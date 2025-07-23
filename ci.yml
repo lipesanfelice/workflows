@@ -1,4 +1,4 @@
-name: CI
+name: CI Java com Gradle, JaCoCo, SonarQube e Codecov
 
 on:
   push:
@@ -8,17 +8,18 @@ on:
 
 jobs:
   build:
+    name: Build e Teste
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout do código
+      - name: Clonar o repositório
         uses: actions/checkout@v4
 
-      - name: Instalar JDK 17
+      - name: Configurar Java 17
         uses: actions/setup-java@v4
         with:
-          java-version: '17'
           distribution: 'temurin'
+          java-version: '17'
 
       - name: Cache do Gradle
         uses: actions/cache@v4
@@ -27,21 +28,20 @@ jobs:
             ~/.gradle/caches
             ~/.gradle/wrapper
           key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
-          restore-keys: |
-            ${{ runner.os }}-gradle-
+          restore-keys: ${{ runner.os }}-gradle
 
-      - name: Conceder permissão de execução ao wrapper
-        run: chmod +x gradlew
+      - name: Dar permissão ao Gradle Wrapper
+        run: chmod +x ./gradlew
 
-      - name: Executar testes
+      - name: Testar e gerar relatório de cobertura
         run: ./gradlew test jacocoTestReport
 
-      - name: Enviar cobertura para Codecov
+      - name: Enviar relatório ao Codecov
         uses: codecov/codecov-action@v4
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: build/reports/jacoco/test/jacocoTestReport.xml
           fail_ci_if_error: true
 
-      - name: Análise com SonarQube
+      - name: Enviar dados ao SonarQube
         run: ./gradlew sonarqube -Dsonar.token=${{ secrets.SONAR_TOKEN }}
