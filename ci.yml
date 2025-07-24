@@ -36,11 +36,14 @@ jobs:
       - name: Testar e gerar relatório de cobertura
         run: ./gradlew test jacocoTestReport
 
-      - name: Enviar relatório ao Codecov
-        uses: codecov/codecov-action@v5
+      - name: Upload cobertura para Codecov
+        uses: codecov/codecov-action@v4
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: build/reports/jacoco/test/jacocoTestReport.xml
+          flags: unittests
+          name: codecov-upload
+          verbose: true
           fail_ci_if_error: true
 
       - name: Enviar dados ao SonarQube
