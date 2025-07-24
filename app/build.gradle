@@ -59,7 +59,7 @@ sonar {
         property "sonar.projectKey", "projeto-teste-sonarqube"
         property "sonar.projectName", "Projeto Teste"
         property "sonar.host.url", "http://localhost:9000"
-        property "sonar.token", "sqp_a2c0ebab7c725ccb031b9a408b78d05dc0f84e33"
+        //property "sonar.token", "sqp_a2c0ebab7c725ccb031b9a408b78d05dc0f84e33"
         property "sonar.java.binaries", "${buildDir}/classes"
         property "sonar.coverage.jacoco.xmlReportPaths", "${buildDir}/reports/jacoco/test/jacocoTestReport.xml"
     }
