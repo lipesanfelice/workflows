@@ -56,8 +56,8 @@ application {
 
 sonar {
     properties {
-        property "sonar.projectKey", "lipesanfelice"
-        property "sonar.organization", "Felipe Sanfelice"
+        property "sonar.projectKey", "lipesanfelice_workflows"
+        property "sonar.organization", "lipesanfelice"
         property "sonar.host.url", "https://sonarcloud.io"
         property "sonar.token", System.getenv("SONAR_TOKEN") // Recomendado usar variável de ambiente
         property "sonar.java.binaries", "${buildDir}/classes"
