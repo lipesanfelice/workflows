@@ -56,8 +56,8 @@ application {
 
 sonar {
     properties {
-        property "sonar.projectKey", "projeto-teste-sonarqube"
-        property "sonar.projectName", "Projeto Teste"
+        property "sonar.projectKey", "sonar"
+        property "sonar.projectName", "teste-sonar"
         property "sonar.host.url", "http://localhost:9000"
         //property "sonar.token", "sqp_a2c0ebab7c725ccb031b9a408b78d05dc0f84e33"
         property "sonar.java.binaries", "${buildDir}/classes"
