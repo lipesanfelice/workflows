@@ -47,4 +47,4 @@ jobs:
     - name: Análise com SonarQube
       env:
         SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-      run: ./gradlew sonar -Dsonar.token=$SONAR_TOKEN
+      run: ./gradlew sonar

@@ -56,15 +56,14 @@ application {
 
 sonar {
     properties {
-        property "sonar.projectKey", "projeto-teste-sonarqube"
-        property "sonar.projectName", "Projeto Teste"
-        property "sonar.host.url", "http://localhost:9000"
-        //property "sonar.token", "sqp_a2c0ebab7c725ccb031b9a408b78d05dc0f84e33"
+        property "sonar.projectKey", "lipesanfelice"
+        property "sonar.organization", "Felipe Sanfelice"
+        property "sonar.host.url", "https://sonarcloud.io"
+        property "sonar.token", System.getenv("SONAR_TOKEN") // Recomendado usar variável de ambiente
         property "sonar.java.binaries", "${buildDir}/classes"
         property "sonar.coverage.jacoco.xmlReportPaths", "${buildDir}/reports/jacoco/test/jacocoTestReport.xml"
     }
 }
-
 
 tasks.named('test') {
     // Use JUnit Platform for unit tests.
