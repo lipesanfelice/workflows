@@ -26,6 +26,8 @@ dependencies {
 
     // This dependency is used by the application.
     implementation libs.guava
+
+    implementation 'org.json:json:20240303'
 }
 
 test {
@@ -45,13 +47,16 @@ jacocoTestReport {
 // Apply a specific Java toolchain to ease working on different environments.
 java {
     toolchain {
-        languageVersion = JavaLanguageVersion.of(24)
+        languageVersion = JavaLanguageVersion.of(21)
     }
 }
 
 application {
     // Define the main class for the application.
-    mainClass = 'org.example.App'
+    //mainClass = 'org.example.App'
+    //mainClass = 'org.example.util.TesteExtracao'
+    //mainClass = 'org.example.util.TesteSonar'
+    mainClass = 'org.example.util.TesteCodecov'
 }
 
 sonar {
@@ -59,7 +64,7 @@ sonar {
         property "sonar.projectKey", "lipesanfelice_workflows"
         property "sonar.organization", "lipesanfelice"
         property "sonar.host.url", "https://sonarcloud.io"
-        property "sonar.token", System.getenv("SONAR_TOKEN") // Recomendado usar variável de ambiente
+        property "sonar.token", System.getenv("SONAR_TOKEN")
         property "sonar.java.binaries", "${buildDir}/classes"
         property "sonar.coverage.jacoco.xmlReportPaths", "${buildDir}/reports/jacoco/test/jacocoTestReport.xml"
     }
