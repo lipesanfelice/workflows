@@ -11,7 +11,8 @@ public class ExtratorCodecov {
 
     public static void extrair(String owner, String repo, String token) {
         try {
-            String url = "https://api.codecov.io/api/v2/github/" + owner + "/repos/" + repo + "/commits/latest";
+            String url = "https://api.codecov.io/api/v2/github/" + owner + "/repos/" + repo + "/commits?branch=main";
+
 
             URL obj = new URL(url);
             HttpURLConnection conexao = (HttpURLConnection) obj.openConnection();
@@ -27,15 +28,24 @@ public class ExtratorCodecov {
             }
             in.close();
 
+            System.out.println("🔍 Resposta bruta da API:");
+            System.out.println(resposta.toString());
+
             JSONObject json = new JSONObject(resposta.toString());
 
-            JSONObject commit = json.getJSONObject("commit");
+
+            //JSONObject commit = json.getJSONObject("commit");
+            // Pega o primeiro commit da lista "results"
+            JSONObject commit = json.getJSONArray("results").getJSONObject(0);
+
+            // Extrai a cobertura
             JSONObject cobertura = commit.getJSONObject("totals");
 
             double coverage = cobertura.getDouble("coverage");
-            int linhasCobertas = cobertura.getInt("covered_lines");
+            int linhasCobertas = cobertura.getInt("hits");
             int linhasTotais = cobertura.getInt("lines");
 
+            // Informações adicionais
             String hash = commit.getString("commitid");
             String data = commit.getString("timestamp");
 
