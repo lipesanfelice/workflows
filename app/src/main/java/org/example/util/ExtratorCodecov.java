@@ -4,16 +4,15 @@ import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
 import java.net.URL;
-import java.util.ArrayList;
-import java.util.List;
+
 import org.json.JSONObject;
 
 public class ExtratorCodecov {
 
-    public static List<DadoCobertura> extrair(String owner, String repo, String token) {
-        List<DadoCobertura> dados = new ArrayList<>();
+    public static String extrair(String owner, String repo, String token) {
         try {
             String url = "https://api.codecov.io/api/v2/github/" + owner + "/repos/" + repo + "/commits?branch=main";
+
 
             URL obj = new URL(url);
             HttpURLConnection conexao = (HttpURLConnection) obj.openConnection();
@@ -29,25 +28,39 @@ public class ExtratorCodecov {
             }
             in.close();
 
+            System.out.println("🔍 Resposta bruta da API:");
+            System.out.println(resposta.toString());
+
             JSONObject json = new JSONObject(resposta.toString());
+
+
+            //JSONObject commit = json.getJSONObject("commit");
+            // Pega o primeiro commit da lista "results"
             JSONObject commit = json.getJSONArray("results").getJSONObject(0);
-            JSONObject totals = commit.getJSONObject("totals");
 
-            float coverage = (float) totals.getDouble("coverage");
-            int linhasTotais = totals.getInt("lines");
-            int linhasCobertas = totals.getInt("hits");
+            // Extrai a cobertura
+            JSONObject cobertura = commit.getJSONObject("totals");
 
-            dados.add(new DadoCobertura(
-                repo,
-                "Geral",
-                1,
-                linhasTotais,
-                coverage
-            ));
+            double coverage = cobertura.getDouble("coverage");
+            int linhasCobertas = cobertura.getInt("hits");
+            int linhasTotais = cobertura.getInt("lines");
+
+            // Informações adicionais
+            String hash = commit.getString("commitid");
+            String data = commit.getString("timestamp");
+
+            System.out.println("📊 MÉTRICAS EXTRAÍDAS DO CODECOV:");
+            System.out.println("➡ Cobertura total: " + String.format("%.2f", coverage) + "%");
+            System.out.println("➡ Linhas cobertas: " + linhasCobertas + " / " + linhasTotais);
+            System.out.println("➡ Último commit: " + hash);
+            System.out.println("➡ Data: " + data);
+            
+            return resposta.toString();
 
         } catch (Exception e) {
             e.printStackTrace();
+            System.out.println("❌ Erro ao extrair dados do Codecov");
+            return "{}"; // Retorna JSON vazio em caso de erro
         }
-        return dados;
     }
 }
