@@ -11,9 +11,6 @@ public class GeradorAleatorio {
         // Boolean aleatório
         boolean verdadeiroOuFalso = random.nextBoolean();
         System.out.println("Boolean aleatório: " + verdadeiroOuFalso);
-        
-        // Double entre 0.0 e 1.0
-        double decimal = random.nextDouble();
-        System.out.println("Decimal aleatório: " + decimal);
+       
     }
 }
