@@ -2,10 +2,11 @@ name: Java CI with Gradle
 
 on:
   push:
-    branches: [ main ]
-  
+    paths:
+      - 'entrada-usuario/**'
   pull_request:
-    branches: [ main ]
+    paths:
+      - 'entrada-usuario/**'
 
 jobs:
   build:

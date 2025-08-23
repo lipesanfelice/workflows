@@ -35,20 +35,28 @@ test {
     finalizedBy jacocoTestReport
 }
 
+// jacocoTestReport {
+//     dependsOn test
+//     reports {
+//         xml.required = true
+//         html.required = true
+//     }
+// }
+
 jacocoTestReport {
     dependsOn test
     reports {
         xml.required = true
         html.required = true
     }
-    // **Só classes da pasta entrada-usuario**
     classDirectories.setFrom(
         fileTree(
             dir: "$buildDir/classes/java/main",
-            includes: ["entrada-usuario/**"]
+            includes: ["entrada/usuario/**"] // só classes dentro dessa pasta
         )
     )
 }
+
 
 java {
     toolchain {
@@ -61,7 +69,7 @@ application {
 }
 
 springBoot {
-    mainClass = 'org.example.web.WebApplication'
+    mainClass = 'org.example.web.WebApplication' // ajuste para o nome do seu pacote/classe principal
 }
 
 sonar {
@@ -70,15 +78,15 @@ sonar {
         property "sonar.organization", "lipesanfelice"
         property "sonar.host.url", "https://sonarcloud.io"
         property "sonar.token", System.getenv("SONAR_TOKEN")
-
-        // **Só fontes e testes da pasta entrada-usuario**
-        property "sonar.sources", "entrada-usuario"
-        property "sonar.tests", "entrada-usuario"
-        property "sonar.java.binaries", "${buildDir}/classes/java/main/entrada-usuario"
+        property "sonar.java.binaries", "${buildDir}/classes"
         property "sonar.coverage.jacoco.xmlReportPaths", "${buildDir}/reports/jacoco/test/jacocoTestReport.xml"
     }
 }
 
 tasks.withType(JavaExec).configureEach {
     environment 'JAVA_TOOL_OPTIONS', '-Dfile.encoding=UTF-8'
+}
+
+tasks.named('test') {
+    useJUnitPlatform()
 }

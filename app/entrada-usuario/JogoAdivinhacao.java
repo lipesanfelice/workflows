@@ -12,20 +12,7 @@ public class JogoAdivinhacao {
         
         System.out.println("Adivinhe o número entre 1 e 100!");
         
-        do {
-            System.out.print("Seu palpite: ");
-            palpite = scanner.nextInt();
-            tentativas++;
-            
-            if (palpite < numeroSecreto) {
-                System.out.println("Muito baixo!");
-            } else if (palpite > numeroSecreto) {
-                System.out.println("Muito alto!");
-            } else {
-                System.out.println("Parabéns! Você acertou em " + 
-                                  tentativas + " tentativas!");
-            }
-        } while (palpite != numeroSecreto);
+        
         
         scanner.close();
     }
