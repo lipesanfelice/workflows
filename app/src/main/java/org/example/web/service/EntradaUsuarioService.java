@@ -18,7 +18,7 @@ public class EntradaUsuarioService {
     public EntradaUsuarioService(
             @Value("${app.entrada.diretorio:entrada-usuario}") String pastaEntrada,
             @Value("${app.entrada.repositorio-git:https://github.com/lipesanfelice/workflows.git}") String repositorioGit,
-            @Value("${app.entrada.mensagem-commit:Nova entrada do usuário}") String mensagemCommit) throws IOException {
+            @Value("${app.entrada.mensagem-commit:Nova entrada do usuario}") String mensagemCommit) throws IOException {
         
         this.pastaEntrada = pastaEntrada;
         this.repositorioGit = repositorioGit;

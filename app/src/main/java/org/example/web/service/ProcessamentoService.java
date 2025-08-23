@@ -104,42 +104,62 @@ public class ProcessamentoService {
         Path work = baseWorkDir().resolve(execId);
         Files.createDirectories(work);
 
-        // Extrai apenas .java
+        // Pastas separadas
         Path extractedJava = work.resolve("java-files");
+        Path extractedClass = work.resolve("class-files");
         Files.createDirectories(extractedJava);
+        Files.createDirectories(extractedClass);
 
         try (ZipInputStream zis = new ZipInputStream(zip.getInputStream())) {
             ZipEntry entry;
             while ((entry = zis.getNextEntry()) != null) {
-                if (entry.isDirectory() || !entry.getName().toLowerCase().endsWith(".java")) {
-                    continue; // Ignora não-Java
+                if (entry.isDirectory()) continue;
+
+                String lowerName = entry.getName().toLowerCase();
+                Path targetPath = null;
+
+                if (lowerName.endsWith(".java")) {
+                    targetPath = extractedJava.resolve(Paths.get(entry.getName()).getFileName());
+                } else if (lowerName.endsWith(".class")) {
+                    targetPath = extractedClass.resolve(Paths.get(entry.getName()).getFileName());
                 }
 
-                Path outPath = extractedJava.resolve(Paths.get(entry.getName()).getFileName());
-                Files.createDirectories(outPath.getParent());
-                Files.copy(zis, outPath, StandardCopyOption.REPLACE_EXISTING);
+                if (targetPath != null) {
+                    Files.createDirectories(targetPath.getParent());
+                    Files.copy(zis, targetPath, StandardCopyOption.REPLACE_EXISTING);
+                }
             }
         }
 
-        // Lista apenas os .java extraídos
+        // Lista arquivos
         List<File> javaFiles = FileUtils.listFiles(extractedJava.toFile(), new String[]{"java"}, true)
+                .stream().toList();
+        List<File> classFiles = FileUtils.listFiles(extractedClass.toFile(), new String[]{"class"}, true)
                 .stream().toList();
 
         ResultadoProcessamento res = new ResultadoProcessamento();
         res.setIdExecucao(execId);
-        res.setTotalArquivos(javaFiles.size());
+        res.setTotalArquivos(javaFiles.size() + classFiles.size());
         res.setTotalJava(javaFiles.size());
 
+        // Adiciona detalhes
         javaFiles.forEach(f -> res.getArquivos().add(new ResultadoArquivo(
                 f.getAbsolutePath(),
                 f.length(),
                 true,
                 "Arquivo Java extraído"
         )));
+        classFiles.forEach(f -> res.getArquivos().add(new ResultadoArquivo(
+                f.getAbsolutePath(),
+                f.length(),
+                true,
+                "Arquivo .class extraído"
+        )));
 
         res.setProximaAcao("ANALISAR_COBERTURA_E_GERAR_TESTES");
         return res;
     }
+
 
     private void unzip(Path zip, Path target) throws IOException {
         try (ZipInputStream zis = new ZipInputStream(Files.newInputStream(zip))) {
