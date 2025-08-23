@@ -1,28 +1,32 @@
 import java.util.Random;
+import java.util.Scanner;
 
-public class SorteioNomes {
+public class JogoAdivinhacao {
     public static void main(String[] args) {
-        String[] nomes = {
-            "Ana", "Carlos", "Maria", "João", "Pedro",
-            "Laura", "Ricardo", "Fernanda", "Lucas", "Juliana"
-        };
-        
         Random random = new Random();
-        int indiceSorteado = random.nextInt(nomes.length);
+        Scanner scanner = new Scanner(System.in);
         
-        System.out.println("Nome sorteado: " + nomes[indiceSorteado]);
+        int numeroSecreto = random.nextInt(100) + 1;
+        int tentativas = 0;
+        int palpite;
         
-        // Misturar array
-        for (int i = 0; i < nomes.length; i++) {
-            int randomIndex = random.nextInt(nomes.length);
-            String temp = nomes[i];
-            nomes[i] = nomes[randomIndex];
-            nomes[randomIndex] = temp;
-        }
+        System.out.println("Adivinhe o número entre 1 e 100!");
         
-        System.out.println("\nLista embaralhada:");
-        for (String nome : nomes) {
-            System.out.println(nome);
-        }
+        do {
+            System.out.print("Seu palpite: ");
+            palpite = scanner.nextInt();
+            tentativas++;
+            
+            if (palpite < numeroSecreto) {
+                System.out.println("Muito baixo!");
+            } else if (palpite > numeroSecreto) {
+                System.out.println("Muito alto!");
+            } else {
+                System.out.println("Parabéns! Você acertou em " + 
+                                  tentativas + " tentativas!");
+            }
+        } while (palpite != numeroSecreto);
+        
+        scanner.close();
     }
 }

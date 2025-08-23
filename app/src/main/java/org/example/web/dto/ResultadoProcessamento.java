@@ -8,7 +8,7 @@ public class ResultadoProcessamento {
     private int totalArquivos;
     private int totalJava;
     private List<ResultadoArquivo> arquivos = new ArrayList<>();
-    private String proximaAcao; // ex: "PARSE_JACOCO", "GERAR_TESTES", etc.
+    private String proximaAcao;
 
     public String getIdExecucao() { return idExecucao; }
     public void setIdExecucao(String idExecucao) { this.idExecucao = idExecucao; }

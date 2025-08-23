@@ -41,6 +41,13 @@ jacocoTestReport {
         xml.required = true
         html.required = true
     }
+    // **Só classes da pasta entrada-usuario**
+    classDirectories.setFrom(
+        fileTree(
+            dir: "$buildDir/classes/java/main",
+            includes: ["entrada-usuario/**"]
+        )
+    )
 }
 
 java {
@@ -54,7 +61,7 @@ application {
 }
 
 springBoot {
-    mainClass = 'org.example.web.WebApplication' // ajuste para o nome do seu pacote/classe principal
+    mainClass = 'org.example.web.WebApplication'
 }
 
 sonar {
@@ -63,15 +70,15 @@ sonar {
         property "sonar.organization", "lipesanfelice"
         property "sonar.host.url", "https://sonarcloud.io"
         property "sonar.token", System.getenv("SONAR_TOKEN")
-        property "sonar.java.binaries", "${buildDir}/classes"
+
+        // **Só fontes e testes da pasta entrada-usuario**
+        property "sonar.sources", "entrada-usuario"
+        property "sonar.tests", "entrada-usuario"
+        property "sonar.java.binaries", "${buildDir}/classes/java/main/entrada-usuario"
         property "sonar.coverage.jacoco.xmlReportPaths", "${buildDir}/reports/jacoco/test/jacocoTestReport.xml"
     }
 }
 
 tasks.withType(JavaExec).configureEach {
     environment 'JAVA_TOOL_OPTIONS', '-Dfile.encoding=UTF-8'
-}
-
-tasks.named('test') {
-    useJUnitPlatform()
 }

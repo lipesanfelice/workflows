@@ -90,7 +90,7 @@ public class EntradaUsuarioService {
 
             // Fazer commit e push
             pb = new ProcessBuilder(
-                    "git", "add", pastaEntrada
+                    "git", "add", "."
             );
             pb.inheritIO().start().waitFor();
 
@@ -100,7 +100,7 @@ public class EntradaUsuarioService {
             pb.inheritIO().start().waitFor();
 
             pb = new ProcessBuilder(
-                    "git", "push", "origin", "main"
+                    "git", "push", "origin", "HEAD:main"
             );
             pb.inheritIO().start().waitFor();
 
