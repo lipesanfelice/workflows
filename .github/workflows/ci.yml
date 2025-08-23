@@ -3,10 +3,10 @@ name: Java CI with Gradle
 on:
   push:
     paths:
-      - 'entrada-usuario/**'
+      - 'app/entrada-usuario/**'
   pull_request:
     paths:
-      - 'entrada-usuario/**'
+      - 'app/entrada-usuario/**'
 
 jobs:
   build:
