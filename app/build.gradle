@@ -35,14 +35,6 @@ test {
     finalizedBy jacocoTestReport
 }
 
-// jacocoTestReport {
-//     dependsOn test
-//     reports {
-//         xml.required = true
-//         html.required = true
-//     }
-// }
-
 jacocoTestReport {
     dependsOn test
     reports {
@@ -51,8 +43,8 @@ jacocoTestReport {
     }
     classDirectories.setFrom(
         fileTree(
-            dir: "$buildDir/classes/java/main",
-            includes: ["entrada/usuario/**"] // só classes dentro dessa pasta
+            dir: "$projectDir/src/main/java", // project/ TEM src/
+            includes: ['app/entrada-usuario/**']
         )
     )
 }
@@ -69,8 +61,19 @@ application {
 }
 
 springBoot {
-    mainClass = 'org.example.web.WebApplication' // ajuste para o nome do seu pacote/classe principal
+    mainClass = 'org.example.web.WebApplication' 
 }
+
+// sonar {
+//     properties {
+//         property "sonar.projectKey", "lipesanfelice_workflows"
+//         property "sonar.organization", "lipesanfelice"
+//         property "sonar.host.url", "https://sonarcloud.io"
+//         property "sonar.token", System.getenv("SONAR_TOKEN")
+//         property "sonar.java.binaries", "${buildDir}/classes"
+//         property "sonar.coverage.jacoco.xmlReportPaths", "${buildDir}/reports/jacoco/test/jacocoTestReport.xml"
+//     }
+// }
 
 sonar {
     properties {
@@ -78,10 +81,13 @@ sonar {
         property "sonar.organization", "lipesanfelice"
         property "sonar.host.url", "https://sonarcloud.io"
         property "sonar.token", System.getenv("SONAR_TOKEN")
-        property "sonar.java.binaries", "${buildDir}/classes"
-        property "sonar.coverage.jacoco.xmlReportPaths", "${buildDir}/reports/jacoco/test/jacocoTestReport.xml"
+        property "sonar.java.binaries", "${buildDir}/classes/java/main"
+        property "sonar.coverage.jacoco.xmlReportPaths", "${buildDir}app/build/reports/jacoco/test/jacocoTestReport.xml"
+        property "sonar.sources", "app/entrada-usuario"
+        property "sonar.inclusions", "**/*.java"
     }
 }
+
 
 tasks.withType(JavaExec).configureEach {
     environment 'JAVA_TOOL_OPTIONS', '-Dfile.encoding=UTF-8'
