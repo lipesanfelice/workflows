@@ -1,17 +1,16 @@
 import java.util.Random;
 
-public class GeradorCor {
-    public static String gerarCorRGB() {
-        Random random = new Random();
-        int r = random.nextInt(256);
-        int g = random.nextInt(256);
-        int b = random.nextInt(256);
-        return String.format("rgb(%d, %d, %d)", r, g, b);
-    }
-    
+public class GeradorAleatorio {
     public static void main(String[] args) {
-        System.out.println("Cor gerada: " + gerarCorRGB());
-        System.out.println("Cor gerada: " + gerarCorRGB());
-        System.out.println("Cor gerada: " + gerarCorRGB());
+        Random random = new Random();
+        
+        // Número inteiro entre 1 e 100
+        int numero = random.nextInt(100) + 1;
+        System.out.println("Número aleatório: " + numero);
+        
+        // Boolean aleatório
+        boolean verdadeiroOuFalso = random.nextBoolean();
+        System.out.println("Boolean aleatório: " + verdadeiroOuFalso);
+       
     }
 }
