@@ -55,5 +55,6 @@ jobs:
     - name: SonarQube (somente entrada-usuario)
       env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
-      run: ./gradlew -p app -Dsonar.token=$SONAR_TOKEN sonar
+      run: |
+        ./gradlew clean build
+        ./gradlew -p app -Dsonar.token=$SONAR_TOKEN sonar

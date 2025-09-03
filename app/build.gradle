@@ -89,13 +89,17 @@ sonar {
         property "sonar.host.url", "https://sonarcloud.io"
         property "sonar.token", System.getenv("SONAR_TOKEN")
 
+        // 👇 fontes analisadas = APENAS a pasta entrada-usuario
+        property "sonar.sources", "entrada-usuario"
         property "sonar.inclusions", "entrada-usuario/**/*.java"
+
         property "sonar.tests", "src/test/java"
         property "sonar.java.binaries", "build/classes/java/main"
         property "sonar.junit.reportPaths", "build/test-results/test"
         property "sonar.coverage.jacoco.xmlReportPaths", "build/reports/jacoco/test/jacocoTestReport.xml"
     }
 }
+
 
 
 
