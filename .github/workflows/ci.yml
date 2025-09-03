@@ -62,6 +62,9 @@ jobs:
     - name: Extrair métricas Sonar → relatorio-sonar.json
       working-directory: app
       env:
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        SONAR_PROJECT_KEY: lipesanfelice_workflows
+        SONAR_OUTPUT_DIR: ${{ github.workspace }}/app/entrada-usuario
       run: ../gradlew bootRun --args='--acao=extrair-sonar --spring.main.web-application-type=none'
+
 
