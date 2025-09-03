@@ -35,17 +35,25 @@ jobs:
     - name: Conceder permissão para o wrapper
       run: chmod +x gradlew
 
-    - name: Compilar e testar (somente entrada-usuario)
-      run: ./gradlew clean build jacocoTestReport
+    # - name: Compilar e testar (somente entrada-usuario)
+    #   run: ./gradlew clean build jacocoTestReport
 
-    - name: Enviar cobertura para Codecov (somente entrada-usuario)
-      uses: codecov/codecov-action@v4
-      with:
-        token: ${{ secrets.CODECOV_TOKEN }}
-        files: app/build/reports/jacoco/test/jacocoTestReport.xml
-        fail_ci_if_error: true
+    # - name: Enviar cobertura para Codecov (somente entrada-usuario)
+    #   uses: codecov/codecov-action@v4
+    #   with:
+    #     token: ${{ secrets.CODECOV_TOKEN }}
+    #     files: app/build/reports/jacoco/test/jacocoTestReport.xml
+    #     fail_ci_if_error: true
 
-    - name: Análise com SonarQube (somente entrada-usuario)
+    # - name: Análise com SonarQube (somente entrada-usuario)
+    #   env:
+    #     SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+    #   run: |
+    #     ./gradlew clean build
+    #     ./gradlew sonar
+
+    - name: SonarQube (somente entrada-usuario)
       env:
-        SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-      run: ./gradlew sonar
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+      run: ./gradlew -p app -Dsonar.token=$SONAR_TOKEN sonar

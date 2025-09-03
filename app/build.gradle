@@ -43,7 +43,7 @@ jacocoTestReport {
     }
     classDirectories.setFrom(
         fileTree(
-            dir: "$projectDir/src/main/java", // project/ TEM src/
+            dir: "$projectDir/src/main/java",
             includes: ['app/entrada-usuario/**']
         )
     )
@@ -70,8 +70,15 @@ springBoot {
 //         property "sonar.organization", "lipesanfelice"
 //         property "sonar.host.url", "https://sonarcloud.io"
 //         property "sonar.token", "869a0095d5eeff251ea1d9ea8bdd34cc9e4cbe38"
-//         property "sonar.java.binaries", "${buildDir}/classes"
-//         property "sonar.coverage.jacoco.xmlReportPaths", "${buildDir}/reports/jacoco/test/jacocoTestReport.xml"
+
+//         // ✅ Caminho certo (relativo ao build.gradle dentro de app/)
+//         property "sonar.sources", "entrada-usuario"
+
+//         // ✅ Apenas arquivos .java
+//         property "sonar.inclusions", "**/*.java"
+
+//         // ✅ Ignora testes
+//         property "sonar.exclusions", "src/test/**"
 //     }
 // }
 
@@ -80,26 +87,17 @@ sonar {
         property "sonar.projectKey", "lipesanfelice_workflows"
         property "sonar.organization", "lipesanfelice"
         property "sonar.host.url", "https://sonarcloud.io"
-        // property "sonar.token", System.getenv("SONAR_TOKEN")
-        property "sonar.token", "869a0095d5eeff251ea1d9ea8bdd34cc9e4cbe38"
+        property "sonar.token", System.getenv("SONAR_TOKEN")
 
-        // ✅ Foco absoluto na pasta entrada-usuario
-        property "sonar.sources", "${projectDir}/entrada-usuario"
-        
-        // ✅ Incluir apenas Java dessa pasta
-        property "sonar.inclusions", "app/entrada-usuario/**/*.java"
-        
-        // ✅ Excluir TUDO que não for da pasta entrada-usuario
-        property "sonar.exclusions", "**/*.java,!app/entrada-usuario/**/*.java"
-        
-        // // ✅ Para análise estática pura (sem compilação)
-        // property "sonar.analysis.mode", "preview"
-
-        // property "sonar.coverage.jacoco.xmlReportPaths", "${buildDir}/reports/jacoco/test/jacocoTestReport.xml"
-        //property "sonar.sources", "app/entrada-usuario"
-        // property "sonar.inclusions", "**/*.java"
+        property "sonar.inclusions", "entrada-usuario/**/*.java"
+        property "sonar.tests", "src/test/java"
+        property "sonar.java.binaries", "build/classes/java/main"
+        property "sonar.junit.reportPaths", "build/test-results/test"
+        property "sonar.coverage.jacoco.xmlReportPaths", "build/reports/jacoco/test/jacocoTestReport.xml"
     }
 }
+
+
 
 
 tasks.withType(JavaExec).configureEach {
