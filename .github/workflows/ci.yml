@@ -72,11 +72,19 @@ jobs:
         ls -la $GITHUB_WORKSPACE/app/entrada-usuario || true
         test -f $GITHUB_WORKSPACE/app/entrada-usuario/relatorio-sonar.json && echo "OK" || (echo "NOK" && exit 1)
     
-    - name: Publicar relatorio-sonar.json
-      uses: actions/upload-artifact@v4
-      with:
-        name: relatorio-sonar
-        path: ${{ github.workspace }}/app/entrada-usuario/relatorio-sonar.json
+    - name: Fallback via curl se ausente
+      env:
+        SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+      run: |
+        if [ ! -s "$GITHUB_WORKSPACE/app/entrada-usuario/relatorio-sonar.json" ]; then
+          echo "Fazendo fallback via curl"
+          mkdir -p "$GITHUB_WORKSPACE/app/entrada-usuario"
+          curl -s -u "${SONAR_TOKEN}:" \
+            "https://sonarcloud.io/api/measures/component?component=lipesanfelice_workflows&metricKeys=coverage,lines_to_cover,uncovered_lines,complexity,bugs,vulnerabilities,code_smells,duplicated_lines_density" \
+            > "$GITHUB_WORKSPACE/app/entrada-usuario/relatorio-sonar.json"
+          test -s "$GITHUB_WORKSPACE/app/entrada-usuario/relatorio-sonar.json" || (echo "Fallback falhou" && exit 1)
+        fi
+
 
 
 
