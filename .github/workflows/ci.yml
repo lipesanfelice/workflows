@@ -67,4 +67,10 @@ jobs:
         SONAR_OUTPUT_DIR: ${{ github.workspace }}/app/entrada-usuario
       run: ../gradlew bootRun --args='--acao=extrair-sonar --spring.main.web-application-type=none'
 
+    - name: Conferir arquivo salvo
+      run: |
+        ls -la $GITHUB_WORKSPACE/app/entrada-usuario || true
+        test -f $GITHUB_WORKSPACE/app/entrada-usuario/relatorio-sonar.json && echo "OK" || (echo "NOK" && exit 1)
+
+
 
