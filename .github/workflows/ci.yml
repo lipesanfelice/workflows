@@ -4,9 +4,11 @@ name: Java CI with Gradle
 permissions:
   contents: write
 
+
 concurrency:
   group: gen-tests-${{ github.ref }}
   cancel-in-progress: true
+  
 
 
 on:
@@ -173,15 +175,16 @@ jobs:
         git config user.email "github-actions[bot]@users.noreply.github.com"
         git config --global --add safe.directory "$GITHUB_WORKSPACE"
 
-        # Garante branch local apontando pro remoto
+        # Garante branch local rastreando o remoto
         git fetch origin "$BRANCH" --prune
         git checkout -B "$BRANCH" "origin/$BRANCH" || git checkout -B "$BRANCH"
 
-        # Rebase inicial para ficar 100% atualizado antes de mexer
-        git pull --rebase origin "$BRANCH" || true
+        # Atualiza a árvore ANTES de commitar, mesmo com alterações locais (autostash)
+        git pull --rebase --autostash origin "$BRANCH" || true
 
-        # Stage + commit se houver mudanças
+        # Stage + commit apenas do diretório gerado
         git add -A app/entrada-usuario/testes_explicações
+
         if git diff --cached --quiet; then
           echo "Sem mudanças para commit."
           exit 0
@@ -190,7 +193,7 @@ jobs:
         msg="chore(tests): atualizar testes gerados pela IA [skip ci] - run ${{ github.run_number }} @ ${{ github.sha }}"
         git commit -m "$msg"
 
-        # Rebase novamente (caso remoto tenha avançado entre o fetch e o commit)
+        # Se o remoto avançou entre o pull e o commit, rebase novamente
         git pull --rebase --autostash origin "$BRANCH" || true
 
         # Push com retry
@@ -206,18 +209,4 @@ jobs:
 
         echo "Falha ao fazer push após rebase/retry"
         exit 1
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
