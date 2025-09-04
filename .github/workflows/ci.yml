@@ -3,6 +3,8 @@ name: Java CI with Gradle
 # no topo do workflow ou do job:
 permissions:
   contents: write
+  pull-requests: write
+
 
 
 concurrency:
@@ -165,48 +167,22 @@ jobs:
     # - name: Testes + JaCoCo
     #   run: ./gradlew -p app test jacocoTestReport
 
-    - name: Commit e push dos arquivos gerados
-      if: ${{ github.event_name != 'pull_request' }}
-      env:
-        BRANCH: ${{ github.ref_name }}
-      run: |
-        set -euo pipefail
-        git config user.name  "github-actions[bot]"
-        git config user.email "github-actions[bot]@users.noreply.github.com"
-        git config --global --add safe.directory "$GITHUB_WORKSPACE"
+    - name: Abrir/atualizar PR com testes gerados
+      uses: peter-evans/create-pull-request@v6
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+        commit-message: "chore(tests): atualizar testes gerados pela IA [skip ci]"
+        title: "chore(tests): atualizar testes gerados pela IA"
+        body: |
+          Atualização automática de testes gerados pela IA.
+          Run: ${{ github.run_number }}
+          SHA base: ${{ github.sha }}
+        branch: ci/generated-tests
+        base: main
+        add-paths: |
+          app/entrada-usuario/testes_explicações/**
+        labels: |
+          automated
+          tests
 
-        # Garante branch local rastreando o remoto
-        git fetch origin "$BRANCH" --prune
-        git checkout -B "$BRANCH" "origin/$BRANCH" || git checkout -B "$BRANCH"
-
-        # Atualiza a árvore ANTES de commitar, mesmo com alterações locais (autostash)
-        git pull --rebase --autostash origin "$BRANCH" || true
-
-        # Stage + commit apenas do diretório gerado
-        git add -A app/entrada-usuario/testes_explicações
-
-        if git diff --cached --quiet; then
-          echo "Sem mudanças para commit."
-          exit 0
-        fi
-
-        msg="chore(tests): atualizar testes gerados pela IA [skip ci] - run ${{ github.run_number }} @ ${{ github.sha }}"
-        git commit -m "$msg"
-
-        # Se o remoto avançou entre o pull e o commit, rebase novamente
-        git pull --rebase --autostash origin "$BRANCH" || true
-
-        # Push com retry
-        for i in 1 2; do
-          if git push origin "HEAD:$BRANCH"; then
-            echo "Push concluído"
-            exit 0
-          fi
-          echo "Push falhou, tentando novamente após rebase..."
-          git pull --rebase --autostash origin "$BRANCH" || true
-          sleep 2
-        done
-
-        echo "Falha ao fazer push após rebase/retry"
-        exit 1
 
