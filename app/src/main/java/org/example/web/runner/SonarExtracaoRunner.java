@@ -7,6 +7,8 @@ import org.springframework.stereotype.Component;
 
 import java.nio.file.*;
 import java.security.MessageDigest;
+import java.util.Comparator;
+import java.util.stream.Stream;
 
 @Component
 public class SonarExtracaoRunner implements ApplicationRunner {
@@ -21,11 +23,22 @@ public class SonarExtracaoRunner implements ApplicationRunner {
         try {
             var projeto = System.getenv().getOrDefault("SONAR_PROJECT_KEY", "lipesanfelice_workflows");
             var token = System.getenv("SONAR_TOKEN");
-            var saida = System.getenv("SONAR_OUTPUT_FILE");
+            var saidaEnv = System.getenv("SONAR_OUTPUT_FILE");
+            Path base;
+            if (saidaEnv != null && !saidaEnv.isBlank()) {
+                base = Paths.get(saidaEnv).toAbsolutePath().getParent();
+            } else {
+                var cwd = Paths.get("").toAbsolutePath();
+                base = (Files.isDirectory(cwd.resolve("app")) ? cwd.resolve("app") : cwd).resolve("dados_sonar");
+            }
+
+            limparDiretorio(base);
+            Files.createDirectories(base);
+            var destino = (saidaEnv != null && !saidaEnv.isBlank())
+                    ? Paths.get(saidaEnv).toAbsolutePath()
+                    : base.resolve("relatorio-sonar.json").toAbsolutePath();
+
             if (token == null || token.isBlank()) throw new IllegalStateException("SONAR_TOKEN ausente");
-            if (saida == null || saida.isBlank()) throw new IllegalStateException("SONAR_OUTPUT_FILE ausente");
-            var destino = Paths.get(saida).toAbsolutePath();
-            if (destino.getParent() != null) Files.createDirectories(destino.getParent());
 
             ExtratorSonar.extrairESalvar(projeto, token, destino);
 
@@ -35,7 +48,6 @@ public class SonarExtracaoRunner implements ApplicationRunner {
             System.out.println("user.dir=" + System.getProperty("user.dir"));
             System.out.println("arquivo=" + destino);
             System.out.println("existe=" + existe + " tamanho=" + tam + " sha256=" + sha);
-
             if (!existe || tam <= 2) throw new IllegalStateException("Arquivo ausente ou vazio");
         } catch (Exception e) {
             ok = false;
@@ -44,6 +56,18 @@ public class SonarExtracaoRunner implements ApplicationRunner {
             var falhar = Boolean.parseBoolean(System.getenv().getOrDefault("FAIL_ON_SONAR_EXTRACTION_ERROR","false"));
             System.exit(ok ? 0 : (falhar ? 1 : 0));
         }
+    }
+
+    private static void limparDiretorio(Path dir) {
+        try {
+            if (dir != null && Files.exists(dir)) {
+                try (Stream<Path> s = Files.walk(dir)) {
+                    s.sorted(Comparator.reverseOrder())
+                     .filter(p -> !p.equals(dir))
+                     .forEach(p -> { try { Files.deleteIfExists(p); } catch (Exception ignored) {} });
+                }
+            }
+        } catch (Exception ignored) {}
     }
 
     private static String sha256Hex(byte[] dados) {
