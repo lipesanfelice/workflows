@@ -163,7 +163,7 @@ jobs:
     # - name: Testes + JaCoCo
     #   run: ./gradlew -p app test jacocoTestReport
 
-    - name: Commit e push dos arquivos gerados (main)
+    - name: Commit e push dos arquivos gerados (na main)
       if: ${{ github.event_name != 'pull_request' }}
       env:
         BRANCH: main
@@ -173,10 +173,10 @@ jobs:
         git config user.email "github-actions[bot]@users.noreply.github.com"
         git config --global --add safe.directory "$GITHUB_WORKSPACE"
 
-        # guarda tudo que foi gerado (inclusive não rastreado)
+        # guarda tudo (inclusive não rastreado) antes de sincronizar com o remoto
         git stash push --include-untracked --all -m "ci-autostash" || true
 
-        # sincroniza local com o remoto e BASEIA a main local no HEAD remoto
+        # sincroniza e ancora na ponta remota
         git fetch origin "$BRANCH" --prune
         if git rev-parse --verify "$BRANCH" >/dev/null 2>&1; then
           git checkout "$BRANCH"
@@ -185,22 +185,34 @@ jobs:
         fi
         git reset --hard "origin/$BRANCH"
 
-        # restaura arquivos gerados do stash
+        # restaura o que foi gerado/alterado nesta execução
         git stash pop || true
 
-        # adiciona só a pasta gerada
-        git add -A app/entrada-usuario/testes_explicações
+        # ADICIONA TODO o conteúdo de app/entrada-usuario (inclui código do usuário + testes)
+        git add -A app/entrada-usuario
 
         if git diff --cached --quiet; then
           echo "Sem mudanças para commit."
           exit 0
         fi
 
-        msg="chore(tests): atualizar testes gerados pela IA [skip ci] - run ${{ github.run_number }} @ ${{ github.sha }}"
+        msg="chore: atualizar entrada-usuario e testes gerados [skip ci] - run ${{ github.run_number }} @ ${{ github.sha }}"
         git commit -m "$msg"
 
-        # push linear baseado no HEAD remoto (agora FF é garantido)
-        git push origin HEAD:"$BRANCH"
+        # tenta push; se falhar por avanço remoto, rebaseia e tenta de novo
+        if git push origin HEAD:"$BRANCH"; then
+          exit 0
+        fi
+
+        echo "Push falhou, tentando rebase e novo push..."
+        git pull --rebase --autostash origin "$BRANCH" || true
+        if git push origin HEAD:"$BRANCH"; then
+          exit 0
+        fi
+
+        echo "Ainda falhou; usando push com --force-with-lease de forma segura"
+        git push --force-with-lease origin HEAD:"$BRANCH"
+
 
 
 
