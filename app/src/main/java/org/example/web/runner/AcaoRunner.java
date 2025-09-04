@@ -2,6 +2,7 @@ package org.example.web.runner;
 
 import org.example.web.service.GeradorTestesService;
 import org.example.util.Prompts;
+import org.example.util.LeitorCodigo;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.context.ApplicationContext;
@@ -24,16 +25,16 @@ public class AcaoRunner implements ApplicationRunner {
     @Override
     public void run(ApplicationArguments args) throws Exception {
         if (!args.containsOption("acao")) return;
-        var valor = args.getOptionValues("acao").get(0);
-        if (!"gerar-testes".equalsIgnoreCase(valor)) return;
+        var v = args.getOptionValues("acao").get(0);
+        if (!"gerar-testes".equalsIgnoreCase(v)) return;
 
         var relatorio = System.getenv("SONAR_RELATORIO_JSON");
-        var codigoDir = System.getenv("CODIGO_FONTE_DIR");
+        var dir = System.getenv("CODIGO_FONTE_DIR");
         var findings = Files.readString(Path.of(relatorio));
-        var prompt = Prompts.montarPromptGroq(findings, Path.of(codigoDir).toAbsolutePath().toString());
+        var bloco = LeitorCodigo.montarBlocoCodigo(Path.of(dir), 250_000);
+        var prompt = Prompts.montarPromptGroq(findings, Path.of(dir).toAbsolutePath().toString(), bloco);
 
         gerador.gerar(prompt);
-
         SpringApplication.exit(ctx, () -> 0);
     }
 }

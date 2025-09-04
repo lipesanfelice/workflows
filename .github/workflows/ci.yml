@@ -128,8 +128,9 @@ jobs:
         GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
         GROQ_MODELO: llama-3.1-8b-instant
         SONAR_RELATORIO_JSON: ${{ github.workspace }}/app/entrada-usuario/relatorio-sonar.json
-        CODIGO_FONTE_DIR: ${{ github.workspace }}/app/entrada-usuario/java
+        CODIGO_FONTE_DIR: ${{ github.workspace }}/app/entrada-usuario
       run: ./gradlew -p app bootRun --args='--acao=gerar-testes --spring.main.web-application-type=none'
+
 
 
 

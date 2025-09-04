@@ -1,7 +1,7 @@
 package org.example.util;
 
 public class Prompts {
-    public static String montarPromptGroq(String relatorioSonarJson, String caminhoCodigoFonte) {
+    public static String montarPromptGroq(String relatorioSonarJson, String caminhoCodigo, String blocoCodigo) {
         var instrucoes = """
 Gere testes unitários JUnit 5 para Java priorizando achados de maior gravidade do Sonar.
 Respeite:
@@ -17,7 +17,10 @@ Respeite:
 RELATORIO_SONAR_JSON:
 %s
 
-CAMINHO_CODIGO_FONTE: %s
+CAMINHO_BASE_CODIGO: %s
+
+CODIGO_FONTE:
+%s
 
 REGRAS:
 - Selecione classes e métodos com issues de MAJOR e CRITICAL antes das demais
@@ -25,7 +28,7 @@ REGRAS:
 - Evite acessar rede, disco ou banco
 - Use pacote org.example.generated para os testes
 - Importe a classe alvo pelo pacote correto quando possível
-        """.formatted(relatorioSonarJson, caminhoCodigoFonte);
+        """.formatted(relatorioSonarJson, caminhoCodigo, blocoCodigo);
         var formato = """
 Retorne exatamente neste formato:
 
