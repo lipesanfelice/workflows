@@ -1,5 +1,9 @@
 name: Java CI with Gradle
 
+# no topo do workflow ou do job:
+permissions:
+  contents: write
+
 on:
   push:
     paths:
@@ -122,6 +126,13 @@ jobs:
         test -f "${{ github.workspace }}/app/entrada-usuario/relatorio-sonar.json" || (echo "faltando relatorio-sonar.json" && exit 1)
         test -d "${{ github.workspace }}/app/entrada-usuario" || (echo "faltando pasta de código entrada-usuario/java" && exit 1)
     
+    - name: Garantir e limpar pasta de testes gerados
+      run: |
+        TESTS_DIR="${{ github.workspace }}/app/entrada-usuario/testes_explicações"
+        mkdir -p "$TESTS_DIR/tests" "$TESTS_DIR/explicacoes"
+        find "$TESTS_DIR" -mindepth 1 -maxdepth 1 -exec rm -rf {} +
+        echo "Pasta preparada: $TESTS_DIR"
+
     - name: Gerar testes via IA (Groq)
       env:
         IA_PROVEDOR: groq
@@ -132,12 +143,32 @@ jobs:
       run: |
         ./gradlew -p app bootRun --args='--acao=gerar-testes --spring.main.web-application-type=none --app.entrada.diretorio=${{ github.workspace }}/app/entrada-usuario'
 
-    - name: Listar testes gerados
+    - name: Conferir testes gerados
       run: |
-        echo "Base: ${{ github.workspace }}/app/entrada-usuario/testes_explicações"
-        ls -la "${{ github.workspace }}/app/entrada-usuario/testes_explicações" || true
-        find "${{ github.workspace }}/app/entrada-usuario/testes_explicações/tests" -type f -name "*.java" -maxdepth 4 || true
+        echo "Arquivos gerados:"
+        find "${{ github.workspace }}/app/entrada-usuario/testes_explicações/tests" -type f -name "*.java" | sed -n '1,200p'
+        echo "Relatório:"
         cat "${{ github.workspace }}/app/entrada-usuario/testes_explicações/relatorio.txt" || true
+
+    # opcional: rodar testes + cobertura agora
+    # - name: Testes + JaCoCo
+    #   run: ./gradlew -p app test jacocoTestReport
+
+    - name: Commit e push dos arquivos gerados
+      if: ${{ github.event_name != 'pull_request' }}  # evita falhar em PRs de forks
+      run: |
+        git config user.name  "github-actions[bot]"
+        git config user.email "github-actions[bot]@users.noreply.github.com"
+        git pull --rebase
+        git add app/entrada-usuario/testes_explicações
+        if git diff --cached --quiet; then
+          echo "Sem mudanças para commit."
+        else
+          msg="chore(tests): atualizar testes gerados pela IA - run ${{ github.run_number }} @ ${{ github.sha }}"
+          git commit -m "$msg"
+          git push
+        fi
+
 
 
 
