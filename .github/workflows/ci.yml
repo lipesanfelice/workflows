@@ -59,38 +59,20 @@ jobs:
         ./gradlew clean build
         ./gradlew -p app -Dsonar.token=$SONAR_TOKEN sonar
 
-    # - name: Extrair e salvar relatório SonarCloud
-    #   working-directory: app
-    #   env:
-    #     SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-    #   run: ../gradlew salvarRelatorioSonar
-
-    # - name: Conferir arquivo salvo
-    #   run: |
-    #     ls -la "$GITHUB_WORKSPACE/app/entrada-usuario" || true
-    #     test -s "$GITHUB_WORKSPACE/app/entrada-usuario/relatorio-sonar.json" && echo "OK: presente" || (echo "NOK: ausente" && exit 1)
-
-    - name: Baixar métricas do Sonar e salvar JSON
+    - name: Extrair métricas Sonar → relatorio-sonar.json
+      working-directory: app
       env:
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-      run: |
-          mkdir -p app/entrada-usuario
-          curl -s -u "${SONAR_TOKEN}:" \
-            "https://sonarcloud.io/api/measures/component?component=lipesanfelice_workflows&metricKeys=coverage,lines_to_cover,uncovered_lines,complexity,bugs,vulnerabilities,code_smells,duplicated_lines_density" \
-            > app/entrada-usuario/relatorio-sonar.json
-          test -s app/entrada-usuario/relatorio-sonar.json
+        SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        SONAR_PROJECT_KEY: lipesanfelice_workflows
+        SONAR_OUTPUT_DIR: ${{ github.workspace }}/app/entrada-usuario
+      run: ../gradlew bootRun --args='--acao=extrair-sonar --spring.main.web-application-type=none'
 
-    - name: Commit e push do relatorio-sonar.json
+    - name: Conferir arquivo salvo
       run: |
-          git config user.name  "lipesanfelice"
-          git config user.email "felipesanfelice59@gmail.com"
-          git add app/entrada-usuario/relatorio-sonar.json
-          if git diff --cached --quiet; then
-            echo "Sem mudanças para commitar"
-          else
-            git commit -m "chore(ci): atualizar relatorio-sonar.json [skip ci]"
-            git push origin HEAD:${{ github.ref_name }}
-          fi
+        ls -la $GITHUB_WORKSPACE/app/entrada-usuario || true
+        test -f $GITHUB_WORKSPACE/app/entrada-usuario/relatorio-sonar.json && echo "OK" || (echo "NOK" && exit 1)
+
+
 
 
 
