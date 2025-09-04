@@ -8,6 +8,7 @@ import java.nio.file.*;
 import java.util.Map;
 import java.io.*;
 import java.util.zip.*;
+import java.util.Comparator;
 
 @Service
 public class EntradaUsuarioService {
@@ -29,7 +30,7 @@ public class EntradaUsuarioService {
                 Files.createDirectories(alvo.getParent());
                 Files.writeString(alvo, e.getValue());
             }
-            enviarParaRepositorio(base); // <-- antes era base.getParent()
+            enviarParaRepositorio(base);
             return base;
         } catch (Exception e) {
             throw new RuntimeException(e);
@@ -42,39 +43,39 @@ public class EntradaUsuarioService {
             Path alvo = base.resolve(caminhoRelativo);
             Files.createDirectories(alvo.getParent());
             Files.writeString(alvo, conteudo);
-            enviarParaRepositorio(base); // <-- antes era base.getParent()
+            enviarParaRepositorio(base);
             return alvo;
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
     }
 
-    // Compatível com seu controller
+    // compatível com seu controller
     public Path salvarCodigo(String codigo) {
         String nome = "java/CodigoUsuario.java";
         return salvarConteudo(nome, codigo);
     }
 
-    // Compatível com seu controller
+    // compatível com seu controller
     public Path salvarArquivo(File arquivo) {
         try {
             Path base = resolverBase();
             Path destino = base.resolve(arquivo.getName());
             Files.createDirectories(destino.getParent());
             Files.copy(arquivo.toPath(), destino, StandardCopyOption.REPLACE_EXISTING);
-            enviarParaRepositorio(base); // <-- antes era base.getParent()
+            enviarParaRepositorio(base);
             return destino;
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
     }
 
-    // Compatível com seu controller
+    // compatível com seu controller
     public Path salvarProjetoZip(File zip) {
         try {
             Path base = resolverBase();
             unzip(zip, base);
-            enviarParaRepositorio(base); // <-- antes era base.getParent()
+            enviarParaRepositorio(base);
             return base;
         } catch (Exception e) {
             throw new RuntimeException(e);
@@ -86,17 +87,12 @@ public class EntradaUsuarioService {
             Path base = Path.of(diretorioEntrada);
             if (!base.isAbsolute()) {
                 Path cwd = Path.of("").toAbsolutePath();
-                Path candidatoEmApp = cwd.resolve("app").resolve(diretorioEntrada);
-                Path candidatoAqui = cwd.resolve(diretorioEntrada);
-                // Se existe o diretório "app" (rodando da raiz), usa app/entrada-usuario; senão usa ./entrada-usuario
-                if (Files.exists(candidatoEmApp.getParent())) {
-                    base = candidatoEmApp;
-                } else {
-                    base = candidatoAqui;
-                }
+                Path candApp = cwd.resolve("app").resolve(diretorioEntrada);
+                Path candAqui = cwd.resolve(diretorioEntrada);
+                base = Files.exists(candApp.getParent()) ? candApp : candAqui;
             }
             Files.createDirectories(base);
-            return base; // já é absoluto ou resolvido
+            return base;
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
@@ -111,11 +107,19 @@ public class EntradaUsuarioService {
         try {
             Path destino = clone.toPath().resolve("app").resolve("entrada-usuario");
             Files.createDirectories(destino);
+
+            // 1) LIMPAR completamente o conteúdo anterior do destino
+            limparConteudo(destino);
+
+            // 2) COPIAR tudo do usuário, EXCETO a pasta de testes gerados
+            Path excluirTests = pastaEntrada.resolve("testes_explicações").normalize();
             try (var walk = Files.walk(pastaEntrada)) {
                 walk.forEach(p -> {
                     try {
+                        if (p == null) return;
+                        if (p.normalize().startsWith(excluirTests)) return; // ignora testes gerados
                         Path rel = pastaEntrada.relativize(p);
-                        Path alvo = destino.resolve(rel.toString());
+                        Path alvo = destino.resolve(rel.toString()).normalize();
                         if (Files.isDirectory(p)) {
                             Files.createDirectories(alvo);
                         } else {
@@ -130,8 +134,21 @@ public class EntradaUsuarioService {
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
+
         git.configurarIdentidade("github-actions[bot]", "github-actions[bot]@users.noreply.github.com");
+        // 3) add -A para também registrar deleções
         git.adicionarCommitarEmpurrar("app/entrada-usuario", mensagemCommit);
+    }
+
+    private static void limparConteudo(Path dir) {
+        if (!Files.exists(dir)) return;
+        try (var walk = Files.walk(dir)) {
+            walk.sorted(Comparator.reverseOrder())
+                .filter(p -> !p.equals(dir))
+                .forEach(p -> {
+                    try { Files.deleteIfExists(p); } catch (Exception ignored) {}
+                });
+        } catch (IOException ignored) {}
     }
 
     private static void unzip(File zipFile, Path targetBase) {
@@ -139,10 +156,7 @@ public class EntradaUsuarioService {
             ZipEntry entry;
             while ((entry = zis.getNextEntry()) != null) {
                 Path alvo = targetBase.resolve(entry.getName()).normalize();
-                if (!alvo.startsWith(targetBase)) {
-                    zis.closeEntry();
-                    continue;
-                }
+                if (!alvo.startsWith(targetBase)) { zis.closeEntry(); continue; }
                 if (entry.isDirectory()) {
                     Files.createDirectories(alvo);
                 } else {
