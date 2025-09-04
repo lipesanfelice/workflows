@@ -6,15 +6,12 @@ import org.springframework.stereotype.Service;
 
 import java.nio.file.*;
 import java.util.Map;
-import java.util.Comparator;
 import java.io.*;
 import java.util.zip.*;
-import java.util.concurrent.locks.ReentrantLock;
+import java.util.Comparator;
 
 @Service
 public class EntradaUsuarioService {
-
-    private static final ReentrantLock LOCK = new ReentrantLock();
 
     @Value("${app.entrada.diretorio:entrada-usuario}")
     private String diretorioEntrada;
@@ -28,30 +25,26 @@ public class EntradaUsuarioService {
     // ===== APIs usadas pelo controller =====
 
     public Path salvarArquivos(Map<String, String> arquivosRelativosParaConteudo) {
-        LOCK.lock();
         try {
             Path base = resolverBase();
-            limparConteudo(base); // zera local
+            limparConteudo(base);
 
             for (var e : arquivosRelativosParaConteudo.entrySet()) {
                 String nome = soNome(e.getKey());
                 if (nome == null || !nome.endsWith(".java")) continue; // só .java
-                Path alvo = nomeUnico(base, nome);                      // numera se já existir
+                Path alvo = base.resolve(nome);
                 Files.createDirectories(alvo.getParent());
-                Files.writeString(alvo, e.getValue());
+                Files.writeString(alvo, e.getValue()); // último vence (sobrescreve o anterior do mesmo nome)
             }
 
-            enviarParaRepositorio(base); // limpa clone, copia mantendo nomes e commita
+            enviarParaRepositorio(base);
             return base;
         } catch (Exception ex) {
             throw new RuntimeException(ex);
-        } finally {
-            LOCK.unlock();
         }
     }
 
     public Path salvarConteudo(String caminhoRelativo, String conteudo) {
-        LOCK.lock();
         try {
             Path base = resolverBase();
             limparConteudo(base);
@@ -60,16 +53,14 @@ public class EntradaUsuarioService {
             if (nome == null || nome.isBlank()) nome = "Arquivo.java";
             if (!nome.endsWith(".java")) nome = nome + ".java";
 
-            Path alvo = nomeUnico(base, nome);
+            Path alvo = base.resolve(nome);
             Files.createDirectories(alvo.getParent());
-            Files.writeString(alvo, conteudo);
+            Files.writeString(alvo, conteudo); // último vence
 
             enviarParaRepositorio(base);
             return alvo;
         } catch (Exception ex) {
             throw new RuntimeException(ex);
-        } finally {
-            LOCK.unlock();
         }
     }
 
@@ -78,39 +69,31 @@ public class EntradaUsuarioService {
     }
 
     public Path salvarArquivo(File arquivo) {
-        LOCK.lock();
         try {
             Path base = resolverBase();
             limparConteudo(base);
-
             if (arquivo.getName().endsWith(".java")) {
                 String nome = soNome(arquivo.getName());
-                Path alvo = nomeUnico(base, nome);
+                Path alvo = base.resolve(nome);
                 Files.createDirectories(alvo.getParent());
-                Files.copy(arquivo.toPath(), alvo, StandardCopyOption.REPLACE_EXISTING);
+                Files.copy(arquivo.toPath(), alvo, StandardCopyOption.REPLACE_EXISTING); // último vence
             }
-
             enviarParaRepositorio(base);
             return base;
         } catch (Exception ex) {
             throw new RuntimeException(ex);
-        } finally {
-            LOCK.unlock();
         }
     }
 
     public Path salvarProjetoZip(File zip) {
-        LOCK.lock();
         try {
             Path base = resolverBase();
             limparConteudo(base);
-            unzipSomenteJavaAchatarNumerando(zip, base); // só .java, achatado, numerando duplicados
+            unzipSomenteJavaAchatarOverwrite(zip, base); // só .java, achatado, último vence
             enviarParaRepositorio(base);
             return base;
         } catch (Exception ex) {
             throw new RuntimeException(ex);
-        } finally {
-            LOCK.unlock();
         }
     }
 
@@ -147,16 +130,16 @@ public class EntradaUsuarioService {
             // limpa tudo no clone
             limparConteudo(destino);
 
-            // copia SOMENTE .java do envio atual, achatando e PRESERVANDO o nome (já numerado se preciso)
+            // copia SOMENTE .java, achatando; se repetir nome, o último sobrescreve
             try (var walk = Files.walk(pastaEntrada)) {
                 walk.filter(Files::isRegularFile)
                     .filter(p -> p.toString().endsWith(".java"))
                     .forEach(p -> {
                         try {
-                            String nome = p.getFileName().toString(); // mantém o nome como está
-                            Path alvo = destino.resolve(nome);
+                            String nome = p.getFileName().toString();
+                            Path alvo = destino.resolve(nome).normalize();
                             Files.createDirectories(alvo.getParent());
-                            Files.copy(p, alvo, StandardCopyOption.REPLACE_EXISTING);
+                            Files.copy(p, alvo, StandardCopyOption.REPLACE_EXISTING); // último vence
                         } catch (Exception ex) {
                             throw new RuntimeException(ex);
                         }
@@ -179,8 +162,9 @@ public class EntradaUsuarioService {
         } catch (IOException ignored) {}
     }
 
-    // extrai apenas .java e grava no targetBase com o NOME DO ARQUIVO (sem pastas); numera se já existir
-    private static void unzipSomenteJavaAchatarNumerando(File zipFile, Path targetBase) {
+    // extrai apenas .java e grava no targetBase com o NOME DO ARQUIVO (sem pastas);
+    // se aparecerem dois com o mesmo nome, o último do ZIP sobrescreve o anterior
+    private static void unzipSomenteJavaAchatarOverwrite(File zipFile, Path targetBase) {
         try (ZipInputStream zis = new ZipInputStream(new BufferedInputStream(new FileInputStream(zipFile)))) {
             ZipEntry entry;
             while ((entry = zis.getNextEntry()) != null) {
@@ -188,10 +172,10 @@ public class EntradaUsuarioService {
                 String nome = entry.getName();
                 if (nome == null || !nome.endsWith(".java")) { zis.closeEntry(); continue; }
                 String baseName = Paths.get(nome).getFileName().toString();
-                Path alvo = nomeUnico(targetBase, baseName); // numera se necessário
+                Path alvo = targetBase.resolve(baseName).normalize();
                 Files.createDirectories(alvo.getParent());
                 try (OutputStream os = Files.newOutputStream(alvo, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING)) {
-                    zis.transferTo(os);
+                    zis.transferTo(os); // último vence
                 }
                 zis.closeEntry();
             }
@@ -200,27 +184,8 @@ public class EntradaUsuarioService {
         }
     }
 
-    // util: pega só o nome do arquivo (sem diretórios)
     private static String soNome(String caminho) {
         if (caminho == null || caminho.isBlank()) return "Arquivo.java";
         return Paths.get(caminho).getFileName().toString();
-    }
-
-    // util: garante nome único no diretório (Classe.java, Classe_2.java, Classe_3.java, …)
-    private static Path nomeUnico(Path dir, String baseName) {
-        String semExt = baseName;
-        String ext = "";
-        int p = baseName.lastIndexOf('.');
-        if (p > 0) {
-            semExt = baseName.substring(0, p);
-            ext = baseName.substring(p);
-        }
-        Path candidato = dir.resolve(baseName);
-        int i = 2;
-        while (Files.exists(candidato)) {
-            candidato = dir.resolve(semExt + "_" + i + ext);
-            i++;
-        }
-        return candidato;
     }
 }
