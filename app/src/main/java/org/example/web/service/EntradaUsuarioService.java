@@ -6,12 +6,15 @@ import org.springframework.stereotype.Service;
 
 import java.nio.file.*;
 import java.util.Map;
+import java.util.Comparator;
 import java.io.*;
 import java.util.zip.*;
-import java.util.Comparator;
+import java.util.concurrent.locks.ReentrantLock;
 
 @Service
 public class EntradaUsuarioService {
+
+    private static final ReentrantLock LOCK = new ReentrantLock();
 
     @Value("${app.entrada.diretorio:entrada-usuario}")
     private String diretorioEntrada;
@@ -25,6 +28,7 @@ public class EntradaUsuarioService {
     // ===== APIs usadas pelo controller =====
 
     public Path salvarArquivos(Map<String, String> arquivosRelativosParaConteudo) {
+        LOCK.lock();
         try {
             Path base = resolverBase();
             limparConteudo(base); // zera local
@@ -37,14 +41,17 @@ public class EntradaUsuarioService {
                 Files.writeString(alvo, e.getValue());
             }
 
-            enviarParaRepositorio(base); // limpa clone, copia mantendo os nomes e commita
+            enviarParaRepositorio(base); // limpa clone, copia mantendo nomes e commita
             return base;
         } catch (Exception ex) {
             throw new RuntimeException(ex);
+        } finally {
+            LOCK.unlock();
         }
     }
 
     public Path salvarConteudo(String caminhoRelativo, String conteudo) {
+        LOCK.lock();
         try {
             Path base = resolverBase();
             limparConteudo(base);
@@ -61,6 +68,8 @@ public class EntradaUsuarioService {
             return alvo;
         } catch (Exception ex) {
             throw new RuntimeException(ex);
+        } finally {
+            LOCK.unlock();
         }
     }
 
@@ -69,6 +78,7 @@ public class EntradaUsuarioService {
     }
 
     public Path salvarArquivo(File arquivo) {
+        LOCK.lock();
         try {
             Path base = resolverBase();
             limparConteudo(base);
@@ -84,10 +94,13 @@ public class EntradaUsuarioService {
             return base;
         } catch (Exception ex) {
             throw new RuntimeException(ex);
+        } finally {
+            LOCK.unlock();
         }
     }
 
     public Path salvarProjetoZip(File zip) {
+        LOCK.lock();
         try {
             Path base = resolverBase();
             limparConteudo(base);
@@ -96,6 +109,8 @@ public class EntradaUsuarioService {
             return base;
         } catch (Exception ex) {
             throw new RuntimeException(ex);
+        } finally {
+            LOCK.unlock();
         }
     }
 
