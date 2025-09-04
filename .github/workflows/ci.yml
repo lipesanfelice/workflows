@@ -129,7 +129,15 @@ jobs:
         GROQ_MODELO: llama-3.1-8b-instant
         SONAR_RELATORIO_JSON: ${{ github.workspace }}/app/entrada-usuario/relatorio-sonar.json
         CODIGO_FONTE_DIR: ${{ github.workspace }}/app/entrada-usuario
-      run: ./gradlew -p app bootRun --args='--acao=gerar-testes --spring.main.web-application-type=none'
+      run: |
+        ./gradlew -p app bootRun --args='--acao=gerar-testes --spring.main.web-application-type=none --app.entrada.diretorio=${{ github.workspace }}/app/entrada-usuario'
+
+    - name: Listar testes gerados
+      run: |
+        echo "Base: ${{ github.workspace }}/app/entrada-usuario/testes_explicações"
+        ls -la "${{ github.workspace }}/app/entrada-usuario/testes_explicações" || true
+        find "${{ github.workspace }}/app/entrada-usuario/testes_explicações/tests" -type f -name "*.java" -maxdepth 4 || true
+        cat "${{ github.workspace }}/app/entrada-usuario/testes_explicações/relatorio.txt" || true
 
 
 
