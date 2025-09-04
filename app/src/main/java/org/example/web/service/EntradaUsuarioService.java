@@ -6,6 +6,8 @@ import org.springframework.stereotype.Service;
 
 import java.nio.file.*;
 import java.util.Map;
+import java.io.*;
+import java.util.zip.*;
 
 @Service
 public class EntradaUsuarioService {
@@ -47,6 +49,35 @@ public class EntradaUsuarioService {
         }
     }
 
+    public Path salvarCodigo(String codigo) {
+        String nome = "java/CodigoUsuario.java";
+        return salvarConteudo(nome, codigo);
+    }
+
+    public Path salvarArquivo(File arquivo) {
+        try {
+            Path base = resolverBase();
+            Path destino = base.resolve(arquivo.getName());
+            Files.createDirectories(destino.getParent());
+            Files.copy(arquivo.toPath(), destino, StandardCopyOption.REPLACE_EXISTING);
+            enviarParaRepositorio(base.getParent());
+            return destino;
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    public Path salvarProjetoZip(File zip) {
+        try {
+            Path base = resolverBase();
+            unzip(zip, base);
+            enviarParaRepositorio(base.getParent());
+            return base;
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+    }
+
     private Path resolverBase() {
         Path base = Path.of(diretorioEntrada);
         if (!base.isAbsolute()) {
@@ -58,11 +89,11 @@ public class EntradaUsuarioService {
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
-        return base.resolve(""); // normaliza
+        return base.resolve("");
     }
 
     private void enviarParaRepositorio(Path pastaEntrada) {
-        java.io.File clone = java.nio.file.Paths.get(System.getProperty("java.io.tmpdir"), "repo-workflows").toFile();
+        File clone = Paths.get(System.getProperty("java.io.tmpdir"), "repo-workflows").toFile();
         GitServico git = new GitServico(clone, repositorioGit);
         git.garantirClone();
         git.sincronizarMain();
@@ -90,5 +121,29 @@ public class EntradaUsuarioService {
         }
         git.configurarIdentidade("github-actions[bot]", "github-actions[bot]@users.noreply.github.com");
         git.adicionarCommitarEmpurrar("app/entrada-usuario", mensagemCommit);
+    }
+
+    private static void unzip(File zipFile, Path targetBase) {
+        try (ZipInputStream zis = new ZipInputStream(new BufferedInputStream(new FileInputStream(zipFile)))) {
+            ZipEntry entry;
+            while ((entry = zis.getNextEntry()) != null) {
+                Path alvo = targetBase.resolve(entry.getName()).normalize();
+                if (!alvo.startsWith(targetBase)) {
+                    zis.closeEntry();
+                    continue;
+                }
+                if (entry.isDirectory()) {
+                    Files.createDirectories(alvo);
+                } else {
+                    Files.createDirectories(alvo.getParent());
+                    try (OutputStream os = Files.newOutputStream(alvo, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING)) {
+                        zis.transferTo(os);
+                    }
+                }
+                zis.closeEntry();
+            }
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
     }
 }
