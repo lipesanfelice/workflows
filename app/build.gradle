@@ -100,9 +100,11 @@ sonar {
     }
 }
 
-tasks.register('extrairSonar', JavaExec) {
+tasks.register('salvarRelatorioSonar', JavaExec) {
+    group = 'sonar'
+    mainClass = 'org.example.util.SonarRelatorioCli'
     classpath = sourceSets.main.runtimeClasspath
-    mainClass = 'org.example.cli.SonarExtracaoMain'
+    args "lipesanfelice_workflows", System.getenv('SONAR_TOKEN') ?: '', "$projectDir/entrada-usuario/relatorio-sonar.json"
 }
 
 
