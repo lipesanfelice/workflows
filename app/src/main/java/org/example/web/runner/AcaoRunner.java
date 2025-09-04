@@ -31,7 +31,7 @@ public class AcaoRunner implements ApplicationRunner {
         var relatorio = System.getenv("SONAR_RELATORIO_JSON");
         var dir = System.getenv("CODIGO_FONTE_DIR");
         var findings = Files.readString(Path.of(relatorio));
-        var bloco = LeitorCodigo.montarBlocoCodigo(Path.of(dir), 250_000);
+        var bloco = LeitorCodigo.montarBlocoCodigo(Path.of(dir), 250000);
         var prompt = Prompts.montarPromptGroq(findings, Path.of(dir).toAbsolutePath().toString(), bloco);
 
         gerador.gerar(prompt);

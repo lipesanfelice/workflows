@@ -122,6 +122,10 @@ sourceSets {
     }
 }
 
+dependencies {
+    testImplementation 'org.mockito:mockito-core:5.13.0'
+}
+
 
 
 tasks.withType(JavaExec).configureEach {

@@ -3,6 +3,7 @@ package org.example.web.service;
 import org.example.web.ia.ClienteIa;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+
 import java.nio.file.*;
 import java.util.*;
 import java.io.*;
@@ -20,9 +21,14 @@ public class GeradorTestesService {
 
     public Path gerar(String prompt) {
         try {
-            var base = Paths.get(dirEntrada).resolve("testes_explicações");
-            var pastaTests = base.resolve("tests");
-            var pastaExp = base.resolve("explicacoes");
+            Path baseEntrada = Path.of(dirEntrada);
+            if (!baseEntrada.isAbsolute()) {
+                Path cand = Path.of("app").resolve(dirEntrada);
+                baseEntrada = Files.exists(cand) ? cand : baseEntrada;
+            }
+            Path base = baseEntrada.resolve("testes_explicações");
+            Path pastaTests = base.resolve("tests");
+            Path pastaExp = base.resolve("explicacoes");
             Files.createDirectories(pastaTests);
             Files.createDirectories(pastaExp);
 
@@ -30,19 +36,19 @@ public class GeradorTestesService {
             var arquivos = separarArquivos(resp.codigo());
             var nomes = new ArrayList<String>();
             for (var arq : arquivos.entrySet()) {
-                var caminho = arq.getKey().trim().replace('.', '/');
-                var nome = caminho.endsWith(".java") ? caminho : caminho + ".java";
-                var alvo = pastaTests.resolve(nome);
+                String caminho = arq.getKey().trim().replace('.', '/');
+                String nome = caminho.endsWith(".java") ? caminho : caminho + ".java";
+                Path alvo = pastaTests.resolve(nome);
                 Files.createDirectories(alvo.getParent());
                 Files.writeString(alvo, arq.getValue());
                 nomes.add(alvo.toString());
             }
-            if (!resp.explicacao().isBlank()) {
-                var exp = pastaExp.resolve("explicacoes.jsonl");
+            if (resp.explicacao() != null && !resp.explicacao().isBlank()) {
+                Path exp = pastaExp.resolve("explicacoes.jsonl");
                 Files.writeString(exp, resp.explicacao() + System.lineSeparator(), StandardOpenOption.CREATE, StandardOpenOption.APPEND);
             }
-            var resumo = base.resolve("relatorio.txt");
-            var linhas = String.join(System.lineSeparator(), nomes);
+            Path resumo = base.resolve("relatorio.txt");
+            String linhas = String.join(System.lineSeparator(), nomes);
             Files.writeString(resumo, linhas + System.lineSeparator(), StandardOpenOption.CREATE, StandardOpenOption.APPEND);
             return base;
         } catch (Exception e) {
@@ -52,6 +58,7 @@ public class GeradorTestesService {
 
     private Map<String,String> separarArquivos(String bloco) {
         var mapa = new LinkedHashMap<String,String>();
+        if (bloco == null) return mapa;
         var linhas = bloco.split("\n");
         String nome = null;
         var b = new StringBuilder();

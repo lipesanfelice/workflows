@@ -1,4 +1,5 @@
 package org.example.web.ia;
+
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -21,24 +22,24 @@ public class ClienteIaGroq implements ClienteIa {
     @Override
     public Registro gerar(String prompt) {
         try {
-            var corpo = """
+            String corpo = ("""
             {"model":"%s","messages":[{"role":"user","content":%s}],"temperature":0.1}
-            """.formatted(modelo, json.writeValueAsString(prompt));
-            var req = HttpRequest.newBuilder()
+            """).formatted(modelo, json.writeValueAsString(prompt));
+            HttpRequest req = HttpRequest.newBuilder()
                     .uri(uri)
-                    .timeout(Duration.ofSeconds(120))   // <- AQUI entra o timeout da requisição
+                    .timeout(Duration.ofSeconds(120))
                     .header("Authorization","Bearer " + chave)
                     .header("Content-Type","application/json")
                     .POST(HttpRequest.BodyPublishers.ofString(corpo))
                     .build();
-            var resp = http.send(req, HttpResponse.BodyHandlers.ofString());
+            HttpResponse<String> resp = http.send(req, HttpResponse.BodyHandlers.ofString());
             if (resp.statusCode() < 200 || resp.statusCode() >= 300) {
                 throw new RuntimeException("Falha Groq: " + resp.statusCode() + " - " + resp.body());
             }
             var raiz = json.readTree(resp.body());
-            var conteudo = raiz.path("choices").get(0).path("message").path("content").asText("");
-            var codigo = extrair(conteudo, "====CODIGO====", "====FIM-CODIGO====");
-            var explicacao = extrair(conteudo, "====EXPLICACAO====", "====FIM-EXPLICACAO====");
+            String conteudo = raiz.path("choices").get(0).path("message").path("content").asText("");
+            String codigo = extrair(conteudo, "====CODIGO====", "====FIM-CODIGO====");
+            String explicacao = extrair(conteudo, "====EXPLICACAO====", "====FIM-EXPLICACAO====");
             return new Registro(codigo, explicacao);
         } catch (Exception e) {
             throw new RuntimeException(e);
@@ -46,8 +47,8 @@ public class ClienteIaGroq implements ClienteIa {
     }
 
     private String extrair(String s, String ini, String fim) {
-        var a = s.indexOf(ini);
-        var b = s.indexOf(fim);
+        int a = s.indexOf(ini);
+        int b = s.indexOf(fim);
         if (a < 0 || b < 0 || b <= a) return "";
         return s.substring(a + ini.length(), b).trim();
     }
