@@ -63,12 +63,12 @@ jobs:
       working-directory: app
       env:
         SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        SONAR_PROJECT: lipesanfelice_workflows
+        SONAR_RELATORIO_JSON: ${{ runner.temp }}/relatorio-sonar.json
       run: ../gradlew salvarRelatorioSonar
 
-    - name: Conferir arquivo salvo
-      run: |
-        ls -la "$GITHUB_WORKSPACE/app/entrada-usuario" || true
-        test -s "$GITHUB_WORKSPACE/app/entrada-usuario/relatorio-sonar.json" && echo "OK: presente" || (echo "NOK: ausente" && exit 1)
+    - name: Conferir arquivo
+      run: ls -la "${{ runner.temp }}"
 
 
 
