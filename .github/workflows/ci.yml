@@ -76,7 +76,7 @@ jobs:
       run: |
           mkdir -p app/entrada-usuario
           curl -s -u "${SONAR_TOKEN}:" \
-            "https://sonarcloud.io/api/measures/component?component=${{ vars.SONAR_PROJECT }}&metricKeys=coverage,lines_to_cover,uncovered_lines,complexity,bugs,vulnerabilities,code_smells,duplicated_lines_density" \
+            "https://sonarcloud.io/api/measures/component?component=lipesanfelice_workflows&metricKeys=coverage,lines_to_cover,uncovered_lines,complexity,bugs,vulnerabilities,code_smells,duplicated_lines_density" \
             > app/entrada-usuario/relatorio-sonar.json
           test -s app/entrada-usuario/relatorio-sonar.json
 
