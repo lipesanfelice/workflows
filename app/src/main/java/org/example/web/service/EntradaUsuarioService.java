@@ -25,13 +25,14 @@ public class EntradaUsuarioService {
     public Path salvarArquivos(Map<String, String> arquivosRelativosParaConteudo) {
         try {
             Path base = resolverBase();
-            limparConteudo(base); // <— limpa TUDO localmente antes de gravar o novo envio
+            limparConteudo(base);
             for (var e : arquivosRelativosParaConteudo.entrySet()) {
                 Path alvo = base.resolve(e.getKey());
+                if (!alvo.toString().endsWith(".java")) continue; // só .java
                 Files.createDirectories(alvo.getParent());
                 Files.writeString(alvo, e.getValue());
             }
-            enviarParaRepositorio(base); // <— vai limpar no clone e commitar
+            enviarParaRepositorio(base);
             return base;
         } catch (Exception e) {
             throw new RuntimeException(e);
@@ -41,7 +42,10 @@ public class EntradaUsuarioService {
     public Path salvarConteudo(String caminhoRelativo, String conteudo) {
         try {
             Path base = resolverBase();
-            limparConteudo(base); // <— limpa TUDO localmente
+            limparConteudo(base);
+            if (!caminhoRelativo.endsWith(".java")) {
+                caminhoRelativo = caminhoRelativo + ".java";
+            }
             Path alvo = base.resolve(caminhoRelativo);
             Files.createDirectories(alvo.getParent());
             Files.writeString(alvo, conteudo);
@@ -52,33 +56,32 @@ public class EntradaUsuarioService {
         }
     }
 
-    // compatível com seu controller
     public Path salvarCodigo(String codigo) {
         String nome = "java/CodigoUsuario.java";
         return salvarConteudo(nome, codigo);
     }
 
-    // compatível com seu controller
     public Path salvarArquivo(File arquivo) {
         try {
             Path base = resolverBase();
-            limparConteudo(base); // <— limpa TUDO localmente
-            Path destino = base.resolve(arquivo.getName());
-            Files.createDirectories(destino.getParent());
-            Files.copy(arquivo.toPath(), destino, StandardCopyOption.REPLACE_EXISTING);
+            limparConteudo(base);
+            if (arquivo.getName().endsWith(".java")) {
+                Path destino = base.resolve(arquivo.getName());
+                Files.createDirectories(destino.getParent());
+                Files.copy(arquivo.toPath(), destino, StandardCopyOption.REPLACE_EXISTING);
+            }
             enviarParaRepositorio(base);
-            return destino;
+            return base;
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
     }
 
-    // compatível com seu controller
     public Path salvarProjetoZip(File zip) {
         try {
             Path base = resolverBase();
-            limparConteudo(base); // <— limpa TUDO localmente
-            unzip(zip, base);
+            limparConteudo(base);
+            unzipSomenteJava(zip, base); // <-- apenas .java entram aqui
             enviarParaRepositorio(base);
             return base;
         } catch (Exception e) {
@@ -114,21 +117,19 @@ public class EntradaUsuarioService {
             Path destino = clone.toPath().resolve("app").resolve("entrada-usuario");
             Files.createDirectories(destino);
 
-            // 1) limpa TUDO no clone, para refletir estado novo
+            // 1) limpa tudo no clone
             limparConteudo(destino);
 
-            // 2) copia TUDO do envio atual (sem exceções)
+            // 2) copia SOMENTE arquivos .java do envio atual
             try (var walk = Files.walk(pastaEntrada)) {
                 walk.forEach(p -> {
                     try {
+                        if (Files.isDirectory(p)) return;
+                        if (!p.toString().endsWith(".java")) return; // só .java
                         Path rel = pastaEntrada.relativize(p);
                         Path alvo = destino.resolve(rel.toString()).normalize();
-                        if (Files.isDirectory(p)) {
-                            Files.createDirectories(alvo);
-                        } else {
-                            Files.createDirectories(alvo.getParent());
-                            Files.copy(p, alvo, StandardCopyOption.REPLACE_EXISTING);
-                        }
+                        Files.createDirectories(alvo.getParent());
+                        Files.copy(p, alvo, StandardCopyOption.REPLACE_EXISTING);
                     } catch (Exception ex) {
                         throw new RuntimeException(ex);
                     }
@@ -139,7 +140,6 @@ public class EntradaUsuarioService {
         }
 
         git.configurarIdentidade("github-actions[bot]", "github-actions[bot]@users.noreply.github.com");
-        // add -A garante que deleções são versionadas
         git.adicionarCommitarEmpurrar("app/entrada-usuario", mensagemCommit);
     }
 
@@ -154,19 +154,18 @@ public class EntradaUsuarioService {
         } catch (IOException ignored) {}
     }
 
-    private static void unzip(File zipFile, Path targetBase) {
+    private static void unzipSomenteJava(File zipFile, Path targetBase) {
         try (ZipInputStream zis = new ZipInputStream(new BufferedInputStream(new FileInputStream(zipFile)))) {
             ZipEntry entry;
             while ((entry = zis.getNextEntry()) != null) {
-                Path alvo = targetBase.resolve(entry.getName()).normalize();
+                String nome = entry.getName();
+                if (entry.isDirectory()) { zis.closeEntry(); continue; }
+                if (nome == null || !nome.endsWith(".java")) { zis.closeEntry(); continue; } // só .java
+                Path alvo = targetBase.resolve(nome).normalize();
                 if (!alvo.startsWith(targetBase)) { zis.closeEntry(); continue; }
-                if (entry.isDirectory()) {
-                    Files.createDirectories(alvo);
-                } else {
-                    Files.createDirectories(alvo.getParent());
-                    try (OutputStream os = Files.newOutputStream(alvo, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING)) {
-                        zis.transferTo(os);
-                    }
+                Files.createDirectories(alvo.getParent());
+                try (OutputStream os = Files.newOutputStream(alvo, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING)) {
+                    zis.transferTo(os);
                 }
                 zis.closeEntry();
             }
