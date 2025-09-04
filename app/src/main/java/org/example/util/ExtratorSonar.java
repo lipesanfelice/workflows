@@ -15,34 +15,41 @@ public class ExtratorSonar {
             String url = "https://sonarcloud.io/api/measures/component?component=" + projeto +
                     "&metricKeys=coverage,lines_to_cover,uncovered_lines,complexity,bugs,vulnerabilities,code_smells,duplicated_lines_density";
             URL obj = new URL(url);
-            HttpURLConnection conexao = (HttpURLConnection) obj.openConnection();
-            conexao.setRequestMethod("GET");
+            HttpURLConnection c = (HttpURLConnection) obj.openConnection();
+            c.setRequestMethod("GET");
             String auth = token + ":";
-            String encodedAuth = Base64.getEncoder().encodeToString(auth.getBytes(StandardCharsets.UTF_8));
-            conexao.setRequestProperty("Authorization", "Basic " + encodedAuth);
-
-            int status = conexao.getResponseCode();
+            String encoded = Base64.getEncoder().encodeToString(auth.getBytes(StandardCharsets.UTF_8));
+            c.setRequestProperty("Authorization", "Basic " + encoded);
+            int status = c.getResponseCode();
             var in = new BufferedReader(new InputStreamReader(
-                    status >= 200 && status < 300 ? conexao.getInputStream() : conexao.getErrorStream(),
-                    StandardCharsets.UTF_8));
-            String entrada;
-            StringBuilder resposta = new StringBuilder();
-            while ((entrada = in.readLine()) != null) {
-                resposta.append(entrada);
-            }
+                    status >= 200 && status < 300 ? c.getInputStream() : c.getErrorStream(), StandardCharsets.UTF_8));
+            String s;
+            StringBuilder b = new StringBuilder();
+            while ((s = in.readLine()) != null) b.append(s);
             in.close();
-            return resposta.toString();
+            return b.toString();
         } catch (Exception e) {
             return "{}";
         }
     }
 
-    public static Path extrairESalvar(String projeto, String token, Path arquivoSaida) {
+    public static Path extrairESalvarComRetry(String projeto, String token, Path destino, int tentativas, long esperaMs) {
         try {
-            String json = extrair(projeto, token);
-            if (arquivoSaida.getParent() != null) Files.createDirectories(arquivoSaida.getParent());
-            Files.writeString(arquivoSaida, json, StandardCharsets.UTF_8, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
-            return arquivoSaida;
+            if (destino.getParent() != null) Files.createDirectories(destino.getParent());
+            Path tmp = destino.resolveSibling(destino.getFileName().toString() + ".tmp");
+            String conteudo = "{}";
+            for (int i = 1; i <= tentativas; i++) {
+                conteudo = extrair(projeto, token);
+                if (conteudo != null && conteudo.length() > 2 && conteudo.contains("component")) break;
+                Thread.sleep(esperaMs);
+            }
+            Files.writeString(tmp, conteudo, StandardCharsets.UTF_8, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
+            try {
+                Files.move(tmp, destino, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+            } catch (Exception ignore) {
+                Files.move(tmp, destino, StandardCopyOption.REPLACE_EXISTING);
+            }
+            return destino;
         } catch (Exception e) {
             throw new RuntimeException(e);
         }

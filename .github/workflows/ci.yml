@@ -58,7 +58,7 @@ jobs:
       run: |
         ./gradlew clean build
         ./gradlew -p app -Dsonar.token=$SONAR_TOKEN sonar
-
+    
     - name: Extrair métricas Sonar → relatorio-sonar.json
       working-directory: app
       env:
@@ -67,17 +67,55 @@ jobs:
         SONAR_OUTPUT_DIR: ${{ github.workspace }}/app/entrada-usuario
       run: ../gradlew bootRun --args='--acao=extrair-sonar --spring.main.web-application-type=none'
 
-    - name: Conferir arquivo salvo
+    - name: Conferir e imprimir conteúdo
+      env:
+        ARQ: ${{ github.workspace }}/app/entrada-usuario/relatorio-sonar.json
       run: |
-        ls -la $GITHUB_WORKSPACE/app/entrada-usuario || true
-        test -f $GITHUB_WORKSPACE/app/entrada-usuario/relatorio-sonar.json && echo "OK" || (echo "NOK" && exit 1)
-    
+        set -euo pipefail
+        ls -la "$(dirname "$ARQ")" || true
+        test -s "$ARQ"
+        echo "OK: arquivo presente"
+        echo "Tamanho (bytes): $(wc -c < "$ARQ")"
+        python3 - <<'PY'
+        import os, json
+        p = os.environ["ARQ"]
+        t = open(p,'r',encoding='utf-8').read()
+        try:
+          j = json.loads(t)
+          print(json.dumps(j, ensure_ascii=False, indent=2))
+        except Exception:
+          print(t)
+        PY
+
+    - name: Backup fora do repo
+      env:
+        ARQ: ${{ github.workspace }}/app/entrada-usuario/relatorio-sonar.json
+        BKP: ${{ runner.temp }}/relatorio-sonar.json
+      run: |
+        set -euo pipefail
+        cp -f "$ARQ" "$BKP"
+        echo "SONAR_JSON=$ARQ" >> $GITHUB_ENV
+        echo "SONAR_JSON_BKP=$BKP" >> $GITHUB_ENV
+
+# ... suas outras etapas (inclusive cleans, se houver) ...
+
+    - name: Restaurar se arquivo sumir
+      if: always()
+      run: |
+        set -euo pipefail
+        if [ ! -s "$SONAR_JSON" ] && [ -s "$SONAR_JSON_BKP" ]; then
+          mkdir -p "$(dirname "$SONAR_JSON")"
+          cp -f "$SONAR_JSON_BKP" "$SONAR_JSON"
+          echo "Restaurado a partir do backup"
+        fi
+        ls -la "$(dirname "$SONAR_JSON")" || true
+
     - name: Publicar relatorio-sonar.json
       if: always()
       uses: actions/upload-artifact@v4
       with:
         name: relatorio-sonar
-        path: app/entrada-usuario/relatorio-sonar.json
+        path: ${{ env.SONAR_JSON }}
         if-no-files-found: error
         retention-days: 30
 
