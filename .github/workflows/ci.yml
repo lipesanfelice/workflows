@@ -5,12 +5,9 @@ permissions:
   contents: write
   pull-requests: write
 
-
-
 concurrency:
   group: gen-tests-${{ github.ref }}
   cancel-in-progress: true
-  
 
 
 on:
@@ -167,22 +164,46 @@ jobs:
     # - name: Testes + JaCoCo
     #   run: ./gradlew -p app test jacocoTestReport
 
-    - name: Abrir/atualizar PR com testes gerados
-      uses: peter-evans/create-pull-request@v6
-      with:
-        token: ${{ secrets.GITHUB_TOKEN }}
-        commit-message: "chore(tests): atualizar testes gerados pela IA [skip ci]"
-        title: "chore(tests): atualizar testes gerados pela IA"
-        body: |
-          Atualização automática de testes gerados pela IA.
-          Run: ${{ github.run_number }}
-          SHA base: ${{ github.sha }}
-        branch: ci/generated-tests
-        base: main
-        add-paths: |
-          app/entrada-usuario/testes_explicações/**
-        labels: |
-          automated
-          tests
+    - name: Commit e push dos arquivos gerados (na main)
+      if: ${{ github.event_name != 'pull_request' }}
+      env:
+        BRANCH: main
+      run: |
+        set -euo pipefail
+        git config user.name  "github-actions[bot]"
+        git config user.email "github-actions[bot]@users.noreply.github.com"
+        git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+        # Garante que estamos na main local e com histórico completo
+        git fetch origin "$BRANCH" --prune
+        if git rev-parse --verify "$BRANCH" >/dev/null 2>&1; then
+          git checkout "$BRANCH"
+        else
+          git checkout -b "$BRANCH" "origin/$BRANCH"
+        fi
+
+        # Guarda tudo que foi gerado (inclusive não rastreado) antes de sincronizar com o remoto
+        git stash push --include-untracked --all -m "ci-autostash" || true
+
+        # Atualiza a main local com o remoto usando MERGE (evita non-fast-forward por rebase)
+        git pull --no-rebase origin "$BRANCH" || true
+
+        # Restaura os arquivos gerados
+        git stash pop || true
+
+        # Sobe somente a pasta dos arquivos gerados
+        git add -A app/entrada-usuario/testes_explicações
+
+        if git diff --cached --quiet; then
+          echo "Sem mudanças para commit."
+          exit 0
+        fi
+
+        msg="chore(tests): atualizar testes gerados pela IA [skip ci] - run ${{ github.run_number }} @ ${{ github.sha }}"
+        git commit -m "$msg"
+
+        # Push normal para a main
+        git push origin HEAD:"$BRANCH"
+
 
 
