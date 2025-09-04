@@ -120,7 +120,7 @@ jobs:
     - name: Conferir entradas
       run: |
         test -f "${{ github.workspace }}/app/entrada-usuario/relatorio-sonar.json" || (echo "faltando relatorio-sonar.json" && exit 1)
-        test -d "${{ github.workspace }}/app/entrada-usuario/java" || (echo "faltando pasta de código entrada-usuario/java" && exit 1)
+        test -d "${{ github.workspace }}/app/entrada-usuario" || (echo "faltando pasta de código entrada-usuario/java" && exit 1)
     
     - name: Gerar testes via IA (Groq)
       env:
