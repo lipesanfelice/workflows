@@ -60,16 +60,14 @@ jobs:
         ./gradlew -p app -Dsonar.token=$SONAR_TOKEN sonar
 
     - name: Extrair métricas Sonar → dados_sonar/relatorio-sonar.json
-      working-directory: app
       env:
         SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         SONAR_PROJECT_KEY: lipesanfelice_workflows
         SONAR_OUTPUT_FILE: ${{ github.workspace }}/app/dados_sonar/relatorio-sonar.json
-      run: ../gradlew bootRun --args='--acao=extrair-sonar --spring.main.web-application-type=none'
+      run: ./gradlew -p app extrairSonar
 
     - name: Conferir arquivo salvo
       run: |
-        echo "pwd=$(pwd)"
         ls -la "$GITHUB_WORKSPACE/app/dados_sonar" || true
         test -s "$GITHUB_WORKSPACE/app/dados_sonar/relatorio-sonar.json" && echo "OK: presente" || (echo "NOK: ausente" && exit 1)
 
