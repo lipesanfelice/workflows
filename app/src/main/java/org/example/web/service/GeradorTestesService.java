@@ -36,11 +36,11 @@ public class GeradorTestesService {
             var arquivos = separarArquivos(resp.codigo());
             var nomes = new ArrayList<String>();
             for (var arq : arquivos.entrySet()) {
-                String caminho = arq.getKey().trim().replace('.', '/');
-                String nome = caminho.endsWith(".java") ? caminho : caminho + ".java";
-                Path alvo = pastaTests.resolve(nome);
+                String nomeNormalizado = normalizarCaminho(arq.getKey());
+                Path alvo = pastaTests.resolve(nomeNormalizado);
                 Files.createDirectories(alvo.getParent());
-                Files.writeString(alvo, arq.getValue());
+                String conteudoAjustado = ajustarPacote(arq.getValue(), "org.example.generated");
+                Files.writeString(alvo, conteudoAjustado);
                 nomes.add(alvo.toString());
             }
             if (resp.explicacao() != null && !resp.explicacao().isBlank()) {
@@ -73,5 +73,63 @@ public class GeradorTestesService {
         }
         if (nome != null && b.length() > 0) mapa.put(nome, b.toString().trim());
         return mapa;
+    }
+
+    // === Blindagens contra nomes "tortos" vindos da IA ===
+    private String normalizarCaminho(String nome) {
+        if (nome == null || nome.isBlank()) {
+            return "org/example/generated/ArquivoGeradoTest.java";
+        }
+        String s = nome.trim().replace('\\','/');
+
+        // Se veio só com pontos (org.example.generated.ClasseTest.java), vira path
+        if (!s.contains("/")) {
+            s = s.replace('.', '/');
+        }
+
+        // Remove barras duplas e prefixos estranhos
+        s = s.replaceAll("/{2,}", "/");
+        while (s.startsWith("/")) s = s.substring(1);
+
+        // Caso bizarro: ".../EntradaUsuarioTest/java.java" -> ".../EntradaUsuarioTest.java"
+        if (s.endsWith("/java.java")) {
+            int idx = s.lastIndexOf('/', s.length() - "/java.java".length() - 1);
+            if (idx >= 0) {
+                String className = s.substring(idx + 1, s.length() - "/java.java".length());
+                s = s.substring(0, idx + 1) + className + ".java";
+            } else {
+                s = s.substring(0, s.length() - "/java.java".length()) + ".java";
+            }
+        }
+
+        // Garante extensão .java
+        if (!s.endsWith(".java")) {
+            s = s + ".java";
+        }
+
+        // Se não apontou pacote, cai no pacote de testes padrão
+        if (!s.startsWith("org/")) {
+            // mantém só o nome do arquivo
+            String file = s.substring(s.lastIndexOf('/') + 1);
+            s = "org/example/generated/" + file;
+        }
+
+        // Força pacote org/example/generated para ficar consistente com o conteúdo
+        if (!s.startsWith("org/example/generated/")) {
+            String file = s.substring(s.lastIndexOf('/') + 1);
+            s = "org/example/generated/" + file;
+        }
+
+        return s;
+    }
+
+    private String ajustarPacote(String conteudoOriginal, String pacoteDesejado) {
+        if (conteudoOriginal == null) conteudoOriginal = "";
+        String s = conteudoOriginal.stripLeading();
+
+        if (!s.startsWith("package ")) {
+            return "package " + pacoteDesejado + ";\n\n" + conteudoOriginal.trim() + "\n";
+        }
+        return s.replaceFirst("^package\\s+[^;]+;", "package " + pacoteDesejado + ";");
     }
 }

@@ -27,6 +27,8 @@ REGRAS:
 - Cubra branches sinalizadas como não cobertas
 - Evite acessar rede, disco ou banco
 - Use pacote org.example.generated para os testes
+- O nome do arquivo DEVE ser org.example.generated.<Classe>Test.java (com .java no fim)
+- NUNCA use barras dentro do nome do arquivo; use pontos de pacote e termine com .java
 - Importe a classe alvo pelo pacote correto quando possível
 """).formatted(relatorioSonarJson, caminhoCodigo, blocoCodigo);
         String formato = """
