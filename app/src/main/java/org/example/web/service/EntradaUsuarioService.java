@@ -25,12 +25,13 @@ public class EntradaUsuarioService {
     public Path salvarArquivos(Map<String, String> arquivosRelativosParaConteudo) {
         try {
             Path base = resolverBase();
+            limparConteudo(base); // <— limpa TUDO localmente antes de gravar o novo envio
             for (var e : arquivosRelativosParaConteudo.entrySet()) {
                 Path alvo = base.resolve(e.getKey());
                 Files.createDirectories(alvo.getParent());
                 Files.writeString(alvo, e.getValue());
             }
-            enviarParaRepositorio(base);
+            enviarParaRepositorio(base); // <— vai limpar no clone e commitar
             return base;
         } catch (Exception e) {
             throw new RuntimeException(e);
@@ -40,6 +41,7 @@ public class EntradaUsuarioService {
     public Path salvarConteudo(String caminhoRelativo, String conteudo) {
         try {
             Path base = resolverBase();
+            limparConteudo(base); // <— limpa TUDO localmente
             Path alvo = base.resolve(caminhoRelativo);
             Files.createDirectories(alvo.getParent());
             Files.writeString(alvo, conteudo);
@@ -60,6 +62,7 @@ public class EntradaUsuarioService {
     public Path salvarArquivo(File arquivo) {
         try {
             Path base = resolverBase();
+            limparConteudo(base); // <— limpa TUDO localmente
             Path destino = base.resolve(arquivo.getName());
             Files.createDirectories(destino.getParent());
             Files.copy(arquivo.toPath(), destino, StandardCopyOption.REPLACE_EXISTING);
@@ -74,6 +77,7 @@ public class EntradaUsuarioService {
     public Path salvarProjetoZip(File zip) {
         try {
             Path base = resolverBase();
+            limparConteudo(base); // <— limpa TUDO localmente
             unzip(zip, base);
             enviarParaRepositorio(base);
             return base;
@@ -100,24 +104,23 @@ public class EntradaUsuarioService {
 
     private void enviarParaRepositorio(Path pastaEntrada) {
         if (pastaEntrada == null) throw new IllegalArgumentException("pastaEntrada nula");
+
         File clone = Paths.get(System.getProperty("java.io.tmpdir"), "repo-workflows").toFile();
         GitServico git = new GitServico(clone, repositorioGit);
         git.garantirClone();
         git.sincronizarMain();
+
         try {
             Path destino = clone.toPath().resolve("app").resolve("entrada-usuario");
             Files.createDirectories(destino);
 
-            // 1) LIMPAR completamente o conteúdo anterior do destino
+            // 1) limpa TUDO no clone, para refletir estado novo
             limparConteudo(destino);
 
-            // 2) COPIAR tudo do usuário, EXCETO a pasta de testes gerados
-            Path excluirTests = pastaEntrada.resolve("testes_explicações").normalize();
+            // 2) copia TUDO do envio atual (sem exceções)
             try (var walk = Files.walk(pastaEntrada)) {
                 walk.forEach(p -> {
                     try {
-                        if (p == null) return;
-                        if (p.normalize().startsWith(excluirTests)) return; // ignora testes gerados
                         Path rel = pastaEntrada.relativize(p);
                         Path alvo = destino.resolve(rel.toString()).normalize();
                         if (Files.isDirectory(p)) {
@@ -136,12 +139,12 @@ public class EntradaUsuarioService {
         }
 
         git.configurarIdentidade("github-actions[bot]", "github-actions[bot]@users.noreply.github.com");
-        // 3) add -A para também registrar deleções
+        // add -A garante que deleções são versionadas
         git.adicionarCommitarEmpurrar("app/entrada-usuario", mensagemCommit);
     }
 
     private static void limparConteudo(Path dir) {
-        if (!Files.exists(dir)) return;
+        if (dir == null || !Files.exists(dir)) return;
         try (var walk = Files.walk(dir)) {
             walk.sorted(Comparator.reverseOrder())
                 .filter(p -> !p.equals(dir))
