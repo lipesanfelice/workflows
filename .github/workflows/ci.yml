@@ -9,7 +9,6 @@ concurrency:
   group: gen-tests-${{ github.ref }}
   cancel-in-progress: true
 
-
 on:
   push:
     paths:
@@ -164,7 +163,7 @@ jobs:
     # - name: Testes + JaCoCo
     #   run: ./gradlew -p app test jacocoTestReport
 
-    - name: Commit e push dos arquivos gerados (na main)
+    - name: Commit e push dos arquivos gerados (main)
       if: ${{ github.event_name != 'pull_request' }}
       env:
         BRANCH: main
@@ -174,24 +173,22 @@ jobs:
         git config user.email "github-actions[bot]@users.noreply.github.com"
         git config --global --add safe.directory "$GITHUB_WORKSPACE"
 
-        # Garante que estamos na main local e com histórico completo
+        # guarda tudo que foi gerado (inclusive não rastreado)
+        git stash push --include-untracked --all -m "ci-autostash" || true
+
+        # sincroniza local com o remoto e BASEIA a main local no HEAD remoto
         git fetch origin "$BRANCH" --prune
         if git rev-parse --verify "$BRANCH" >/dev/null 2>&1; then
           git checkout "$BRANCH"
         else
-          git checkout -b "$BRANCH" "origin/$BRANCH"
+          git checkout -b "$BRANCH"
         fi
+        git reset --hard "origin/$BRANCH"
 
-        # Guarda tudo que foi gerado (inclusive não rastreado) antes de sincronizar com o remoto
-        git stash push --include-untracked --all -m "ci-autostash" || true
-
-        # Atualiza a main local com o remoto usando MERGE (evita non-fast-forward por rebase)
-        git pull --no-rebase origin "$BRANCH" || true
-
-        # Restaura os arquivos gerados
+        # restaura arquivos gerados do stash
         git stash pop || true
 
-        # Sobe somente a pasta dos arquivos gerados
+        # adiciona só a pasta gerada
         git add -A app/entrada-usuario/testes_explicações
 
         if git diff --cached --quiet; then
@@ -202,8 +199,9 @@ jobs:
         msg="chore(tests): atualizar testes gerados pela IA [skip ci] - run ${{ github.run_number }} @ ${{ github.sha }}"
         git commit -m "$msg"
 
-        # Push normal para a main
+        # push linear baseado no HEAD remoto (agora FF é garantido)
         git push origin HEAD:"$BRANCH"
+
 
 
 
