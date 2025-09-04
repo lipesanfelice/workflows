@@ -3,6 +3,9 @@ package org.example.web.service;
 import org.example.web.ia.ClienteIa;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import org.example.util.LeitorCodigo;
+import org.example.util.Prompts;
+import org.example.util.SonarUtil;
 
 import java.nio.file.*;
 import java.util.*;
@@ -15,11 +18,15 @@ public class GeradorTestesService {
     @Value("${app.entrada.diretorio:entrada-usuario}")
     private String dirEntrada;
 
+    // limites bem conservadores para o tier grátis
+    private static final int MAX_CODE_CHARS = 8000;
+    private static final int MAX_SONAR_CHARS = 6000;
+
     public GeradorTestesService(ClienteIa ia) {
         this.ia = ia;
     }
 
-    public Path gerar(String prompt) {
+    public Path gerarParaTodosArquivos(String sonarJsonPath) {
         try {
             Path baseEntrada = Path.of(dirEntrada);
             if (!baseEntrada.isAbsolute()) {
@@ -32,28 +39,64 @@ public class GeradorTestesService {
             Files.createDirectories(pastaTests);
             Files.createDirectories(pastaExp);
 
-            var resp = ia.gerar(prompt);
-            var arquivos = separarArquivos(resp.codigo());
-            var nomes = new ArrayList<String>();
-            for (var arq : arquivos.entrySet()) {
-                String nomeNormalizado = normalizarCaminho(arq.getKey());
-                Path alvo = pastaTests.resolve(nomeNormalizado);
-                Files.createDirectories(alvo.getParent());
-                String conteudoAjustado = ajustarPacote(arq.getValue(), "org.example.generated");
-                Files.writeString(alvo, conteudoAjustado);
-                nomes.add(alvo.toString());
+            String sonarJson = "";
+            try { sonarJson = Files.readString(Path.of(sonarJsonPath)); } catch (Exception ignored) {}
+
+            List<Path> arquivos = listarJava(baseEntrada);
+            List<String> linhasRelatorio = new ArrayList<>();
+
+            for (Path arq : arquivos) {
+                try {
+                    String codigo = LeitorCodigo.lerAteLimite(arq, MAX_CODE_CHARS);
+                    String sonarCut = SonarUtil.extrairTrechoPorArquivo(sonarJson, arq.getFileName().toString(), MAX_SONAR_CHARS);
+                    String prompt = Prompts.montarPromptGroqPorArquivo(sonarCut, arq.toString(), codigo);
+
+                    var resp = ia.gerar(prompt);
+
+                    Map<String,String> arquivosGerados = separarArquivos(resp.codigo());
+                    if (arquivosGerados.isEmpty()) {
+                        linhasRelatorio.add("SEM_ARQUIVOS: " + arq.getFileName());
+                    } else {
+                        for (var e : arquivosGerados.entrySet()) {
+                            String nomeNorm = normalizarCaminho(e.getKey());
+                            Path alvo = pastaTests.resolve(nomeNorm);
+                            Files.createDirectories(alvo.getParent());
+                            String conteudo = ajustarPacote(e.getValue(), "org.example.generated");
+                            Files.writeString(alvo, conteudo);
+                            linhasRelatorio.add("OK: " + arq.getFileName() + " -> " + alvo);
+                        }
+                    }
+                    if (resp.explicacao() != null && !resp.explicacao().isBlank()) {
+                        Path exp = pastaExp.resolve("explicacoes.jsonl");
+                        Files.writeString(exp, resp.explicacao() + System.lineSeparator(), StandardOpenOption.CREATE, StandardOpenOption.APPEND);
+                    }
+
+                    // pequeno intervalo para não pressionar TPM
+                    try { Thread.sleep(350L); } catch (InterruptedException ignored) {}
+                } catch (Exception ex) {
+                    linhasRelatorio.add("ERRO: " + arq.getFileName() + " -> " + ex.getMessage());
+                    // continua nos próximos arquivos
+                }
             }
-            if (resp.explicacao() != null && !resp.explicacao().isBlank()) {
-                Path exp = pastaExp.resolve("explicacoes.jsonl");
-                Files.writeString(exp, resp.explicacao() + System.lineSeparator(), StandardOpenOption.CREATE, StandardOpenOption.APPEND);
-            }
+
             Path resumo = base.resolve("relatorio.txt");
-            String linhas = String.join(System.lineSeparator(), nomes);
-            Files.writeString(resumo, linhas + System.lineSeparator(), StandardOpenOption.CREATE, StandardOpenOption.APPEND);
+            Files.writeString(resumo, String.join(System.lineSeparator(), linhasRelatorio) + System.lineSeparator(),
+                    StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
+
             return base;
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
+    }
+
+    private List<Path> listarJava(Path baseEntrada) throws IOException {
+        List<Path> lista = new ArrayList<>();
+        try (var walk = Files.walk(baseEntrada, 1)) { // nivel 1 porque você achata os arquivos
+            walk.filter(Files::isRegularFile)
+                .filter(p -> p.toString().endsWith(".java"))
+                .forEach(lista::add);
+        }
+        return lista;
     }
 
     private Map<String,String> separarArquivos(String bloco) {
@@ -75,23 +118,14 @@ public class GeradorTestesService {
         return mapa;
     }
 
-    // === Blindagens contra nomes "tortos" vindos da IA ===
     private String normalizarCaminho(String nome) {
         if (nome == null || nome.isBlank()) {
             return "org/example/generated/ArquivoGeradoTest.java";
         }
         String s = nome.trim().replace('\\','/');
-
-        // Se veio só com pontos (org.example.generated.ClasseTest.java), vira path
-        if (!s.contains("/")) {
-            s = s.replace('.', '/');
-        }
-
-        // Remove barras duplas e prefixos estranhos
+        if (!s.contains("/")) s = s.replace('.', '/');
         s = s.replaceAll("/{2,}", "/");
         while (s.startsWith("/")) s = s.substring(1);
-
-        // Caso bizarro: ".../EntradaUsuarioTest/java.java" -> ".../EntradaUsuarioTest.java"
         if (s.endsWith("/java.java")) {
             int idx = s.lastIndexOf('/', s.length() - "/java.java".length() - 1);
             if (idx >= 0) {
@@ -101,32 +135,14 @@ public class GeradorTestesService {
                 s = s.substring(0, s.length() - "/java.java".length()) + ".java";
             }
         }
-
-        // Garante extensão .java
-        if (!s.endsWith(".java")) {
-            s = s + ".java";
-        }
-
-        // Se não apontou pacote, cai no pacote de testes padrão
-        if (!s.startsWith("org/")) {
-            // mantém só o nome do arquivo
-            String file = s.substring(s.lastIndexOf('/') + 1);
-            s = "org/example/generated/" + file;
-        }
-
-        // Força pacote org/example/generated para ficar consistente com o conteúdo
-        if (!s.startsWith("org/example/generated/")) {
-            String file = s.substring(s.lastIndexOf('/') + 1);
-            s = "org/example/generated/" + file;
-        }
-
-        return s;
+        if (!s.endsWith(".java")) s = s + ".java";
+        String file = s.substring(s.lastIndexOf('/') + 1);
+        return "org/example/generated/" + file;
     }
 
     private String ajustarPacote(String conteudoOriginal, String pacoteDesejado) {
         if (conteudoOriginal == null) conteudoOriginal = "";
         String s = conteudoOriginal.stripLeading();
-
         if (!s.startsWith("package ")) {
             return "package " + pacoteDesejado + ";\n\n" + conteudoOriginal.trim() + "\n";
         }

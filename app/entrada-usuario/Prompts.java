@@ -2,7 +2,7 @@ package org.example.util;
 
 public class Prompts {
     public static String montarPromptGroq(String relatorioSonarJson, String caminhoCodigo, String blocoCodigo) {
-        var instrucoes = """
+        String instrucoes = """
 Gere testes unitários JUnit 5 para Java priorizando achados de maior gravidade do Sonar.
 Respeite:
 - Nomes de classes e métodos de teste em português
@@ -11,8 +11,8 @@ Respeite:
 - Mockito apenas quando necessário
 - Java 21
 - Um arquivo de teste por classe alvo
-        """;
-        var contexto = """
+""";
+        String contexto = ("""
 ===ENTRADA===
 RELATORIO_SONAR_JSON:
 %s
@@ -27,9 +27,11 @@ REGRAS:
 - Cubra branches sinalizadas como não cobertas
 - Evite acessar rede, disco ou banco
 - Use pacote org.example.generated para os testes
+- O nome do arquivo DEVE ser org.example.generated.<Classe>Test.java (com .java no fim)
+- NUNCA use barras dentro do nome do arquivo; use pontos de pacote e termine com .java
 - Importe a classe alvo pelo pacote correto quando possível
-        """.formatted(relatorioSonarJson, caminhoCodigo, blocoCodigo);
-        var formato = """
+""").formatted(relatorioSonarJson, caminhoCodigo, blocoCodigo);
+        String formato = """
 Retorne exatamente neste formato:
 
 ====CODIGO====
@@ -48,7 +50,7 @@ class NomeClasseAlvoTest {
 ====EXPLICACAO====
 {"arquivo_origem":"pacote/ClasseAlvo.java","classe_alvo":"pacote.ClasseAlvo","metodos_alvo":["metodoX"],"gravidade_max":"CRITICAL","regras_sonar":["java:SXXXX"],"lacunas_cobertura":{"linhas":[10,11,12],"branches":["condicao==true"]},"estrategia_de_teste":"caminhos felizes e de erro","casos_gerados":[{"nome":"descricaoEmPortugues","cobertura_prevista":{"linhas":[10,11,12],"branches":["condicao==true"]}}]}
 ====FIM-EXPLICACAO====
-        """;
+""";
         return instrucoes + "\n" + contexto + "\n" + formato;
     }
 }

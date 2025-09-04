@@ -23,7 +23,7 @@ public class ClienteIaGroq implements ClienteIa {
     public Registro gerar(String prompt) {
         try {
             String corpo = ("""
-            {"model":"%s","messages":[{"role":"user","content":%s}],"temperature":0.1}
+            {"model":"%s","messages":[{"role":"user","content":%s}],"temperature":0.1,"max_tokens":1200}
             """).formatted(modelo, json.writeValueAsString(prompt));
             HttpRequest req = HttpRequest.newBuilder()
                     .uri(uri)

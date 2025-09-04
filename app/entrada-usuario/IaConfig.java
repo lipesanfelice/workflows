@@ -9,12 +9,8 @@ import org.springframework.context.annotation.Configuration;
 public class IaConfig {
     @Bean
     ClienteIa clienteIa() {
-        var provedor = System.getenv().getOrDefault("IA_PROVEDOR","groq");
-        if (provedor.equalsIgnoreCase("groq")) {
-            var chave = System.getenv("GROQ_API_KEY");
-            var modelo = System.getenv().getOrDefault("GROQ_MODELO","llama-3.1-8b-instant");
-            return new ClienteIaGroq(chave, modelo);
-        }
-        throw new IllegalStateException("Provedor de IA inválido");
+        String chave = System.getenv("GROQ_API_KEY");
+        String modelo = System.getenv().getOrDefault("GROQ_MODELO","llama-3.1-8b-instant");
+        return new ClienteIaGroq(chave, modelo);
     }
 }

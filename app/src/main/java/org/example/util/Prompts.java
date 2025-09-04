@@ -1,56 +1,48 @@
 package org.example.util;
 
 public class Prompts {
-    public static String montarPromptGroq(String relatorioSonarJson, String caminhoCodigo, String blocoCodigo) {
+    public static String montarPromptGroqPorArquivo(String sonarRecorte, String caminhoArquivo, String conteudoArquivo) {
         String instrucoes = """
-Gere testes unitários JUnit 5 para Java priorizando achados de maior gravidade do Sonar.
-Respeite:
-- Nomes de classes e métodos de teste em português
-- Sem comentários no código
-- Asserts determinísticos
-- Mockito apenas quando necessário
-- Java 21
+Gere testes unitários JUnit 5 para o arquivo Java fornecido.
+Priorize problemas de maior gravidade presentes no recorte do relatório Sonar.
+Regras:
+- Escreva testes em pacote org.example.generated
 - Um arquivo de teste por classe alvo
+- Sem comentários no código
+- Mockito apenas quando necessário
+- Java 21, JUnit 5
+- Cubra caminhos felizes e de erro quando fizer sentido
+- Não inclua blocos ``` ou cercas de código
+- Use nomes de métodos de teste em português
 """;
         String contexto = ("""
-===ENTRADA===
-RELATORIO_SONAR_JSON:
+===ARQUIVO_ALVO===
+CAMINHO: %s
+
+CÓDIGO:
 %s
 
-CAMINHO_BASE_CODIGO: %s
-
-CODIGO_FONTE:
+===SONAR_RECORTE_RELACIONADO_AO_ARQUIVO===
 %s
 
-REGRAS:
-- Selecione classes e métodos com issues de MAJOR e CRITICAL antes das demais
-- Cubra branches sinalizadas como não cobertas
-- Evite acessar rede, disco ou banco
-- Use pacote org.example.generated para os testes
-- O nome do arquivo DEVE ser org.example.generated.<Classe>Test.java (com .java no fim)
-- NUNCA use barras dentro do nome do arquivo; use pontos de pacote e termine com .java
-- Importe a classe alvo pelo pacote correto quando possível
-""").formatted(relatorioSonarJson, caminhoCodigo, blocoCodigo);
-        String formato = """
-Retorne exatamente neste formato:
-
+Formato de resposta (EXATAMENTE assim):
 ====CODIGO====
-<arquivo: org.example.generated.NomeClasseAlvoTest.java>
+<arquivo: org.example.generated.NomeDaClasseAlvoTest.java>
 package org.example.generated;
 
 import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
-class NomeClasseAlvoTest {
+class NomeDaClasseAlvoTest {
     @Test
-    void descricaoEmPortugues() {
+    void deveExecutarCaminhoPrincipal() {
     }
 }
 ====FIM-CODIGO====
 ====EXPLICACAO====
-{"arquivo_origem":"pacote/ClasseAlvo.java","classe_alvo":"pacote.ClasseAlvo","metodos_alvo":["metodoX"],"gravidade_max":"CRITICAL","regras_sonar":["java:SXXXX"],"lacunas_cobertura":{"linhas":[10,11,12],"branches":["condicao==true"]},"estrategia_de_teste":"caminhos felizes e de erro","casos_gerados":[{"nome":"descricaoEmPortugues","cobertura_prevista":{"linhas":[10,11,12],"branches":["condicao==true"]}}]}
+{"arquivo_origem":"%s","classe_alvo":"pacote.ClasseAlvo","gravidade_max":"CRITICAL","regras_sonar":["java:SXXXX"],"casos_gerados":[{"nome":"deveExecutarCaminhoPrincipal"}]}
 ====FIM-EXPLICACAO====
-""";
-        return instrucoes + "\n" + contexto + "\n" + formato;
+""").formatted(caminhoArquivo, conteudoArquivo, sonarRecorte, caminhoArquivo);
+        return instrucoes + "\n" + contexto;
     }
 }
