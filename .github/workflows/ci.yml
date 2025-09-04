@@ -97,8 +97,6 @@ jobs:
         echo "SONAR_JSON=$ARQ" >> $GITHUB_ENV
         echo "SONAR_JSON_BKP=$BKP" >> $GITHUB_ENV
 
-# ... suas outras etapas (inclusive cleans, se houver) ...
-
     - name: Restaurar se arquivo sumir
       if: always()
       run: |
@@ -118,17 +116,21 @@ jobs:
         path: ${{ env.SONAR_JSON }}
         if-no-files-found: error
         retention-days: 30
+
+    - name: Conferir entradas
+      run: |
+        test -f "${{ github.workspace }}/app/entrada-usuario/relatorio-sonar.json" || (echo "faltando relatorio-sonar.json" && exit 1)
+        test -d "${{ github.workspace }}/app/entrada-usuario/java" || (echo "faltando pasta de código entrada-usuario/java" && exit 1)
     
     - name: Gerar testes via IA (Groq)
-      working-directory: app
       env:
         IA_PROVEDOR: groq
         GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
         GROQ_MODELO: llama-3.1-8b-instant
         SONAR_RELATORIO_JSON: ${{ github.workspace }}/app/entrada-usuario/relatorio-sonar.json
         CODIGO_FONTE_DIR: ${{ github.workspace }}/app/entrada-usuario/java
-      run: |
-        ../gradlew bootRun --args='--acao=gerar-testes' || true
+      run: ./gradlew -p app bootRun --args='--acao=gerar-testes'
+
 
 
 
