@@ -1,124 +1,94 @@
 package org.example.web.service;
 
+import org.example.web.git.GitServico;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
-import java.io.*;
 import java.nio.file.*;
-import java.util.zip.ZipEntry;
-import java.util.zip.ZipInputStream;
+import java.util.Map;
 
 @Service
 public class EntradaUsuarioService {
 
-    private final String pastaEntrada;
-    private final String repositorioGit;
-    private final String mensagemCommit;
+    @Value("${app.entrada.diretorio:entrada-usuario}")
+    private String diretorioEntrada;
 
-    public EntradaUsuarioService(
-            @Value("${app.entrada.diretorio:entrada-usuario}") String pastaEntrada,
-            @Value("${app.entrada.repositorio-git:https://github.com/lipesanfelice/workflows.git}") String repositorioGit,
-            @Value("${app.entrada.mensagem-commit:Nova entrada do usuario}") String mensagemCommit) throws IOException {
-        
-        this.pastaEntrada = pastaEntrada;
-        this.repositorioGit = repositorioGit;
-        this.mensagemCommit = mensagemCommit;
-        
-        inicializarPasta();
-    }
+    @Value("${app.entrada.repositorio-git:https://github.com/lipesanfelice/workflows.git}")
+    private String repositorioGit;
 
-    private void inicializarPasta() throws IOException {
-        Path pasta = Paths.get(pastaEntrada);
-        if (!Files.exists(pasta)) {
-            Files.createDirectories(pasta);
-        }
-    }
+    @Value("${app.entrada.mensagem-commit:Atualizar entrada do usuário}")
+    private String mensagemCommit;
 
-    public void limparPastaEntrada() throws IOException {
-        Path pasta = Paths.get(pastaEntrada);
-        if (Files.exists(pasta)) {
-            Files.walk(pasta)
-                    .sorted((a, b) -> b.compareTo(a))
-                    .map(Path::toFile)
-                    .forEach(File::delete);
-        }
-        Files.createDirectories(pasta);
-    }
-
-    public void salvarCodigo(String codigo) throws IOException {
-        limparPastaEntrada();
-        Path arquivo = Paths.get(pastaEntrada, "EntradaUsuario.java");
-        Files.writeString(arquivo, codigo);
-        comitarEntrada();
-    }
-
-    public void salvarArquivo(File arquivo) throws IOException {
-        limparPastaEntrada();
-        Path destino = Paths.get(pastaEntrada, arquivo.getName());
-        Files.copy(arquivo.toPath(), destino, StandardCopyOption.REPLACE_EXISTING);
-        comitarEntrada();
-    }
-
-    public void salvarProjetoZip(File zipFile) throws IOException {
-        limparPastaEntrada();
-        try (ZipInputStream zis = new ZipInputStream(new FileInputStream(zipFile))) {
-            ZipEntry entry;
-            while ((entry = zis.getNextEntry()) != null) {
-                if (!entry.isDirectory() && entry.getName().endsWith(".java")) {
-                    Path destino = Paths.get(pastaEntrada, Paths.get(entry.getName()).getFileName().toString());
-                    Files.copy(zis, destino, StandardCopyOption.REPLACE_EXISTING);
-                }
-            }
-        }
-        comitarEntrada();
-    }
-
-    private void comitarEntrada() {
+    public Path salvarArquivos(Map<String, String> arquivosRelativosParaConteudo) {
         try {
-            // Configurar o repositório remoto se não estiver configurado
-            ProcessBuilder pb = new ProcessBuilder(
-                    "git", "remote", "get-url", "origin"
-            );
-            Process process = pb.start();
-            if (process.waitFor() != 0) {
-                // Se não tiver remote, adicionar
-                pb = new ProcessBuilder(
-                        "git", "remote", "add", "origin", repositorioGit
-                );
-                pb.inheritIO().start().waitFor();
+            Path base = resolverBase();
+            for (var e : arquivosRelativosParaConteudo.entrySet()) {
+                Path alvo = base.resolve(e.getKey());
+                Files.createDirectories(alvo.getParent());
+                Files.writeString(alvo, e.getValue());
             }
-
-            // Fazer commit e push
-            pb = new ProcessBuilder(
-                    "git", "add", pastaEntrada
-            );
-            pb.inheritIO().start().waitFor();
-
-            pb = new ProcessBuilder(
-                    "git", "commit", "-m", mensagemCommit
-            );
-            pb.inheritIO().start().waitFor();
-
-            pb = new ProcessBuilder(
-                    "git", "push", "origin", "HEAD:main"
-            );
-            pb.inheritIO().start().waitFor();
-
+            enviarParaRepositorio(base.getParent());
+            return base;
         } catch (Exception e) {
-            e.printStackTrace();
+            throw new RuntimeException(e);
         }
     }
 
-    // Getters para acesso às configurações
-    public String getPastaEntrada() {
-        return pastaEntrada;
+    public Path salvarConteudo(String caminhoRelativo, String conteudo) {
+        try {
+            Path base = resolverBase();
+            Path alvo = base.resolve(caminhoRelativo);
+            Files.createDirectories(alvo.getParent());
+            Files.writeString(alvo, conteudo);
+            enviarParaRepositorio(base.getParent());
+            return alvo;
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
     }
 
-    public String getRepositorioGit() {
-        return repositorioGit;
+    private Path resolverBase() {
+        Path base = Path.of(diretorioEntrada);
+        if (!base.isAbsolute()) {
+            Path cand = Path.of("app").resolve(diretorioEntrada);
+            base = Files.exists(cand.getParent()) ? cand : base;
+        }
+        try {
+            Files.createDirectories(base);
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+        return base.resolve(""); // normaliza
     }
 
-    public String getMensagemCommit() {
-        return mensagemCommit;
+    private void enviarParaRepositorio(Path pastaEntrada) {
+        java.io.File clone = java.nio.file.Paths.get(System.getProperty("java.io.tmpdir"), "repo-workflows").toFile();
+        GitServico git = new GitServico(clone, repositorioGit);
+        git.garantirClone();
+        git.sincronizarMain();
+        try {
+            Path destino = clone.toPath().resolve("app").resolve("entrada-usuario");
+            Files.createDirectories(destino);
+            try (var walk = Files.walk(pastaEntrada)) {
+                walk.forEach(p -> {
+                    try {
+                        Path rel = pastaEntrada.relativize(p);
+                        Path alvo = destino.resolve(rel.toString());
+                        if (Files.isDirectory(p)) {
+                            Files.createDirectories(alvo);
+                        } else {
+                            Files.createDirectories(alvo.getParent());
+                            Files.copy(p, alvo, StandardCopyOption.REPLACE_EXISTING);
+                        }
+                    } catch (Exception ex) {
+                        throw new RuntimeException(ex);
+                    }
+                });
+            }
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+        git.configurarIdentidade("github-actions[bot]", "github-actions[bot]@users.noreply.github.com");
+        git.adicionarCommitarEmpurrar("app/entrada-usuario", mensagemCommit);
     }
 }
