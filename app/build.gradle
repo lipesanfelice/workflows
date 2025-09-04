@@ -107,6 +107,15 @@ tasks.register('salvarRelatorioSonar', JavaExec) {
     args "lipesanfelice_workflows", System.getenv('SONAR_TOKEN') ?: '', "$projectDir/entrada-usuario/relatorio-sonar.json"
 }
 
+sourceSets {
+    test {
+        java {
+            srcDir("$projectDir/entrada-usuario/testes_explicações/tests")
+        }
+    }
+}
+
+
 
 tasks.withType(JavaExec).configureEach {
     environment 'JAVA_TOOL_OPTIONS', '-Dfile.encoding=UTF-8'
