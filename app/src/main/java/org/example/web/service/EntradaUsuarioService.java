@@ -29,7 +29,7 @@ public class EntradaUsuarioService {
                 Files.createDirectories(alvo.getParent());
                 Files.writeString(alvo, e.getValue());
             }
-            enviarParaRepositorio(base.getParent());
+            enviarParaRepositorio(base); // <-- antes era base.getParent()
             return base;
         } catch (Exception e) {
             throw new RuntimeException(e);
@@ -42,36 +42,39 @@ public class EntradaUsuarioService {
             Path alvo = base.resolve(caminhoRelativo);
             Files.createDirectories(alvo.getParent());
             Files.writeString(alvo, conteudo);
-            enviarParaRepositorio(base.getParent());
+            enviarParaRepositorio(base); // <-- antes era base.getParent()
             return alvo;
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
     }
 
+    // Compatível com seu controller
     public Path salvarCodigo(String codigo) {
         String nome = "java/CodigoUsuario.java";
         return salvarConteudo(nome, codigo);
     }
 
+    // Compatível com seu controller
     public Path salvarArquivo(File arquivo) {
         try {
             Path base = resolverBase();
             Path destino = base.resolve(arquivo.getName());
             Files.createDirectories(destino.getParent());
             Files.copy(arquivo.toPath(), destino, StandardCopyOption.REPLACE_EXISTING);
-            enviarParaRepositorio(base.getParent());
+            enviarParaRepositorio(base); // <-- antes era base.getParent()
             return destino;
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
     }
 
+    // Compatível com seu controller
     public Path salvarProjetoZip(File zip) {
         try {
             Path base = resolverBase();
             unzip(zip, base);
-            enviarParaRepositorio(base.getParent());
+            enviarParaRepositorio(base); // <-- antes era base.getParent()
             return base;
         } catch (Exception e) {
             throw new RuntimeException(e);
@@ -79,20 +82,28 @@ public class EntradaUsuarioService {
     }
 
     private Path resolverBase() {
-        Path base = Path.of(diretorioEntrada);
-        if (!base.isAbsolute()) {
-            Path cand = Path.of("app").resolve(diretorioEntrada);
-            base = Files.exists(cand.getParent()) ? cand : base;
-        }
         try {
+            Path base = Path.of(diretorioEntrada);
+            if (!base.isAbsolute()) {
+                Path cwd = Path.of("").toAbsolutePath();
+                Path candidatoEmApp = cwd.resolve("app").resolve(diretorioEntrada);
+                Path candidatoAqui = cwd.resolve(diretorioEntrada);
+                // Se existe o diretório "app" (rodando da raiz), usa app/entrada-usuario; senão usa ./entrada-usuario
+                if (Files.exists(candidatoEmApp.getParent())) {
+                    base = candidatoEmApp;
+                } else {
+                    base = candidatoAqui;
+                }
+            }
             Files.createDirectories(base);
+            return base; // já é absoluto ou resolvido
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
-        return base.resolve("");
     }
 
     private void enviarParaRepositorio(Path pastaEntrada) {
+        if (pastaEntrada == null) throw new IllegalArgumentException("pastaEntrada nula");
         File clone = Paths.get(System.getProperty("java.io.tmpdir"), "repo-workflows").toFile();
         GitServico git = new GitServico(clone, repositorioGit);
         git.garantirClone();
