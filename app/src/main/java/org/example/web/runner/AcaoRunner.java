@@ -4,16 +4,21 @@ import org.example.web.service.GeradorTestesService;
 import org.example.util.Prompts;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
+import org.springframework.context.ApplicationContext;
 import org.springframework.stereotype.Component;
+import org.springframework.boot.SpringApplication;
+
 import java.nio.file.Files;
 import java.nio.file.Path;
 
 @Component
 public class AcaoRunner implements ApplicationRunner {
     private final GeradorTestesService gerador;
+    private final ApplicationContext ctx;
 
-    public AcaoRunner(GeradorTestesService gerador) {
+    public AcaoRunner(GeradorTestesService gerador, ApplicationContext ctx) {
         this.gerador = gerador;
+        this.ctx = ctx;
     }
 
     @Override
@@ -26,6 +31,9 @@ public class AcaoRunner implements ApplicationRunner {
         var codigoDir = System.getenv("CODIGO_FONTE_DIR");
         var findings = Files.readString(Path.of(relatorio));
         var prompt = Prompts.montarPromptGroq(findings, Path.of(codigoDir).toAbsolutePath().toString());
+
         gerador.gerar(prompt);
+
+        SpringApplication.exit(ctx, () -> 0);
     }
 }

@@ -1,5 +1,4 @@
 package org.example.web.ia;
-
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -27,12 +26,16 @@ public class ClienteIaGroq implements ClienteIa {
             """.formatted(modelo, json.writeValueAsString(prompt));
             var req = HttpRequest.newBuilder()
                     .uri(uri)
+                    .timeout(Duration.ofSeconds(120))   // <- AQUI entra o timeout da requisição
                     .header("Authorization","Bearer " + chave)
                     .header("Content-Type","application/json")
                     .POST(HttpRequest.BodyPublishers.ofString(corpo))
                     .build();
-            var resp = http.send(req, HttpResponse.BodyHandlers.ofString()).body();
-            var raiz = json.readTree(resp);
+            var resp = http.send(req, HttpResponse.BodyHandlers.ofString());
+            if (resp.statusCode() < 200 || resp.statusCode() >= 300) {
+                throw new RuntimeException("Falha Groq: " + resp.statusCode() + " - " + resp.body());
+            }
+            var raiz = json.readTree(resp.body());
             var conteudo = raiz.path("choices").get(0).path("message").path("content").asText("");
             var codigo = extrair(conteudo, "====CODIGO====", "====FIM-CODIGO====");
             var explicacao = extrair(conteudo, "====EXPLICACAO====", "====FIM-EXPLICACAO====");
