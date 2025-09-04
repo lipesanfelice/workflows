@@ -59,16 +59,38 @@ jobs:
         ./gradlew clean build
         ./gradlew -p app -Dsonar.token=$SONAR_TOKEN sonar
 
-    - name: Extrair e salvar relatório SonarCloud
-      working-directory: app
-      env:
-        SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-        SONAR_PROJECT: lipesanfelice_workflows
-        SONAR_RELATORIO_JSON: ${{ runner.temp }}/relatorio-sonar.json
-      run: ../gradlew salvarRelatorioSonar
+    # - name: Extrair e salvar relatório SonarCloud
+    #   working-directory: app
+    #   env:
+    #     SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+    #   run: ../gradlew salvarRelatorioSonar
 
-    - name: Conferir arquivo
-      run: ls -la "${{ runner.temp }}"
+    # - name: Conferir arquivo salvo
+    #   run: |
+    #     ls -la "$GITHUB_WORKSPACE/app/entrada-usuario" || true
+    #     test -s "$GITHUB_WORKSPACE/app/entrada-usuario/relatorio-sonar.json" && echo "OK: presente" || (echo "NOK: ausente" && exit 1)
+
+    - name: Baixar métricas do Sonar e salvar JSON
+      env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+      run: |
+          mkdir -p app/entrada-usuario
+          curl -s -u "${SONAR_TOKEN}:" \
+            "https://sonarcloud.io/api/measures/component?component=${{ vars.SONAR_PROJECT }}&metricKeys=coverage,lines_to_cover,uncovered_lines,complexity,bugs,vulnerabilities,code_smells,duplicated_lines_density" \
+            > app/entrada-usuario/relatorio-sonar.json
+          test -s app/entrada-usuario/relatorio-sonar.json
+
+    - name: Commit e push do relatorio-sonar.json
+      run: |
+          git config user.name  "lipesanfelice"
+          git config user.email "felipesanfelice59@gmail.com"
+          git add app/entrada-usuario/relatorio-sonar.json
+          if git diff --cached --quiet; then
+            echo "Sem mudanças para commitar"
+          else
+            git commit -m "chore(ci): atualizar relatorio-sonar.json [skip ci]"
+            git push origin HEAD:${{ github.ref_name }}
+          fi
 
 
 
