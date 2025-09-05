@@ -19,7 +19,7 @@ public class GeradorTestesService {
     @Value("${app.entrada.diretorio:entrada-usuario}")
     private String dirEntrada;
 
-    // limites (podem ser ajustados via env)
+    // limites (ajustáveis por env)
     private final int INIT_MAX_CODE_CHARS  = (int) readLongEnv("IA_CODE_MAX_CHARS", 3000);
     private final int INIT_MAX_SONAR_CHARS = (int) readLongEnv("IA_SONAR_MAX_CHARS", 2000);
     private final long sleepBetweenCallsMs = Math.max(1000L, readLongEnv("IA_SLEEP_MS", 7000L)); // pausa entre arquivos
@@ -39,7 +39,8 @@ public class GeradorTestesService {
             Files.createDirectories(pastaTests);
             Files.createDirectories(pastaExp);
 
-            String sonarJson = ""; try { sonarJson = Files.readString(Path.of(sonarJsonPath)); } catch (Exception ignored) {}
+            String sonarJson = "";
+            try { sonarJson = Files.readString(Path.of(sonarJsonPath)); } catch (Exception ignored) {}
 
             List<Path> arquivos = listarJava(baseEntrada);
             Collections.sort(arquivos);
@@ -48,57 +49,75 @@ public class GeradorTestesService {
             for (Path arq : arquivos) {
                 String fileName = arq.getFileName().toString();
                 String baseName = fileName.replaceAll("\\.java$", "");
-                String desiredFileName = baseName + "_testes.java";          // <<<<< NOME FORÇADO
-                String desiredClassName = baseName + "_testes";              // <<<<< CLASSE FORÇADA
+                String desiredFileName = baseName + "_testes.java";
+                String desiredClassName = baseName + "_testes";
+                String expFileName = baseName + "_testes.txt";
 
                 int maxCode = INIT_MAX_CODE_CHARS, maxSonar = INIT_MAX_SONAR_CHARS;
                 boolean gerou = false; String ultimoErro = null;
 
                 for (int tent = 1; tent <= 3; tent++) {
                     try {
-                        String codigo = LeitorCodigo.lerAteLimite(arq, maxCode);
-                        String sonarCut = SonarUtil.extrairTrechoPorArquivo(sonarJson, fileName, maxSonar);
-                        String prompt = Prompts.montarPromptGroqPorArquivo(sonarCut, arq.toString(), codigo);
+                        String codigoAlvo = LeitorCodigo.lerAteLimite(arq, maxCode);
+                        String sonarCut   = SonarUtil.extrairTrechoPorArquivo(sonarJson, fileName, maxSonar);
+                        String prompt     = Prompts.montarPromptGroqPorArquivo(sonarCut, arq.toString(), codigoAlvo);
 
                         var resp = ia.gerar(prompt);
 
-                        // Ignora o nome que a IA sugerir e salva SEMPRE com <NomeOriginal>_testes.java
+                        // prioriza bloco com tags; senão usa conteúdo cru; senão esqueleto
+                        String conteudoGerado;
                         Map<String,String> arquivosGerados = separarArquivos(resp.codigo());
                         if (!arquivosGerados.isEmpty()) {
-                            // usa o PRIMEIRO arquivo que vier (mas nomeamos como queremos)
-                            String conteudo = arquivosGerados.values().iterator().next();
-                            conteudo = ajustarPacote(conteudo, "org.example.generated");
-                            conteudo = ajustarNomeClasseParaArquivo(conteudo, desiredClassName);
+                            conteudoGerado = arquivosGerados.values().iterator().next();
+                            conteudoGerado = ajustarPacote(conteudoGerado, "org.example.generated");
+                            conteudoGerado = ajustarNomeClasseParaArquivo(conteudoGerado, desiredClassName);
+
                             Path alvo = pastaTests.resolve(desiredFileName);
                             Files.createDirectories(alvo.getParent());
-                            Files.writeString(alvo, conteudo);
+                            Files.writeString(alvo, conteudoGerado);
                             rel.add("OK: " + fileName + " -> " + alvo.getFileName());
+                            // grava EXPLICAÇÃO por arquivo
+                            String explicacao = montarExplicacaoTexto(
+                                    baseName, desiredFileName, desiredClassName, conteudoGerado, sonarCut, "IA_FORMATADA", resp.explicacao());
+                            Files.writeString(pastaExp.resolve(expFileName), explicacao,
+                                    StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
                             gerou = true;
                         } else {
-                            // Fallback RAW: se a IA mandou algo sem tags, usa como código e padroniza nomes
                             String cru = resp.codigo();
                             if (cru != null && !cru.isBlank()) {
-                                cru = ajustarPacote(cru, "org.example.generated");
-                                cru = ajustarNomeClasseParaArquivo(cru, desiredClassName);
+                                conteudoGerado = ajustarPacote(cru, "org.example.generated");
+                                conteudoGerado = ajustarNomeClasseParaArquivo(conteudoGerado, desiredClassName);
+
                                 Path alvo = pastaTests.resolve(desiredFileName);
                                 Files.createDirectories(alvo.getParent());
-                                Files.writeString(alvo, cru);
+                                Files.writeString(alvo, conteudoGerado);
                                 rel.add("RAW_OK: " + fileName + " -> " + alvo.getFileName());
+
+                                String explicacao = montarExplicacaoTexto(
+                                        baseName, desiredFileName, desiredClassName, conteudoGerado, sonarCut, "IA_RAW", resp.explicacao());
+                                Files.writeString(pastaExp.resolve(expFileName), explicacao,
+                                        StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
                                 gerou = true;
                             } else {
-                                // Fallback SKELETON
-                                String skeleton = gerarEsqueleto(desiredClassName);
+                                // esqueleto mínimo
+                                conteudoGerado = gerarEsqueleto(desiredClassName);
                                 Path alvo = pastaTests.resolve(desiredFileName);
                                 Files.createDirectories(alvo.getParent());
-                                Files.writeString(alvo, skeleton);
+                                Files.writeString(alvo, conteudoGerado);
                                 rel.add("SKELETON: " + fileName + " -> " + alvo.getFileName());
+
+                                String explicacao = montarExplicacaoTexto(
+                                        baseName, desiredFileName, desiredClassName, conteudoGerado, sonarCut, "SKELETON", null);
+                                Files.writeString(pastaExp.resolve(expFileName), explicacao,
+                                        StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
                                 gerou = true;
                             }
                         }
 
                         if (resp.explicacao() != null && !resp.explicacao().isBlank()) {
-                            Path exp = pastaExp.resolve("explicacoes.jsonl");
-                            Files.writeString(exp, resp.explicacao() + System.lineSeparator(),
+                            // além do .txt individual, mantemos também um log geral, se quiser
+                            Path expLog = pastaExp.resolve("explicacoes.jsonl");
+                            Files.writeString(expLog, resp.explicacao() + System.lineSeparator(),
                                     StandardOpenOption.CREATE, StandardOpenOption.APPEND);
                         }
                         break; // sucesso
@@ -122,8 +141,7 @@ public class GeradorTestesService {
 
             Path resumo = base.resolve("relatorio.txt");
             Files.writeString(resumo, String.join(System.lineSeparator(), rel) + System.lineSeparator(),
-                StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
-
+                    StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
 
             return base;
         } catch (Exception e) { throw new RuntimeException(e); }
@@ -199,6 +217,105 @@ public class GeradorTestesService {
                     }
                 }
                 """.formatted(desiredClassName);
+    }
+
+    // —————— construção da EXPLICAÇÃO .txt ——————
+    private String montarExplicacaoTexto(String baseName,
+                                         String testFileName,
+                                         String testClassName,
+                                         String testCode,
+                                         String sonarCut,
+                                         String origem,            // IA_FORMATADA | IA_RAW | SKELETON
+                                         String explicacaoIaBruta) // pode ser json ou texto
+    {
+        int qtdTests = contarOcorrencias(testCode, "@Test");
+        boolean temErro = testCode.contains("assertThrows(") || testCode.contains("assertThrows");
+        boolean usaMockito = testCode.contains("Mockito.") || testCode.contains("mock(") || testCode.contains("when(");
+
+        Set<String> severidades = extrairSeveridades(sonarCut);
+        Set<String> regras = extrairRegras(sonarCut);
+
+        StringBuilder sb = new StringBuilder();
+        sb.append("# Explicação dos testes – ").append(testFileName).append("\n\n");
+        sb.append("**Arquivo de entrada:** ").append(baseName).append(".java\n");
+        sb.append("**Teste gerado:** ").append(testFileName)
+          .append("  (classe: ").append(testClassName).append(")\n");
+        sb.append("**Origem:** ").append(origem).append("\n\n");
+
+        sb.append("## O que o teste faz\n");
+        if (qtdTests == 0) {
+            sb.append("- Contém um teste mínimo para validar a compilação e a integração básica.\n");
+        } else {
+            sb.append("- Número de métodos de teste: ").append(qtdTests).append(".\n");
+            if (temErro) sb.append("- Inclui cenários de **erro** usando `assertThrows`.\n");
+            sb.append("- Exercita o caminho principal (happy path)");
+            if (temErro) sb.append(" e também caminhos de erro");
+            sb.append(".\n");
+            if (usaMockito) sb.append("- Usa Mockito para isolar dependências e validar interações.\n");
+        }
+        sb.append("\n");
+
+        sb.append("## Por que foi criado\n");
+        if (!severidades.isEmpty() || !regras.isEmpty()) {
+            sb.append("- Considera pontos do Sonar identificados no recorte (severidades: ")
+              .append(String.join(", ", severidades.isEmpty() ? List.of("N/A") : severidades))
+              .append(").\n");
+            if (!regras.isEmpty()) {
+                sb.append("- Regras relacionadas: ").append(String.join(", ", regras)).append(".\n");
+            }
+        } else {
+            sb.append("- Foi criado para aumentar cobertura e validar comportamento essencial da classe alvo.\n");
+        }
+        sb.append("\n");
+
+        sb.append("## Importância\n");
+        sb.append("- Aumenta a confiança em alterações futuras e reduz regressões.\n");
+        if (temErro) sb.append("- Ajuda a capturar falhas de validação e tratamento de exceções.\n");
+        if (usaMockito) sb.append("- Garante que integrações com dependências externas estejam sob controle.\n");
+        sb.append("\n");
+
+        if (explicacaoIaBruta != null && !explicacaoIaBruta.isBlank()) {
+            sb.append("## Notas adicionais da IA\n");
+            sb.append(explicacaoIaBruta.trim()).append("\n\n");
+        }
+
+        if (sonarCut != null && !sonarCut.isBlank()) {
+            sb.append("## Trecho relevante do Sonar (recorte)\n");
+            sb.append(truncar(sonarCut.trim(), 1200)).append("\n");
+        }
+        return sb.toString();
+    }
+
+    private int contarOcorrencias(String s, String token) {
+        if (s == null || token == null || token.isEmpty()) return 0;
+        int count = 0, idx = 0;
+        while ((idx = s.indexOf(token, idx)) >= 0) { count++; idx += token.length(); }
+        return count;
+    }
+
+    private Set<String> extrairSeveridades(String s) {
+        if (s == null) return Set.of();
+        Set<String> out = new LinkedHashSet<>();
+        String up = s.toUpperCase(Locale.ROOT);
+        if (up.contains("BLOCKER")) out.add("BLOCKER");
+        if (up.contains("CRITICAL")) out.add("CRITICAL");
+        if (up.contains("MAJOR")) out.add("MAJOR");
+        if (up.contains("MINOR")) out.add("MINOR");
+        if (up.contains("INFO")) out.add("INFO");
+        return out;
+    }
+
+    private Set<String> extrairRegras(String s) {
+        if (s == null) return Set.of();
+        Set<String> out = new LinkedHashSet<>();
+        Matcher m = Pattern.compile("java:S\\d+").matcher(s);
+        while (m.find()) out.add(m.group());
+        return out;
+    }
+
+    private String truncar(String s, int max) {
+        if (s == null || s.length() <= max) return s;
+        return s.substring(0, max) + "...";
     }
 
     private static long readLongEnv(String name, long def){
