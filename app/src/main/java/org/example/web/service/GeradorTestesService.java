@@ -19,10 +19,10 @@ public class GeradorTestesService {
     @Value("${app.entrada.diretorio:entrada-usuario}")
     private String dirEntrada;
 
-    // limites iniciais (reduzimos para caber folgado no tier grátis)
+    // limites (podem ser ajustados via env)
     private final int INIT_MAX_CODE_CHARS  = (int) readLongEnv("IA_CODE_MAX_CHARS", 3000);
     private final int INIT_MAX_SONAR_CHARS = (int) readLongEnv("IA_SONAR_MAX_CHARS", 2000);
-    private final long sleepBetweenCallsMs = Math.max(1000L, readLongEnv("IA_SLEEP_MS", 7000L)); // 7s por arquivo
+    private final long sleepBetweenCallsMs = Math.max(1000L, readLongEnv("IA_SLEEP_MS", 7000L)); // pausa entre arquivos
 
     public GeradorTestesService(ClienteIa ia) { this.ia = ia; }
 
@@ -40,12 +40,17 @@ public class GeradorTestesService {
             Files.createDirectories(pastaExp);
 
             String sonarJson = ""; try { sonarJson = Files.readString(Path.of(sonarJsonPath)); } catch (Exception ignored) {}
+
             List<Path> arquivos = listarJava(baseEntrada);
             Collections.sort(arquivos);
 
             List<String> rel = new ArrayList<>();
             for (Path arq : arquivos) {
                 String fileName = arq.getFileName().toString();
+                String baseName = fileName.replaceAll("\\.java$", "");
+                String desiredFileName = baseName + "_testes.java";          // <<<<< NOME FORÇADO
+                String desiredClassName = baseName + "_testes";              // <<<<< CLASSE FORÇADA
+
                 int maxCode = INIT_MAX_CODE_CHARS, maxSonar = INIT_MAX_SONAR_CHARS;
                 boolean gerou = false; String ultimoErro = null;
 
@@ -57,34 +62,36 @@ public class GeradorTestesService {
 
                         var resp = ia.gerar(prompt);
 
+                        // Ignora o nome que a IA sugerir e salva SEMPRE com <NomeOriginal>_testes.java
                         Map<String,String> arquivosGerados = separarArquivos(resp.codigo());
-                        if (arquivosGerados.isEmpty()) {
-                            // Fallback 1: se veio "código cru" (sem tags), usa-o como arquivo único.
+                        if (!arquivosGerados.isEmpty()) {
+                            // usa o PRIMEIRO arquivo que vier (mas nomeamos como queremos)
+                            String conteudo = arquivosGerados.values().iterator().next();
+                            conteudo = ajustarPacote(conteudo, "org.example.generated");
+                            conteudo = ajustarNomeClasseParaArquivo(conteudo, desiredClassName);
+                            Path alvo = pastaTests.resolve(desiredFileName);
+                            Files.createDirectories(alvo.getParent());
+                            Files.writeString(alvo, conteudo);
+                            rel.add("OK: " + fileName + " -> " + alvo.getFileName());
+                            gerou = true;
+                        } else {
+                            // Fallback RAW: se a IA mandou algo sem tags, usa como código e padroniza nomes
                             String cru = resp.codigo();
                             if (cru != null && !cru.isBlank()) {
-                                String nomeNorm = normalizarCaminho(nomeTestePorArquivo(arq));
-                                Path alvo = pastaTests.resolve(nomeNorm);
+                                cru = ajustarPacote(cru, "org.example.generated");
+                                cru = ajustarNomeClasseParaArquivo(cru, desiredClassName);
+                                Path alvo = pastaTests.resolve(desiredFileName);
                                 Files.createDirectories(alvo.getParent());
-                                Files.writeString(alvo, ajustarPacote(cru, "org.example.generated"));
-                                rel.add("RAW_OK: " + fileName + " -> " + alvo);
+                                Files.writeString(alvo, cru);
+                                rel.add("RAW_OK: " + fileName + " -> " + alvo.getFileName());
                                 gerou = true;
                             } else {
-                                // Fallback 2: esqueleto mínimo
-                                String skeleton = gerarEsqueleto(arq, codigo);
-                                String nomeNorm = normalizarCaminho(nomeTestePorArquivo(arq));
-                                Path alvo = pastaTests.resolve(nomeNorm);
+                                // Fallback SKELETON
+                                String skeleton = gerarEsqueleto(desiredClassName);
+                                Path alvo = pastaTests.resolve(desiredFileName);
                                 Files.createDirectories(alvo.getParent());
                                 Files.writeString(alvo, skeleton);
-                                rel.add("SKELETON: " + fileName + " -> " + alvo);
-                                gerou = true;
-                            }
-                        } else {
-                            for (var e : arquivosGerados.entrySet()) {
-                                String nomeNorm = normalizarCaminho(e.getKey());
-                                Path alvo = pastaTests.resolve(nomeNorm);
-                                Files.createDirectories(alvo.getParent());
-                                Files.writeString(alvo, ajustarPacote(e.getValue(), "org.example.generated"));
-                                rel.add("OK: " + fileName + " -> " + alvo);
+                                rel.add("SKELETON: " + fileName + " -> " + alvo.getFileName());
                                 gerou = true;
                             }
                         }
@@ -94,42 +101,47 @@ public class GeradorTestesService {
                             Files.writeString(exp, resp.explicacao() + System.lineSeparator(),
                                     StandardOpenOption.CREATE, StandardOpenOption.APPEND);
                         }
-                        break; // sucesso, sai das tentativas
+                        break; // sucesso
                     } catch (RuntimeException ex) {
                         String msg = ex.getMessage() == null ? "" : ex.getMessage();
-                        // 413 => reduz e tenta de novo
                         if (msg.contains("413") || msg.toLowerCase().contains("too large")) {
                             maxCode = Math.max(1200, (int)(maxCode * 0.6));
                             maxSonar = Math.max(800,  (int)(maxSonar * 0.6));
-                            ultimoErro = "413 adaptado para code=" + maxCode + " sonar=" + maxSonar;
-                            dormir(600L); continue;
+                            ultimoErro = "413 adaptado code=" + maxCode + " sonar=" + maxSonar;
+                            dormir(600L);
+                            continue;
                         }
-                        // 429 — ClienteIa já tenta backoff; se sobrar erro, dá pequena pausa e tenta
                         if (msg.contains("429")) { ultimoErro = "429"; dormir(2000L); continue; }
                         ultimoErro = msg; dormir(400L);
                     }
                 }
 
                 if (!gerou) rel.add("ERRO: " + fileName + " -> " + (ultimoErro==null?"desconhecido":ultimoErro));
-                dormir(sleepBetweenCallsMs); // intervala entre arquivos para não estourar TPM
+                dormir(sleepBetweenCallsMs);
             }
 
             Path resumo = base.resolve("relatorio.txt");
             Files.writeString(resumo, String.join(System.lineSeparator(), rel) + System.lineSeparator(),
-                    StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
+                StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
+
 
             return base;
         } catch (Exception e) { throw new RuntimeException(e); }
     }
 
+    // === util ===
+
     private List<Path> listarJava(Path baseEntrada) throws IOException {
         List<Path> lista = new ArrayList<>();
         try (var walk = Files.walk(baseEntrada, 1)) {
-            walk.filter(Files::isRegularFile).filter(p -> p.toString().endsWith(".java")).forEach(lista::add);
+            walk.filter(Files::isRegularFile)
+                .filter(p -> p.toString().endsWith(".java"))
+                .forEach(lista::add);
         }
         return lista;
     }
 
+    /** Divide bloco em <arquivo: ...> ... por arquivo (mas ignoramos o nome retornado). */
     private Map<String,String> separarArquivos(String bloco) {
         var mapa = new LinkedHashMap<String,String>();
         if (bloco == null) return mapa;
@@ -145,22 +157,6 @@ public class GeradorTestesService {
         return mapa;
     }
 
-    private String normalizarCaminho(String nome) {
-        if (nome == null || nome.isBlank()) return "org/example/generated/ArquivoGeradoTest.java";
-        String s = nome.trim().replace('\\','/');
-        if (!s.contains("/")) s = s.replace('.', '/');
-        s = s.replaceAll("/{2,}", "/");
-        while (s.startsWith("/")) s = s.substring(1);
-        if (s.endsWith("/java.java")) {
-            int idx = s.lastIndexOf('/', s.length() - "/java.java".length() - 1);
-            s = (idx >= 0) ? s.substring(0, idx + 1) + s.substring(idx + 1, s.length() - "/java.java".length()) + ".java"
-                           : s.substring(0, s.length() - "/java.java".length()) + ".java";
-        }
-        if (!s.endsWith(".java")) s = s + ".java";
-        String file = s.substring(s.lastIndexOf('/') + 1);
-        return "org/example/generated/" + file;
-    }
-
     private String ajustarPacote(String conteudoOriginal, String pacoteDesejado) {
         if (conteudoOriginal == null) conteudoOriginal = "";
         String s = conteudoOriginal.stripLeading();
@@ -168,11 +164,28 @@ public class GeradorTestesService {
         return s.replaceFirst("^package\\s+[^;]+;", "package " + pacoteDesejado + ";");
     }
 
-    private String gerarEsqueleto(Path arquivoAlvo, String codigoAlvo) {
-        String nomeBase = arquivoAlvo.getFileName().toString().replaceAll("\\.java$","");
-        String classe = extrairNomeClasse(codigoAlvo);
-        if (classe == null || classe.isBlank()) classe = nomeBase;
-        String testName = classe.replaceAll("[^A-Za-z0-9_]", "") + "Test";
+    // Força o nome da classe pública (ou primeira classe) a casar com o nome do arquivo desejado
+    private String ajustarNomeClasseParaArquivo(String code, String desiredClassName) {
+        if (code == null || code.isBlank()) return code;
+        // public class / class / final class / abstract class ...
+        Pattern p = Pattern.compile("(\\b(public\\s+)?(abstract\\s+|final\\s+)?class\\s+)([A-Za-z_][A-Za-z0-9_]*)");
+        Matcher m = p.matcher(code);
+        if (m.find()) {
+            String prefix = m.group(1);
+            return m.replaceFirst(Matcher.quoteReplacement(prefix + desiredClassName));
+        }
+        // se não achou classe, cria uma.
+        return """
+               package org.example.generated;
+
+               public class %s {
+                   @org.junit.jupiter.api.Test
+                   void deveCompilar() { org.junit.jupiter.api.Assertions.assertTrue(true); }
+               }
+               """.formatted(desiredClassName);
+    }
+
+    private String gerarEsqueleto(String desiredClassName) {
         return """
                 package org.example.generated;
 
@@ -185,19 +198,7 @@ public class GeradorTestesService {
                         assertTrue(true);
                     }
                 }
-                """.formatted(testName);
-    }
-
-    private String nomeTestePorArquivo(Path arquivoAlvo) {
-        String base = arquivoAlvo.getFileName().toString().replaceAll("\\.java$","");
-        return "org.example.generated." + base + "Test.java";
-    }
-
-    private static final Pattern CLASS_NAME = Pattern.compile("\\bclass\\s+([A-Za-z_][A-Za-z0-9_]*)");
-    private String extrairNomeClasse(String codigo) {
-        if (codigo == null) return null;
-        var m = CLASS_NAME.matcher(codigo);
-        return m.find() ? m.group(1) : null;
+                """.formatted(desiredClassName);
     }
 
     private static long readLongEnv(String name, long def){
