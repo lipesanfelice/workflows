@@ -1,3 +1,0 @@
-RAW_OK: ParserCodecov.java -> ParserCodecov_testes.java
-RAW_OK: ParserJacoco.java -> ParserJacoco_testes.java
-RAW_OK: ParserSonar.java -> ParserSonar_testes.java
