@@ -1,0 +1,23 @@
+# Explicação dos testes – ParserJacoco_testes.java
+
+**Arquivo de entrada:** ParserJacoco.java
+**Teste gerado:** ParserJacoco_testes.java  (classe: ParserJacoco_testes)
+**Origem:** IA_RAW
+
+## O que o teste faz
+- Número de métodos de teste: 2.
+- Exercita o caminho principal (happy path).
+- Usa Mockito para isolar dependências e validar interações.
+
+## Por que foi criado
+- Foi criado para aumentar cobertura e validar comportamento essencial da classe alvo.
+
+## Importância
+- Aumenta a confiança em alterações futuras e reduz regressões.
+- Garante que integrações com dependências externas estejam sob controle.
+
+## Notas adicionais da IA
+{"arquivo_origem":"/home/runner/work/workflows/workflows/app/entrada-usuario/ParserJacoco.java"}
+
+## Trecho relevante do Sonar (recorte)
+{"component":{"id":"AZg9vKiOeCdLaV9tobxT","key":"lipesanfelice_workflows","name":"app","qualifier":"TRK","measures":[{"metric":"coverage","value":"0.0","bestValue":false},{"metric":"complexity","value":"7"},{"metric":"bugs","value":"0","bestValue":true},{"metric":"lines_to_cover","value":"43"},{"metric":"code_smells","value":"3","bestValue":false},{"metric":"duplicated_lines_density","value":"0.0","bestValue":true},{"metric":"uncovered_lines","value":"43","bestValue":false},{"metric":"vulnerabilities","value":"0","bestValue":true}]}}

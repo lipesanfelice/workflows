@@ -1,0 +1,1 @@
+RAW_OK: ParserJacoco.java -> ParserJacoco_testes.java
