@@ -158,37 +158,36 @@ jobs:
     #   run: ./gradlew -p app test jacocoTestReport
 
     - name: Verificar presença de fontes e testes do usuário
-      id: check
+      id: check_usuario
       shell: bash
       run: |
-          shopt -s globstar nullglob
-          fontes=(app/entrada-usuario/**/*.java)
-          testes=(app/entrada-usuario/testes_explicações/tests/**/*.java)
-          if [[ ${#fontes[@]} -gt 0 && ${#testes[@]} -gt 0 ]]; then
-            echo "tem=true" >> $GITHUB_OUTPUT
-          else
-            echo "tem=false" >> $GITHUB_OUTPUT
-          fi
+        shopt -s globstar nullglob
+        fontes=(app/entrada-usuario/**/*.java)
+        testes=(app/entrada-usuario/testes_explicações/tests/**/*.java)
+        if [[ ${#fontes[@]} -gt 0 && ${#testes[@]} -gt 0 ]]; then
+          echo "tem=true" >> "$GITHUB_OUTPUT"
+        else
+          echo "tem=false" >> "$GITHUB_OUTPUT"
+        fi
 
-    - name: Gradle test + JaCoCo
-      if: steps.check.outputs.tem == 'true'
-      run: ./gradlew --no-daemon clean testUsuario jacocoRelatorioUsuario
+    - name: Testes + Cobertura (testUsuario + jacocoRelatorioUsuario)
+      if: steps.check_usuario.outputs.tem == 'true'
+      run: |
+        ./gradlew --no-daemon clean testUsuario jacocoRelatorioUsuario
+        echo "JACOCO_XML=app/entrada-usuario/jacoco-relatorio/jacoco.xml" >> "$GITHUB_ENV"
+        echo "JACOCO_HTML_DIR=app/entrada-usuario/jacoco-relatorio/html" >> "$GITHUB_ENV"
 
-    - name: Publicar relatório JaCoCo
-      if: steps.check.outputs.tem == 'true'
+    - name: Publicar relatório JaCoCo (HTML+XML)
+      if: steps.check_usuario.outputs.tem == 'true'
       uses: actions/upload-artifact@v4
       with:
-          name: jacoco-relatorio
-          path: app/entrada-usuario/jacoco-relatorio/**
+        name: jacoco-relatorio
+        path: |
+          ${{ env.JACOCO_XML }}
+          ${{ env.JACOCO_HTML_DIR }}/**
+        if-no-files-found: error
+        retention-days: 30
 
-    - name: Publicar logs de testes
-      if: steps.check.outputs.tem == 'true'
-      uses: actions/upload-artifact@v4
-      with:
-          name: testes-logs
-          path: |
-            build/test-results/**/*
-            build/reports/tests/**/*
 
     - name: Commit e push dos arquivos gerados (na main)
       if: ${{ github.event_name != 'pull_request' }}
