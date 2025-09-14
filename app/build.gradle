@@ -113,27 +113,34 @@ def dirMain = new File(dirWork, 'src/main/java')
 def dirTest = new File(dirWork, 'src/test/java')
 
 tasks.register('organizarUsuario') {
+    // declare entradas/saídas NA CONFIGURAÇÃO
     inputs.files(fileTree(dirEntrada) { include '**/*.java' })
     inputs.files(fileTree(dirTestsIA) { include '**/*.java' })
     outputs.dir(dirWork)
+
     doLast {
-        project.delete(dirWork)           // limpa
+        // limpa somente com APIs de File (sem project)
+        if (dirWork.exists()) {
+            dirWork.deleteDir()
+        }
         dirMain.mkdirs()
         dirTest.mkdirs()
-        def mover = { File origem, File baseDestino ->
-            def texto = origem.getText('UTF-8')
+
+        // percorre SOMENTE os arquivos já declarados em inputs
+        inputs.files.files.each { File origem ->
+            boolean isTeste = origem.toPath().startsWith(dirTestsIA.toPath())
+            File baseDestino = isTeste ? dirTest : dirMain
+
+            String texto = origem.getText('UTF-8')
             def m = (texto =~ /(?m)^\s*package\s+([a-zA-Z0-9_.]+)\s*;/)
-            def pacote = m.find() ? m.group(1) : ''
-            def caminhoPacote = pacote ? pacote.replace('.', File.separator) : ''
-            def destinoDir = caminhoPacote ? new File(baseDestino, caminhoPacote) : baseDestino
+            String pacote = m.find() ? m.group(1) : ''
+            String caminhoPacote = pacote ? pacote.replace('.', File.separator) : ''
+            File destinoDir = caminhoPacote ? new File(baseDestino, caminhoPacote) : baseDestino
             destinoDir.mkdirs()
             new File(destinoDir, origem.name).setText(texto, 'UTF-8')
         }
-        fileTree(dirEntrada) { include '**/*.java' }.files.each { f -> mover(f, dirMain) }
-        fileTree(dirTestsIA) { include '**/*.java' }.files.each { f -> mover(f, dirTest) }
     }
 }
-
 
 
 sourceSets {

@@ -173,9 +173,8 @@ jobs:
     - name: Testes + Cobertura (testUsuario + jacocoRelatorioUsuario)
       if: steps.check_usuario.outputs.tem == 'true'
       run: |
-        ./gradlew --no-daemon clean testUsuario jacocoRelatorioUsuario
-        echo "JACOCO_XML=app/entrada-usuario/jacoco-relatorio/jacoco.xml" >> "$GITHUB_ENV"
-        echo "JACOCO_HTML_DIR=app/entrada-usuario/jacoco-relatorio/html" >> "$GITHUB_ENV"
+        ./gradlew --no-daemon -Dorg.gradle.configuration-cache=false clean testUsuario jacocoRelatorioUsuario
+
 
     - name: Publicar relatório JaCoCo (HTML+XML)
       if: steps.check_usuario.outputs.tem == 'true'
