@@ -28,26 +28,29 @@ dependencies {
 
     // Testes Spring Boot
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
+
+    testImplementation platform('org.junit:junit-bom:5.10.2')
+    testImplementation 'org.junit.jupiter:junit-jupiter'
 }
 
-test {
-    useJUnitPlatform()
-    finalizedBy jacocoTestReport
-}
+// test {
+//     useJUnitPlatform()
+//     finalizedBy jacocoTestReport
+// }
 
-jacocoTestReport {
-    dependsOn test
-    reports {
-        xml.required = true
-        html.required = true
-    }
-    classDirectories.setFrom(
-        fileTree(
-            dir: "$projectDir/src/main/java",
-            includes: ['app/entrada-usuario/**']
-        )
-    )
-}
+// jacocoTestReport {
+//     dependsOn test
+//     reports {
+//         xml.required = true
+//         html.required = true
+//     }
+//     classDirectories.setFrom(
+//         fileTree(
+//             dir: "$projectDir/src/main/java",
+//             includes: ['app/entrada-usuario/**']
+//         )
+//     )
+// }
 
 
 java {
@@ -64,23 +67,6 @@ springBoot {
     mainClass = 'org.example.web.WebApplication' 
 }
 
-// sonar {
-//     properties {
-//         property "sonar.projectKey", "lipesanfelice_workflows"
-//         property "sonar.organization", "lipesanfelice"
-//         property "sonar.host.url", "https://sonarcloud.io"
-//         property "sonar.token", "869a0095d5eeff251ea1d9ea8bdd34cc9e4cbe38"
-
-//         // ✅ Caminho certo (relativo ao build.gradle dentro de app/)
-//         property "sonar.sources", "entrada-usuario"
-
-//         // ✅ Apenas arquivos .java
-//         property "sonar.inclusions", "**/*.java"
-
-//         // ✅ Ignora testes
-//         property "sonar.exclusions", "src/test/**"
-//     }
-// }
 
 sonar {
     properties {
@@ -113,12 +99,113 @@ tasks.register('gerarTestesIa', JavaExec) {
     mainClass = 'org.example.web.cli.GerarTestesCli'
 }
 
+configurations {
+    usuarioImplementation.extendsFrom implementation
+    usuarioRuntimeOnly.extendsFrom runtimeOnly
+    usuarioTestImplementation.extendsFrom testImplementation
+    usuarioTestRuntimeOnly.extendsFrom testRuntimeOnly
+}
+
+def dirEntrada = file('app/entrada-usuario')
+def dirTestsIA = file('app/entrada-usuario/testes_explicações/tests')
+def dirWork = layout.buildDirectory.dir('usuario-src').get().asFile
+def dirMain = new File(dirWork, 'src/main/java')
+def dirTest = new File(dirWork, 'src/test/java')
+
+tasks.register('organizarUsuario') {
+    inputs.files(fileTree(dirEntrada) { include '**/*.java' })
+    inputs.files(fileTree(dirTestsIA) { include '**/*.java' })
+    outputs.dir(dirWork)
+    doLast {
+        dirMain.mkdirs()
+        dirTest.mkdirs()
+        def mover = { File origem, File baseDestino ->
+            def texto = origem.getText('UTF-8')
+            def m = (texto =~ /(?m)^\s*package\s+([a-zA-Z0-9_.]+)\s*;/)
+            def pacote = m.find() ? m.group(1) : ''
+            def caminhoPacote = pacote ? pacote.replace('.', File.separator) : ''
+            def destinoDir = caminhoPacote ? new File(baseDestino, caminhoPacote) : baseDestino
+            destinoDir.mkdirs()
+            new File(destinoDir, origem.name).setText(texto, 'UTF-8')
+        }
+        fileTree(dirEntrada) { include '**/*.java' }.files.each { f -> mover(f, dirMain) }
+        fileTree(dirTestsIA) { include '**/*.java' }.files.each { f -> mover(f, dirTest) }
+    }
+}
+
 
 sourceSets {
-    test {
+    usuario {
         java {
-            srcDir("$projectDir/entrada-usuario/testes_explicações/tests")
+            srcDirs = [dirMain]
         }
+        resources.srcDirs = []
+    }
+    usuarioTest {
+        java {
+            srcDirs = [dirTest]
+        }
+        resources.srcDirs = []
+        compileClasspath += sourceSets.usuario.output
+        runtimeClasspath  += sourceSets.usuario.output
+    }
+}
+
+tasks.register('compilarUsuario', JavaCompile) {
+    dependsOn 'organizarUsuario'
+    source = sourceSets.usuario.java
+    destinationDirectory = layout.buildDirectory.dir('classes/usuario').get().asFile
+    classpath = configurations.usuarioImplementation
+    options.encoding = 'UTF-8'
+}
+
+tasks.register('testUsuario', Test) {
+    dependsOn 'compilarUsuario', tasks.named(sourceSets.usuarioTest.classesTaskName)
+    testClassesDirs = sourceSets.usuarioTest.output.classesDirs
+    classpath       = sourceSets.usuarioTest.runtimeClasspath
+    useJUnitPlatform()
+    jvmArgs '-Xmx512m'
+    finalizedBy 'jacocoRelatorioUsuario'
+}
+
+
+jacoco {
+    toolVersion = '0.8.12'
+}
+
+tasks.register('jacocoRelatorioUsuario', JacocoReport) {
+    dependsOn 'testUsuario'
+
+    executionData.setFrom(
+        fileTree(
+            dir: layout.buildDirectory.get().asFile,
+            includes: ['**/test.exec', '**/*.exec', '**/*.ec']
+        )
+    )
+
+    // Classes compiladas e fontes
+    classDirectories.setFrom(sourceSets.usuario.output.classesDirs)
+    sourceDirectories.setFrom(sourceSets.usuario.java.srcDirs)
+
+    reports {
+        xml.required.set(true)
+        html.required.set(true)
+        csv.required.set(false)
+        html.outputLocation.set(file('app/entrada-usuario/jacoco-relatorio/html'))
+        xml.outputLocation.set(file('app/entrada-usuario/jacoco-relatorio/jacoco.xml'))
+    }
+}
+
+
+tasks.register('usuarioCobertura') {
+    dependsOn 'testUsuario'
+}
+
+tasks.withType(Test).configureEach {
+    testLogging {
+        events "FAILED", "SKIPPED"
+        exceptionFormat "full"
+        showStandardStreams = false
     }
 }
 

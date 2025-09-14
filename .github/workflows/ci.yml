@@ -157,6 +157,39 @@ jobs:
     # - name: Testes + JaCoCo
     #   run: ./gradlew -p app test jacocoTestReport
 
+    - name: Verificar presença de fontes e testes do usuário
+      id: check
+      shell: bash
+      run: |
+          shopt -s globstar nullglob
+          fontes=(app/entrada-usuario/**/*.java)
+          testes=(app/entrada-usuario/testes_explicações/tests/**/*.java)
+          if [[ ${#fontes[@]} -gt 0 && ${#testes[@]} -gt 0 ]]; then
+            echo "tem=true" >> $GITHUB_OUTPUT
+          else
+            echo "tem=false" >> $GITHUB_OUTPUT
+          fi
+
+    - name: Gradle test + JaCoCo
+      if: steps.check.outputs.tem == 'true'
+      run: ./gradlew --no-daemon clean testUsuario jacocoRelatorioUsuario
+
+    - name: Publicar relatório JaCoCo
+      if: steps.check.outputs.tem == 'true'
+      uses: actions/upload-artifact@v4
+      with:
+          name: jacoco-relatorio
+          path: app/entrada-usuario/jacoco-relatorio/**
+
+    - name: Publicar logs de testes
+      if: steps.check.outputs.tem == 'true'
+      uses: actions/upload-artifact@v4
+      with:
+          name: testes-logs
+          path: |
+            build/test-results/**/*
+            build/reports/tests/**/*
+
     - name: Commit e push dos arquivos gerados (na main)
       if: ${{ github.event_name != 'pull_request' }}
       env:
