@@ -182,8 +182,8 @@ jobs:
       with:
         name: jacoco-relatorio
         path: |
-          ${{ env.JACOCO_XML }}
-          ${{ env.JACOCO_HTML_DIR }}/**
+          ${{ github.workspace }}/app/entrada-usuario/jacoco-relatorio/jacoco.xml
+          ${{ github.workspace }}/app/entrada-usuario/jacoco-relatorio/html
         if-no-files-found: error
         retention-days: 30
 
