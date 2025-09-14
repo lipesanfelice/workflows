@@ -174,18 +174,21 @@ jobs:
       if: steps.check_usuario.outputs.tem == 'true'
       run: |
         ./gradlew --no-daemon -Dorg.gradle.configuration-cache=false clean testUsuario jacocoRelatorioUsuario
+        echo "JACOCO_DIR=${{ github.workspace }}/app/entrada-usuario/jacoco-relatorio" >> "$GITHUB_ENV"
+        echo "JACOCO_XML=${{ github.workspace }}/app/entrada-usuario/jacoco-relatorio/jacoco.xml" >> "$GITHUB_ENV"
+        echo "JACOCO_HTML_DIR=${{ github.workspace }}/app/entrada-usuario/jacoco-relatorio/html" >> "$GITHUB_ENV"
 
-
-    - name: Publicar relatório JaCoCo (HTML+XML)
+    - name: Conferir relatório JaCoCo
       if: steps.check_usuario.outputs.tem == 'true'
-      uses: actions/upload-artifact@v4
-      with:
-        name: jacoco-relatorio
-        path: |
-          ${{ github.workspace }}/app/entrada-usuario/jacoco-relatorio/jacoco.xml
-          ${{ github.workspace }}/app/entrada-usuario/jacoco-relatorio/html
-        if-no-files-found: error
-        retention-days: 30
+      run: |
+        set -e
+        ls -la "${JACOCO_DIR}" || true
+        if [ ! -f "${JACOCO_XML}" ]; then
+          echo "jacoco.xml não encontrado em ${JACOCO_XML}"
+          echo "Árvore de build para depuração:"
+          find "${{ github.workspace }}/build" -maxdepth 3 -type f -printf "%p\n" 2>/dev/null | sed -n '1,400p' || true
+          exit 1
+        fi
 
 
     - name: Commit e push dos arquivos gerados (na main)
