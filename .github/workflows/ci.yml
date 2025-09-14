@@ -178,6 +178,7 @@ jobs:
         echo "JACOCO_XML=${{ github.workspace }}/app/entrada-usuario/jacoco-relatorio/jacoco.xml" >> "$GITHUB_ENV"
         echo "JACOCO_HTML_DIR=${{ github.workspace }}/app/entrada-usuario/jacoco-relatorio/html" >> "$GITHUB_ENV"
 
+
     - name: Conferir relatório JaCoCo
       if: steps.check_usuario.outputs.tem == 'true'
       run: |

@@ -1,25 +1,19 @@
-import java.util.Arrays;
 import java.util.Random;
 
-public class ArrayAleatorio {
+public class GeradorAleatorio {
     public static void main(String[] args) {
-        int[] numeros = new int[10];
         Random random = new Random();
         
-        // Preenche array com valores aleatórios
-        for (int i = 0; i < numeros.length; i++) {
-            numeros[i] = random.nextInt(1000);
-        }
+        // Número inteiro entre 0 e 100
+        int numeroInteiro = random.nextInt(101);
+        System.out.println("Número inteiro: " + numeroInteiro);
         
-        System.out.println("Array original: " + Arrays.toString(numeros));
+        // Número decimal entre 0.0 e 1.0
+        double numeroDecimal = random.nextDouble();
+        System.out.println("Número decimal: " + numeroDecimal);
         
-        // Ordena o array
-        Arrays.sort(numeros);
-        System.out.println("Array ordenado: " + Arrays.toString(numeros));
-        
-        // Encontra maior e menor valor
-        int maior = numeros[numeros.length - 1];
-        int menor = numeros[0];
-        System.out.println("Maior: " + maior + ", Menor: " + menor);
+        // Boolean aleatório
+        boolean valorBooleano = random.nextBoolean();
+        System.out.println("Valor booleano: " + valorBooleano);
     }
 }

@@ -168,14 +168,28 @@ tasks.register('compilarUsuario', JavaCompile) {
     options.encoding = 'UTF-8'
 }
 
+// 1) Compila o main do "usuario" só depois de organizarUsuario
+tasks.named(sourceSets.usuario.compileJavaTaskName) {
+    dependsOn 'organizarUsuario'
+}
+
+// 2) Compila o test do "usuario" só depois de organizarUsuario e das classes do main
+tasks.named(sourceSets.usuarioTest.compileJavaTaskName) {
+    dependsOn 'organizarUsuario', tasks.named(sourceSets.usuario.classesTaskName)
+}
+
+// 3) Garanta que testUsuario depende das classes de main e de teste
 tasks.register('testUsuario', Test) {
-    dependsOn 'organizarUsuario', tasks.named(sourceSets.usuarioTest.classesTaskName)
+    dependsOn tasks.named(sourceSets.usuario.classesTaskName),
+              tasks.named(sourceSets.usuarioTest.classesTaskName)
+
     testClassesDirs = sourceSets.usuarioTest.output.classesDirs
     classpath       = sourceSets.usuarioTest.runtimeClasspath
     useJUnitPlatform()
     jvmArgs '-Xmx512m'
     finalizedBy 'jacocoRelatorioUsuario'
 }
+
 
 jacoco {
     toolVersion = '0.8.12'
