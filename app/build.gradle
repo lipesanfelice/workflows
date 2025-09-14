@@ -117,6 +117,7 @@ tasks.register('organizarUsuario') {
     inputs.files(fileTree(dirTestsIA) { include '**/*.java' })
     outputs.dir(dirWork)
     doLast {
+        project.delete(dirWork)           // limpa
         dirMain.mkdirs()
         dirTest.mkdirs()
         def mover = { File origem, File baseDestino ->
@@ -132,6 +133,7 @@ tasks.register('organizarUsuario') {
         fileTree(dirTestsIA) { include '**/*.java' }.files.each { f -> mover(f, dirTest) }
     }
 }
+
 
 
 sourceSets {
@@ -160,13 +162,14 @@ tasks.register('compilarUsuario', JavaCompile) {
 }
 
 tasks.register('testUsuario', Test) {
-    dependsOn 'compilarUsuario', tasks.named(sourceSets.usuarioTest.classesTaskName)
+    dependsOn 'organizarUsuario', tasks.named(sourceSets.usuarioTest.classesTaskName)
     testClassesDirs = sourceSets.usuarioTest.output.classesDirs
     classpath       = sourceSets.usuarioTest.runtimeClasspath
     useJUnitPlatform()
     jvmArgs '-Xmx512m'
     finalizedBy 'jacocoRelatorioUsuario'
 }
+
 
 
 jacoco {
