@@ -91,8 +91,8 @@ configurations {
     usuarioTestRuntimeOnly.extendsFrom testRuntimeOnly
 }
 
-def dirEntrada = file('app/entrada-usuario')
-def dirTestsIA = file('app/entrada-usuario/testes_explicações/tests')
+def dirEntrada = file('entrada-usuario')
+def dirTestsIA = file('entrada-usuario/testes_explicações/tests')
 def dirWork = layout.buildDirectory.dir('usuario-src').get().asFile
 def dirMain = new File(dirWork, 'src/main/java')
 def dirTest = new File(dirWork, 'src/test/java')
@@ -200,8 +200,8 @@ tasks.register('jacocoRelatorioUsuario', JacocoReport) {
         xml.required.set(true)
         html.required.set(true)
         csv.required.set(false)
-        html.outputLocation.set(file('app/entrada-usuario/jacoco-relatorio/html'))
-        xml.outputLocation.set(file('app/entrada-usuario/jacoco-relatorio/jacoco.xml'))
+        html.outputLocation.set(file('entrada-usuario/jacoco-relatorio/html'))
+        xml.outputLocation.set(file('entrada-usuario/jacoco-relatorio/jacoco.xml'))
     }
 
     doFirst {
