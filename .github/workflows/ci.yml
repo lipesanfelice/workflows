@@ -177,6 +177,15 @@ jobs:
         echo "JACOCO_DIR=${{ github.workspace }}/app/entrada-usuario/jacoco-relatorio" >> "$GITHUB_ENV"
         echo "JACOCO_XML=${{ github.workspace }}/app/entrada-usuario/jacoco-relatorio/jacoco.xml" >> "$GITHUB_ENV"
         echo "JACOCO_HTML_DIR=${{ github.workspace }}/app/entrada-usuario/jacoco-relatorio/html" >> "$GITHUB_ENV"
+    
+    - name: Mostrar relatório JUnit do testUsuario
+      if: always()
+      run: |
+        echo "=== SUMÁRIO TESTES (HTML) ==="
+        ls -la app/build/reports/tests/testUsuario || true
+        echo "=== XMLs JUnit ==="
+        find app/build/test-results/testUsuario -type f -name "*.xml" -maxdepth 1 2>/dev/null | sed -n '1,50p' || true
+
 
     
     - name: Garantir pasta/arquivo do relatório JaCoCo

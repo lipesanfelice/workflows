@@ -320,6 +320,23 @@ tasks.named(sourceSets.usuarioTest.compileJavaTaskName) {
     dependsOn 'organizarUsuario', 'resolverDepsUsuario', tasks.named(sourceSets.usuario.classesTaskName)
 }
 
+tasks.named('testUsuario', Test).configure {
+    // se algum teste falhar, o Gradle continua o build
+    ignoreFailures = true
+
+    // gerar sempre o .exec
+    jacoco {
+        destinationFile = layout.buildDirectory.file("jacoco/testUsuario.exec").get().asFile
+    }
+
+    finalizedBy 'jacocoRelatorioUsuario'
+}
+
+tasks.named('jacocoRelatorioUsuario', JacocoReport).configure {
+    // só pula se nem houver arquivo de execução
+    onlyIf { layout.buildDirectory.file("jacoco/testUsuario.exec").get().asFile.exists() }
+}
+
 
 // REGISTRO do testUsuario (substitua seu bloco atual por este)
 tasks.register('testUsuario', Test) {

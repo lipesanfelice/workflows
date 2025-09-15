@@ -1,27 +1,19 @@
 import java.util.Random;
-import java.util.Scanner;
 
-public class CaraCoroa {
+public class GeradorAleatorio {
     public static void main(String[] args) {
-        Scanner scanner = new Scanner(System.in);
         Random random = new Random();
         
-        System.out.println("Cara ou Coroa? (0-Cara, 1-Coroa)");
-        int escolha = scanner.nextInt();
+        // Número inteiro entre 0 e 100
+        int numeroInteiro = random.nextInt(101);
+        System.out.println("Número inteiro: " + numeroInteiro);
         
-        int resultado = random.nextInt(2);
-        String resultadoTexto = (resultado == 0) ? "Cara" : "Coroa";
-        String escolhaTexto = (escolha == 0) ? "Cara" : "Coroa";
+        // Número decimal entre 0.0 e 1.0
+        double numeroDecimal = random.nextDouble();
+        System.out.println("Número decimal: " + numeroDecimal);
         
-        System.out.println("Resultado: " + resultadoTexto);
-        System.out.println("Sua escolha: " + escolhaTexto);
-        
-        if (escolha == resultado) {
-            System.out.println("Você ganhou!");
-        } else {
-            System.out.println("Você perdeu!");
-        }
-        
-        scanner.close();
+        // Boolean aleatório
+        boolean valorBooleano = random.nextBoolean();
+        System.out.println("Valor booleano: " + valorBooleano);
     }
 }
