@@ -7,6 +7,7 @@ plugins {
     id 'io.spring.dependency-management' version '1.1.5'
 }
 
+import org.gradle.testing.jacoco.plugins.JacocoTaskExtension
 repositories {
     mavenCentral()
 }
@@ -154,6 +155,7 @@ tasks.named(sourceSets.usuarioTest.compileJavaTaskName) {
     dependsOn 'organizarUsuario', tasks.named(sourceSets.usuario.classesTaskName)
 }
 
+// REGISTRO do testUsuario (substitua seu bloco atual por este)
 tasks.register('testUsuario', Test) {
     dependsOn tasks.named(sourceSets.usuario.classesTaskName),
               tasks.named(sourceSets.usuarioTest.classesTaskName)
@@ -161,35 +163,35 @@ tasks.register('testUsuario', Test) {
     testClassesDirs = sourceSets.usuarioTest.output.classesDirs
     classpath       = sourceSets.usuarioTest.runtimeClasspath
     useJUnitPlatform()
-    testLogging { events "PASSED","FAILED","SKIPPED" }
 
-    // prende o JaCoCo nesta task
+    // Log resumido no fim: quantos testes rodaram
+    afterSuite { desc, result ->
+        if (!desc.parent) {
+            println "Resumo testUsuario -> total: ${result.testCount}, "\
+                  + "passaram: ${result.successfulTestCount}, "\
+                  + "falharam: ${result.failedTestCount}, "\
+                  + "skipped: ${result.skippedTestCount}"
+        }
+    }
+
+    // Gravar o .exec sempre no mesmo lugar
     jacoco {
-        destinationFile = layout.buildDirectory.file("jacoco/${name}.exec").get().asFile
+        destinationFile = layout.buildDirectory.file("jacoco/testUsuario.exec").get().asFile
     }
 
     finalizedBy 'jacocoRelatorioUsuario'
 }
 
-
-
 jacoco {
     toolVersion = '0.8.12'
 }
 
-import org.gradle.testing.jacoco.plugins.JacocoTaskExtension
-
+// JacocoReport lendo EXATAMENTE o .exec do testUsuario
 tasks.register('jacocoRelatorioUsuario', JacocoReport) {
     dependsOn 'testUsuario'
 
-    // Coleta .exec de TODOS os Test tasks (inclui testUsuario)
-    executionData.setFrom(
-        files(
-            tasks.withType(Test).collect { t ->
-                t.extensions.findByType(JacocoTaskExtension)?.destinationFile
-            }
-        )
-    )
+    // pega somente o .exec do testUsuario
+    executionData.setFrom(layout.buildDirectory.file("jacoco/testUsuario.exec"))
 
     classDirectories.setFrom(sourceSets.usuario.output.classesDirs)
     sourceDirectories.setFrom(sourceSets.usuario.java.srcDirs)
@@ -203,8 +205,8 @@ tasks.register('jacocoRelatorioUsuario', JacocoReport) {
     }
 
     doFirst {
-        file('app/entrada-usuario/jacoco-relatorio/html').mkdirs()
         file('app/entrada-usuario/jacoco-relatorio').mkdirs()
+        file('app/entrada-usuario/jacoco-relatorio/html').mkdirs()
     }
 }
 
