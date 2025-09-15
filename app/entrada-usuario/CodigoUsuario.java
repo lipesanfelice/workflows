@@ -1,23 +1,25 @@
+import java.util.Arrays;
 import java.util.Random;
-import java.util.Scanner;
 
-public class JogoDados {
+public class ArrayAleatorio {
     public static void main(String[] args) {
-        Scanner scanner = new Scanner(System.in);
+        int[] numeros = new int[10];
         Random random = new Random();
         
-        System.out.println("Jogo de Dados - Quantos dados quer lançar?");
-        int quantidade = scanner.nextInt();
-        
-        int total = 0;
-        System.out.println("Resultados:");
-        for (int i = 0; i < quantidade; i++) {
-            int dado = random.nextInt(6) + 1;
-            System.out.println("Dado " + (i+1) + ": " + dado);
-            total += dado;
+        // Preenche array com valores aleatórios
+        for (int i = 0; i < numeros.length; i++) {
+            numeros[i] = random.nextInt(1000);
         }
         
-        System.out.println("Total: " + total);
-        scanner.close();
+        System.out.println("Array original: " + Arrays.toString(numeros));
+        
+        // Ordena o array
+        Arrays.sort(numeros);
+        System.out.println("Array ordenado: " + Arrays.toString(numeros));
+        
+        // Encontra maior e menor valor
+        int maior = numeros[numeros.length - 1];
+        int menor = numeros[0];
+        System.out.println("Maior: " + maior + ", Menor: " + menor);
     }
 }

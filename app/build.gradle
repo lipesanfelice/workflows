@@ -124,6 +124,12 @@ tasks.register('organizarUsuario') {
             destinoDir.mkdirs()
             new File(destinoDir, origem.name).setText(texto, 'UTF-8')
         }
+
+        println "organizarUsuario → copiado para main: ${dirMain.absolutePath}"
+        println "organizarUsuario → copiado para test: ${dirTest.absolutePath}"
+        println "organizarUsuario → fontes recebidos: " + inputs.files.files.count { !it.toPath().startsWith(dirTestsIA.toPath()) }
+        println "organizarUsuario → testes recebidos: " + inputs.files.files.count { it.toPath().startsWith(dirTestsIA.toPath()) }
+
     }
 }
 
@@ -205,8 +211,8 @@ tasks.register('jacocoRelatorioUsuario', JacocoReport) {
     }
 
     doFirst {
-        file('app/entrada-usuario/jacoco-relatorio').mkdirs()
-        file('app/entrada-usuario/jacoco-relatorio/html').mkdirs()
+        file('entrada-usuario/jacoco-relatorio').mkdirs()
+        file('entrada-usuario/jacoco-relatorio/html').mkdirs()
     }
 }
 
