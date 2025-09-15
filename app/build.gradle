@@ -355,6 +355,70 @@ tasks.register('organizarUsuario') {
         fontesUsuario.each { gravar(it.text, false) }
         testesIA.each     { gravar(it.text, true)  }
 
+        // --- [INÍCIO: injeção condicional de stubs do modelo] ---
+        def modeloPkgPath = new File(dirMain, "org/example/model")
+        def modeloJaExiste = { String nome ->
+            // existe no build?
+            def f1 = new File(modeloPkgPath, "${nome}.java")
+            if (f1.exists()) return true
+            // existe no código do usuário?
+            return fileTree(dirEntrada) {
+                include "**/${nome}.java"
+            }.any { it.text.contains("package org.example.model") }
+        }
+
+        // analisamos somente se usuário/testes referem algo do modelo
+        def allText = (fontesUsuario.collect{it.text} + testesIA.collect{it.text}).join("\n")
+        def precisaRel   = allText.contains("RelatorioCobertura") && !modeloJaExiste("RelatorioCobertura")
+        def precisaClasse= allText.contains("ClasseCoberta")      && !modeloJaExiste("ClasseCoberta")
+        def precisaMetodo= allText.contains("MetodoCoberto")      && !modeloJaExiste("MetodoCoberto")
+
+        if (precisaRel || precisaClasse || precisaMetodo) {
+            modeloPkgPath.mkdirs()
+
+            if (precisaMetodo) {
+                new File(modeloPkgPath, "MetodoCoberto.java").setText("""
+                    package org.example.model;
+                    public record MetodoCoberto(String nome, int linhaInicio, int linhaFim, double cobertura) {}
+                """.stripIndent(), "UTF-8")
+            }
+
+            if (precisaClasse) {
+                new File(modeloPkgPath, "ClasseCoberta.java").setText("""
+                    package org.example.model;
+                    import java.util.List;
+                    public record ClasseCoberta(String nome, String caminho, List<MetodoCoberto> metodos) {}
+                """.stripIndent(), "UTF-8")
+            }
+
+            if (precisaRel) {
+                new File(modeloPkgPath, "RelatorioCobertura.java").setText("""
+                    package org.example.model;
+                    import java.util.List;
+                    public final class RelatorioCobertura {
+                        public enum Ferramenta { JACOCO, OUTRA }
+                        private final String caminhoRelatorio;
+                        private final List<ClasseCoberta> classes;
+                        private final Ferramenta ferramenta;
+                        public RelatorioCobertura(String caminhoRelatorio, List<ClasseCoberta> classes, Ferramenta ferramenta) {
+                            this.caminhoRelatorio = caminhoRelatorio;
+                            this.classes = classes;
+                            this.ferramenta = ferramenta;
+                        }
+                        public String caminhoRelatorio() { return caminhoRelatorio; }
+                        public List<ClasseCoberta> classes() { return classes; }
+                        public Ferramenta ferramenta() { return ferramenta; }
+                    }
+                """.stripIndent(), "UTF-8")
+            }
+
+            println "organizarUsuario → stubs injetados em org.example.model: " +
+                    [(precisaMetodo?'MetodoCoberto':null),(precisaClasse?'ClasseCoberta':null),(precisaRel?'RelatorioCobertura':null)]
+                    .findAll{it!=null}.join(", ")
+        }
+        // --- [FIM: injeção condicional de stubs do modelo] ---
+
+
         println "organizarUsuario → copiado para main: ${dirMain.absolutePath}"
         println "organizarUsuario → copiado para test: ${dirTest.absolutePath}"
         println "organizarUsuario → fontes recebidos: ${fontesUsuario.size()}"
