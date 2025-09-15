@@ -97,6 +97,78 @@ def dirWork = layout.buildDirectory.dir('usuario-src').get().asFile
 def dirMain = new File(dirWork, 'src/main/java')
 def dirTest = new File(dirWork, 'src/test/java')
 
+tasks.register('resolverDepsUsuario') {
+    // varre fontes do usuário
+    inputs.files(fileTree(dirEntrada) { include '**/*.java' })
+
+    // deps.txt opcional
+    inputs.files(provider {
+        def f = file('entrada-usuario/deps.txt')
+        f.exists() ? [f] : []
+    })
+
+    // vendor/*.jar opcional (use files, não dir)
+    inputs.files(provider {
+        def v = file('entrada-usuario/vendor')
+        v.exists() ? fileTree(v) { include '*.jar' } : []
+    })
+
+    outputs.dir(file('entrada-usuario/libs'))
+
+    doLast {
+        def libsDir = file('entrada-usuario/libs')
+        libsDir.mkdirs()
+
+        // 1) JARs locais do usuário
+        def vendorDir = file('entrada-usuario/vendor')
+        if (vendorDir.exists()) {
+            copy {
+                from(vendorDir)
+                include '*.jar'
+                into libsDir
+            }
+        }
+
+        // 2) deps.txt (coordenadas explícitas)
+        def coords = [] as Set
+        def depsTxt = file('entrada-usuario/deps.txt')
+        if (depsTxt.exists()) {
+            depsTxt.readLines('UTF-8').each { line ->
+                def s = line.trim()
+                if (s && !s.startsWith('#')) coords << s
+            }
+        }
+
+        // 3) Heurística por imports
+        def imports = [] as Set
+        fileTree(dirEntrada) { include '**/*.java' }.each { f ->
+            f.eachLine('UTF-8') { l ->
+                def m = (l =~ /^\s*import\s+([a-zA-Z0-9_.]+)\./)
+                if (m.find()) imports << m.group(1)
+            }
+        }
+        imports.each { pkg ->
+            mapaImports.findAll { k, v -> pkg.startsWith(k) }.each { k, v -> coords << v }
+        }
+
+        // 4) Resolve e copia jars
+        if (!coords.isEmpty()) {
+            def depObjs = coords.collect { dependencies.create(it) } as org.gradle.api.artifacts.Dependency[]
+            def conf = configurations.detachedConfiguration(depObjs)
+            conf.setTransitive(true)
+            def filesResolved = conf.resolve()
+            copy {
+                from filesResolved
+                into libsDir
+            }
+        }
+
+        new File(libsDir, 'RESOLVIDO.txt').setText((coords.join('\n') + '\n'), 'UTF-8')
+        println "resolverDepsUsuario → libs geradas em ${libsDir} (${coords.size()} coords)"
+    }
+}
+
+
 // Mapeia imports -> coordenadas Maven padrão (ajuste versões se quiser)
 def mapaImports = [
     'org.apache.commons.lang3'         : 'org.apache.commons:commons-lang3:3.14.0',
@@ -208,13 +280,15 @@ tasks.register('organizarUsuario') {
                 'Collections','Stream','Optional','Files','Paths','Mockito','Matchers','Pattern','Matcher'
             ] as Set
             def nomes = [] as Set
-            def re = /(?m)([A-Z][A-Za-z0-9_]*)\s*\.\s*[A-Za-z_][A-Za-z0-9_]*\s*\(/
-            (src =~ re).each { m ->
-                def c = m[0][1]
+            def pat = ~/(?m)([A-Z][A-Za-z0-9_]*)\s*\.\s*[A-Za-z_][A-Za-z0-9_]*\s*\(/
+            def matcher = pat.matcher(src)
+            while (matcher.find()) {
+                def c = matcher.group(1)
                 if (!ignora.contains(c)) nomes << c
             }
             return nomes
         }
+
 
         // 1) carregue tudo em memória para decidir renomes
         def fontesUsuario = []
