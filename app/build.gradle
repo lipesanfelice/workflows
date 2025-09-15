@@ -97,6 +97,87 @@ def dirWork = layout.buildDirectory.dir('usuario-src').get().asFile
 def dirMain = new File(dirWork, 'src/main/java')
 def dirTest = new File(dirWork, 'src/test/java')
 
+// Mapeia imports -> coordenadas Maven padrão (ajuste versões se quiser)
+def mapaImports = [
+    'org.apache.commons.lang3'         : 'org.apache.commons:commons-lang3:3.14.0',
+    'org.apache.commons.io'            : 'commons-io:commons-io:2.16.1',
+    'com.google.gson'                  : 'com.google.code.gson:gson:2.11.0',
+    'com.google.common'                : 'com.google.guava:guava:33.2.1-jre',
+    'org.json'                         : 'org.json:json:20240303',
+    'com.fasterxml.jackson.databind'   : 'com.fasterxml.jackson.core:jackson-databind:2.17.1',
+    'com.fasterxml.jackson.core'       : 'com.fasterxml.jackson.core:jackson-core:2.17.1',
+    'com.fasterxml.jackson.annotation' : 'com.fasterxml.jackson.core:jackson-annotations:2.17.1',
+    'org.slf4j'                        : 'org.slf4j:slf4j-api:2.0.13',
+    'ch.qos.logback'                   : 'ch.qos.logback:logback-classic:1.5.6',
+    'org.apache.http'                  : 'org.apache.httpcomponents.client5:httpclient5:5.3.1',
+    'org.jsoup'                        : 'org.jsoup:jsoup:1.18.1',
+    'org.hibernate'                    : 'org.hibernate.orm:hibernate-core:6.5.3.Final',
+    'jakarta.persistence'              : 'jakarta.persistence:jakarta.persistence-api:3.1.0',
+    'jakarta.validation'               : 'jakarta.validation:jakarta.validation-api:3.0.2',
+    'org.apache.poi'                   : 'org.apache.poi:poi-ooxml:5.2.5'
+]
+
+// Cria/atualiza entrada-usuario/libs com jars detectados e declarados
+tasks.register('resolverDepsUsuario') {
+    inputs.files(fileTree(dirEntrada) { include '**/*.java' }) // varre fontes do usuário
+    inputs.file(file('entrada-usuario/deps.txt'))             // opcional
+    inputs.dir(file('entrada-usuario/vendor'))                // opcional
+    outputs.dir(file('entrada-usuario/libs'))
+
+    doLast {
+        def libsDir = file('entrada-usuario/libs')
+        libsDir.mkdirs()
+
+        // 1) JARs locais do usuário (se existir)
+        def vendorDir = file('entrada-usuario/vendor')
+        if (vendorDir.exists()) {
+            copy {
+                from(vendorDir)
+                include '*.jar'
+                into libsDir
+            }
+        }
+
+        // 2) Coordenadas explícitas em deps.txt (1 por linha: group:artifact:version)
+        def coords = [] as Set
+        def depsTxt = file('entrada-usuario/deps.txt')
+        if (depsTxt.exists()) {
+            depsTxt.readLines('UTF-8').each { line ->
+                def s = line.trim()
+                if (s && !s.startsWith('#')) coords << s
+            }
+        }
+
+        // 3) Heurística pelos imports
+        def imports = [] as Set
+        fileTree(dirEntrada) { include '**/*.java' }.each { f ->
+            f.eachLine('UTF-8') { l ->
+                def m = (l =~ /^\s*import\s+([a-zA-Z0-9_.]+)\./)
+                if (m.find()) imports << m.group(1)
+            }
+        }
+        imports.each { pkg ->
+            mapaImports.findAll { k, v -> pkg.startsWith(k) }.each { k, v -> coords << v }
+        }
+
+        // 4) Resolve e copia jars
+        if (!coords.isEmpty()) {
+            def depObjs = coords.collect { dependencies.create(it) } as org.gradle.api.artifacts.Dependency[]
+            def conf = configurations.detachedConfiguration(depObjs)
+            conf.setTransitive(true)
+            def filesResolved = conf.resolve()
+            copy {
+                from filesResolved
+                into libsDir
+            }
+        }
+
+        new File(libsDir, 'RESOLVIDO.txt').setText((coords.join('\n') + '\n'), 'UTF-8')
+        println "resolverDepsUsuario → libs geradas em ${libsDir} (${coords.size()} coords)"
+    }
+}
+
+
 tasks.register('organizarUsuario') {
     // declare entradas/saídas NA CONFIGURAÇÃO
     inputs.files(fileTree(dirEntrada) { include '**/*.java' })
@@ -110,36 +191,90 @@ tasks.register('organizarUsuario') {
         dirMain.mkdirs()
         dirTest.mkdirs()
 
+        // helpers
         def extrairPacote = { String src ->
             def m = (src =~ /(?m)^\s*package\s+([a-zA-Z0-9_.]+)\s*;/)
             m.find() ? m.group(1) : ''
         }
-        // public class|interface|enum|record Nome
         def extrairNomePublico = { String src ->
+            // public class|interface|enum|record Nome
             def m = (src =~ /(?m)^\s*public\s+(?:class|interface|enum|record)\s+([A-Za-z_][A-Za-z0-9_]*)\b/)
             m.find() ? m.group(1) : null
         }
+        // pega tokens de Classe.metodo() usados nos testes
+        def classesReferenciadasEmTestes = { String src ->
+            def ignora = [
+                'Assertions','Assert','System','Math','Objects','List','ArrayList','Arrays',
+                'Collections','Stream','Optional','Files','Paths','Mockito','Matchers','Pattern','Matcher'
+            ] as Set
+            def nomes = [] as Set
+            def re = /(?m)([A-Z][A-Za-z0-9_]*)\s*\.\s*[A-Za-z_][A-Za-z0-9_]*\s*\(/
+            (src =~ re).each { m ->
+                def c = m[0][1]
+                if (!ignora.contains(c)) nomes << c
+            }
+            return nomes
+        }
 
+        // 1) carregue tudo em memória para decidir renomes
+        def fontesUsuario = []
+        def testesIA = []
         inputs.files.files.each { File origem ->
             boolean isTeste = origem.toPath().startsWith(dirTestsIA.toPath())
-            File baseDestino = isTeste ? dirTest : dirMain
-
             String texto = origem.getText('UTF-8')
+            (isTeste ? testesIA : fontesUsuario) << [file: origem, text: texto]
+        }
+
+        // 2) detecta nomes
+        def nomesPublicosUsuario = fontesUsuario.collect { extrairNomePublico(it.text) }.findAll { it }
+        def nomesReferenciadosTestes = classesReferenciadasEmTestes(testesIA.collect { it.text }.join("\n"))
+
+        // 3) se houver 1 público e 1 esperado nos testes, e forem diferentes, renomeia o texto da classe do usuário
+        String nomePublico = (nomesPublicosUsuario ?: [null]).first()
+        String nomeEsperado = (nomesReferenciadosTestes ?: [null]).first()
+        boolean deveRenomear = (nomePublico && nomeEsperado && nomePublico != nomeEsperado && nomesPublicosUsuario.size()==1 && nomesReferenciadosTestes.size()==1)
+
+        // 4) gravar arquivos no layout de build
+        def gravar = { String texto, boolean isTeste ->
             String pacote = extrairPacote(texto)
             String caminhoPacote = pacote ? pacote.replace('.', File.separator) : ''
+            File baseDestino = isTeste ? dirTest : dirMain
             File destinoDir = caminhoPacote ? new File(baseDestino, caminhoPacote) : baseDestino
             destinoDir.mkdirs()
 
-            String nomePublico = extrairNomePublico(texto)
-            String nomeArquivo = (nomePublico ? "${nomePublico}.java" : origem.name)
-
+            // decide nome do arquivo
+            String nomePublicoLocal = extrairNomePublico(texto)
+            String nomeArquivo = nomePublicoLocal ? "${nomePublicoLocal}.java" : "Arquivo_${System.nanoTime()}.java"
             new File(destinoDir, nomeArquivo).setText(texto, 'UTF-8')
         }
 
+        // se precisar renomear, faz replace no texto da ÚNICA classe pública do usuário
+        if (deveRenomear) {
+            fontesUsuario = fontesUsuario.collect { f ->
+                if (extrairNomePublico(f.text) == nomePublico) {
+                    def novoTexto = f.text.replaceFirst(
+                        /(?m)(^\s*public\s+(?:class|interface|enum|record)\s+)${java.util.regex.Pattern.quote(nomePublico)}\b/,
+                        "\$1${nomeEsperado}"
+                    )
+                    [file: f.file, text: novoTexto]
+                } else {
+                    f
+                }
+            }
+
+            println "organizarUsuario → renomeado classe pública '${nomePublico}' → '${nomeEsperado}' para alinhar com os testes"
+        }
+
+        // grava tudo
+        fontesUsuario.each { gravar(it.text, false) }
+        testesIA.each     { gravar(it.text, true)  }
+
         println "organizarUsuario → copiado para main: ${dirMain.absolutePath}"
         println "organizarUsuario → copiado para test: ${dirTest.absolutePath}"
-        println "organizarUsuario → fontes recebidos: " + inputs.files.files.count { !it.toPath().startsWith(dirTestsIA.toPath()) }
-        println "organizarUsuario → testes recebidos: " + inputs.files.files.count { it.toPath().startsWith(dirTestsIA.toPath()) }
+        println "organizarUsuario → fontes recebidos: ${fontesUsuario.size()}"
+        println "organizarUsuario → testes recebidos:  ${testesIA.size()}"
+        if (nomePublico)  println "organizarUsuario → nome público (usuario): ${nomePublico}"
+        if (nomeEsperado) println "organizarUsuario → nome esperado (testes): ${nomeEsperado}"
     }
 
 }
@@ -162,15 +297,16 @@ sourceSets {
     }
 }
 
-// 1) Compila o main do "usuario" só depois de organizarUsuario
+// compila main só depois de organizar e resolver libs
 tasks.named(sourceSets.usuario.compileJavaTaskName) {
-    dependsOn 'organizarUsuario'
+    dependsOn 'organizarUsuario', 'resolverDepsUsuario'
 }
 
-// 2) Compila o test do "usuario" só depois de organizarUsuario e das classes do main
+// compila testes só depois de organizar, resolver libs e compilar main
 tasks.named(sourceSets.usuarioTest.compileJavaTaskName) {
-    dependsOn 'organizarUsuario', tasks.named(sourceSets.usuario.classesTaskName)
+    dependsOn 'organizarUsuario', 'resolverDepsUsuario', tasks.named(sourceSets.usuario.classesTaskName)
 }
+
 
 // REGISTRO do testUsuario (substitua seu bloco atual por este)
 tasks.register('testUsuario', Test) {
