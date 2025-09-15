@@ -37,26 +37,6 @@ tasks.withType(Test).configureEach {
     useJUnitPlatform()
 }
 
-// test {
-//     useJUnitPlatform()
-//     finalizedBy jacocoTestReport
-// }
-
-// jacocoTestReport {
-//     dependsOn test
-//     reports {
-//         xml.required = true
-//         html.required = true
-//     }
-//     classDirectories.setFrom(
-//         fileTree(
-//             dir: "$projectDir/src/main/java",
-//             includes: ['app/entrada-usuario/**']
-//         )
-//     )
-// }
-
-
 java {
     toolchain {
         languageVersion = JavaLanguageVersion.of(21)
@@ -174,13 +154,6 @@ tasks.named(sourceSets.usuarioTest.compileJavaTaskName) {
     dependsOn 'organizarUsuario', tasks.named(sourceSets.usuario.classesTaskName)
 }
 
-// Prender o JaCoCo no seu Test custom
-tasks.named('testUsuario', Test).configure {
-    jacoco {
-        destinationFile = layout.buildDirectory.file("jacoco/${name}.exec").get().asFile
-    }
-}
-
 tasks.register('testUsuario', Test) {
     dependsOn tasks.named(sourceSets.usuario.classesTaskName),
               tasks.named(sourceSets.usuarioTest.classesTaskName)
@@ -250,10 +223,12 @@ tasks.withType(Test).configureEach {
 }
 
 dependencies {
+    usuarioTestImplementation platform('org.junit:junit-bom:5.10.2')
+    usuarioTestImplementation 'org.junit.jupiter:junit-jupiter'
+    usuarioTestRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+    usuarioImplementation fileTree('app/entrada-usuario/libs') { include '*.jar' }
     testImplementation 'org.mockito:mockito-core:5.13.0'
 }
-
-
 
 tasks.withType(JavaExec).configureEach {
     environment 'JAVA_TOOL_OPTIONS', '-Dfile.encoding=UTF-8'
