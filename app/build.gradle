@@ -418,7 +418,6 @@ tasks.register('organizarUsuario') {
         }
         // --- [FIM: injeção condicional de stubs do modelo] ---
 
-
         println "organizarUsuario → copiado para main: ${dirMain.absolutePath}"
         println "organizarUsuario → copiado para test: ${dirTest.absolutePath}"
         println "organizarUsuario → fontes recebidos: ${fontesUsuario.size()}"

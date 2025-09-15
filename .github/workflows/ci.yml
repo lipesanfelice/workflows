@@ -216,7 +216,17 @@ jobs:
           find "${{ github.workspace }}/build" -maxdepth 3 -type f -printf "%p\n" 2>/dev/null | sed -n '1,400p' || true
           exit 1
         fi
-
+    
+    - name: Enviar cobertura para Codecov (somente entrada-usuario)
+      if: steps.check_usuario.outputs.tem == 'true'
+      uses: codecov/codecov-action@v4
+      with:
+        token: ${{ secrets.CODECOV_TOKEN }}   # opcional p/ público, obrigatório p/ privado
+        files: app/entrada-usuario/jacoco-relatorio/jacoco.xml
+        flags: usuario
+        name: cobertura-entrada-usuario
+        fail_ci_if_error: false               # não quebre o CI se o upload falhar
+        verbose: true
 
     - name: Commit e push dos arquivos gerados (na main)
       if: ${{ github.event_name != 'pull_request' }}
