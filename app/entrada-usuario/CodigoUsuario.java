@@ -1,20 +1,22 @@
-public class ConversorTemperatura {
+import java.util.Arrays;
+
+public class CalculadoraEstatistica {
     
-    public static double celsiusParaFahrenheit(double celsius) {
-        return (celsius * 9/5) + 32;
+    public static double calcularMedia(double[] numeros) {
+        return Arrays.stream(numeros).average().orElse(0.0);
     }
     
-    public static double fahrenheitParaCelsius(double fahrenheit) {
-        return (fahrenheit - 32) * 5/9;
-    }
-    
-    public static double celsiusParaKelvin(double celsius) {
-        return celsius + 273.15;
+    public static double calcularMediana(double[] numeros) {
+        Arrays.sort(numeros);
+        int meio = numeros.length / 2;
+        return numeros.length % 2 == 0 ? 
+            (numeros[meio - 1] + numeros[meio]) / 2.0 : 
+            numeros[meio];
     }
     
     public static void main(String[] args) {
-        System.out.println("25°C para Fahrenheit: " + celsiusParaFahrenheit(25));
-        System.out.println("77°F para Celsius: " + fahrenheitParaCelsius(77));
-        System.out.println("0°C para Kelvin: " + celsiusParaKelvin(0));
+        double[] dados = {10.5, 20.3, 15.7, 8.9, 25.1};
+        System.out.println("Média: " + calcularMedia(dados));
+        System.out.println("Mediana: " + calcularMediana(dados));
     }
 }

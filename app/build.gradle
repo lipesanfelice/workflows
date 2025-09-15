@@ -491,15 +491,17 @@ jacoco {
     toolVersion = '0.8.12'
 }
 
-tasks.register('jacocoRelatorioUsuario', JacocoReport) {
+tasks.named('jacocoRelatorioUsuario', JacocoReport).configure {
     dependsOn 'testUsuario'
 
-    // só executa se o .exec existir
-    onlyIf { layout.buildDirectory.file("jacoco/testUsuario.exec").get().asFile.exists() }
-
+    // usa o .exec do testUsuario
     executionData.setFrom(layout.buildDirectory.file("jacoco/testUsuario.exec"))
+
+    // mantém as classes compiladas do "usuario"
     classDirectories.setFrom(sourceSets.usuario.output.classesDirs)
-    sourceDirectories.setFrom(sourceSets.usuario.java.srcDirs)
+
+    // ⚠️ fontes apontando para o repo (comitado)
+    sourceDirectories.setFrom(files('entrada-usuario'))
 
     reports {
         xml.required.set(true)
@@ -514,6 +516,7 @@ tasks.register('jacocoRelatorioUsuario', JacocoReport) {
         file('entrada-usuario/jacoco-relatorio/html').mkdirs()
     }
 }
+
 
 tasks.register('usuarioCobertura') {
     dependsOn 'testUsuario'
