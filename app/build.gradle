@@ -104,33 +104,44 @@ tasks.register('organizarUsuario') {
     outputs.dir(dirWork)
 
     doLast {
-        // limpa somente com APIs de File (sem project)
         if (dirWork.exists()) {
             dirWork.deleteDir()
         }
         dirMain.mkdirs()
         dirTest.mkdirs()
 
-        // percorre SOMENTE os arquivos já declarados em inputs
+        def extrairPacote = { String src ->
+            def m = (src =~ /(?m)^\s*package\s+([a-zA-Z0-9_.]+)\s*;/)
+            m.find() ? m.group(1) : ''
+        }
+        // public class|interface|enum|record Nome
+        def extrairNomePublico = { String src ->
+            def m = (src =~ /(?m)^\s*public\s+(?:class|interface|enum|record)\s+([A-Za-z_][A-Za-z0-9_]*)\b/)
+            m.find() ? m.group(1) : null
+        }
+
         inputs.files.files.each { File origem ->
             boolean isTeste = origem.toPath().startsWith(dirTestsIA.toPath())
             File baseDestino = isTeste ? dirTest : dirMain
 
             String texto = origem.getText('UTF-8')
-            def m = (texto =~ /(?m)^\s*package\s+([a-zA-Z0-9_.]+)\s*;/)
-            String pacote = m.find() ? m.group(1) : ''
+            String pacote = extrairPacote(texto)
             String caminhoPacote = pacote ? pacote.replace('.', File.separator) : ''
             File destinoDir = caminhoPacote ? new File(baseDestino, caminhoPacote) : baseDestino
             destinoDir.mkdirs()
-            new File(destinoDir, origem.name).setText(texto, 'UTF-8')
+
+            String nomePublico = extrairNomePublico(texto)
+            String nomeArquivo = (nomePublico ? "${nomePublico}.java" : origem.name)
+
+            new File(destinoDir, nomeArquivo).setText(texto, 'UTF-8')
         }
 
         println "organizarUsuario → copiado para main: ${dirMain.absolutePath}"
         println "organizarUsuario → copiado para test: ${dirTest.absolutePath}"
         println "organizarUsuario → fontes recebidos: " + inputs.files.files.count { !it.toPath().startsWith(dirTestsIA.toPath()) }
         println "organizarUsuario → testes recebidos: " + inputs.files.files.count { it.toPath().startsWith(dirTestsIA.toPath()) }
-
     }
+
 }
 
 
@@ -234,7 +245,7 @@ dependencies {
     usuarioTestImplementation platform('org.junit:junit-bom:5.10.2')
     usuarioTestImplementation 'org.junit.jupiter:junit-jupiter'
     usuarioTestRuntimeOnly 'org.junit.platform:junit-platform-launcher'
-    usuarioImplementation fileTree('app/entrada-usuario/libs') { include '*.jar' }
+    usuarioImplementation fileTree('entrada-usuario/libs') { include '*.jar' }
     testImplementation 'org.mockito:mockito-core:5.13.0'
 }
 
