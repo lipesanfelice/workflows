@@ -178,35 +178,22 @@ jobs:
         echo "JACOCO_XML=${{ github.workspace }}/app/entrada-usuario/jacoco-relatorio/jacoco.xml" >> "$GITHUB_ENV"
         echo "JACOCO_HTML_DIR=${{ github.workspace }}/app/entrada-usuario/jacoco-relatorio/html" >> "$GITHUB_ENV"
     
-    - name: Garantir pasta do relatório (cria se não existir)
+    - name: Garantir pasta/arquivo do relatório JaCoCo
       if: steps.check_usuario.outputs.tem == 'true'
       run: |
         set -e
         DIR="${{ github.workspace }}/app/entrada-usuario/jacoco-relatorio"
         mkdir -p "$DIR/html"
-
-        # Se quiser APENAS criar a pasta, pare aqui.
-        # exit 0
-
-        # (Opcional) Criar um jacoco.xml "placeholder" para versionar algo
-            if [ ! -s "$DIR/jacoco.xml" ]; then
-              cat > "$DIR/jacoco.xml" <<'XML'
+        # cria jacoco.xml se ainda não existir
+        if [ ! -s "$DIR/jacoco.xml" ]; then
+          cat > "$DIR/jacoco.xml" <<'XML'
         <?xml version="1.0" encoding="UTF-8"?>
         <report name="sem-cobertura">
-          <!-- Relatório placeholder gerado pelo CI quando não há execução de testes -->
+          <!-- Placeholder criado pelo CI quando não há execução de testes/cobertura -->
         </report>
         XML
             fi
 
-        # (Opcional) Criar um index.html mínimo
-            if [ ! -s "$DIR/html/index.html" ]; then
-              cat > "$DIR/html/index.html" <<'HTML'
-        <!doctype html><meta charset="utf-8">
-        <title>Relatório JaCoCo</title>
-        <h1>Relatório não gerado</h1>
-        <p>Não foram executados testes ou não houve cobertura nesta execução do CI.</p>
-        HTML
-            fi
 
     - name: Conferir relatório JaCoCo
       if: steps.check_usuario.outputs.tem == 'true'

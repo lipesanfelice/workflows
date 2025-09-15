@@ -33,6 +33,10 @@ dependencies {
     testImplementation 'org.junit.jupiter:junit-jupiter'
 }
 
+tasks.withType(Test).configureEach {
+    useJUnitPlatform()
+}
+
 // test {
 //     useJUnitPlatform()
 //     finalizedBy jacocoTestReport
@@ -178,15 +182,23 @@ tasks.named(sourceSets.usuarioTest.compileJavaTaskName) {
     dependsOn 'organizarUsuario', tasks.named(sourceSets.usuario.classesTaskName)
 }
 
-// 3) Garanta que testUsuario depende das classes de main e de teste
+// Prender o JaCoCo no seu Test custom
+tasks.named('testUsuario', Test).configure {
+    jacoco {
+        // cada task Test gera um .exec próprio
+        destinationFile = layout.buildDirectory.file("jacoco/${name}.exec").get().asFile
+    }
+}
+
+
+// testUsuario só roda depois que tudo acima existir
 tasks.register('testUsuario', Test) {
     dependsOn tasks.named(sourceSets.usuario.classesTaskName),
               tasks.named(sourceSets.usuarioTest.classesTaskName)
-
     testClassesDirs = sourceSets.usuarioTest.output.classesDirs
     classpath       = sourceSets.usuarioTest.runtimeClasspath
     useJUnitPlatform()
-    jvmArgs '-Xmx512m'
+    testLogging { events "PASSED","FAILED","SKIPPED" }
     finalizedBy 'jacocoRelatorioUsuario'
 }
 
@@ -195,17 +207,20 @@ jacoco {
     toolVersion = '0.8.12'
 }
 
+import org.gradle.testing.jacoco.plugins.JacocoTaskExtension
+
 tasks.register('jacocoRelatorioUsuario', JacocoReport) {
     dependsOn 'testUsuario'
 
+    // Coleta .exec de TODOS os Test tasks (inclui testUsuario)
     executionData.setFrom(
-        fileTree(
-            dir: layout.buildDirectory.get().asFile,
-            includes: ['**/test.exec', '**/*.exec', '**/*.ec']
+        files(
+            tasks.withType(Test).collect { t ->
+                t.extensions.findByType(JacocoTaskExtension)?.destinationFile
+            }
         )
     )
 
-    // Classes compiladas e fontes
     classDirectories.setFrom(sourceSets.usuario.output.classesDirs)
     sourceDirectories.setFrom(sourceSets.usuario.java.srcDirs)
 
@@ -216,7 +231,13 @@ tasks.register('jacocoRelatorioUsuario', JacocoReport) {
         html.outputLocation.set(file('app/entrada-usuario/jacoco-relatorio/html'))
         xml.outputLocation.set(file('app/entrada-usuario/jacoco-relatorio/jacoco.xml'))
     }
+
+    doFirst {
+        file('app/entrada-usuario/jacoco-relatorio/html').mkdirs()
+        file('app/entrada-usuario/jacoco-relatorio').mkdirs()
+    }
 }
+
 
 
 tasks.register('usuarioCobertura') {
