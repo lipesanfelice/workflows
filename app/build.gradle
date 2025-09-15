@@ -491,16 +491,21 @@ jacoco {
     toolVersion = '0.8.12'
 }
 
-tasks.named('jacocoRelatorioUsuario', JacocoReport).configure {
+def jacocoExecProv = layout.buildDirectory.file("jacoco/testUsuario.exec")
+
+tasks.register('jacocoRelatorioUsuario', JacocoReport) {
     dependsOn 'testUsuario'
 
-    // usa o .exec do testUsuario
-    executionData.setFrom(layout.buildDirectory.file("jacoco/testUsuario.exec"))
+    // só roda se existir o .exec
+    onlyIf { jacocoExecProv.get().asFile.exists() }
 
-    // mantém as classes compiladas do "usuario"
+    // arquivo .exec do testUsuario
+    executionData.setFrom(jacocoExecProv)
+
+    // classes compiladas do sourceSet "usuario"
     classDirectories.setFrom(sourceSets.usuario.output.classesDirs)
 
-    // ⚠️ fontes apontando para o repo (comitado)
+    // ⚠️ fontes apontando para o repo para o Codecov mapear corretamente
     sourceDirectories.setFrom(files('entrada-usuario'))
 
     reports {
@@ -516,6 +521,7 @@ tasks.named('jacocoRelatorioUsuario', JacocoReport).configure {
         file('entrada-usuario/jacoco-relatorio/html').mkdirs()
     }
 }
+
 
 
 tasks.register('usuarioCobertura') {
