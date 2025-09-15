@@ -301,9 +301,11 @@ tasks.register('organizarUsuario') {
 
             // já importados?
             def importados = [] as Set
-            (texto =~ /(?m)^\s*import\s+([a-zA-Z0-9_.]+)\s*;/).each { m ->
-                importados << m.group(1)
+            def impMatcher = (texto =~ /(?m)^\s*import\s+([a-zA-Z0-9_.]+)\s*;/)
+            while (impMatcher.find()) {
+                importados << impMatcher.group(1)
             }
+
 
             // montar lista de imports a inserir
             def paraInserir = []
