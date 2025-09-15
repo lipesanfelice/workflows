@@ -261,28 +261,77 @@ tasks.register('organizarUsuario') {
             println "organizarUsuario → renomeado classe pública '${nomePublico}' → '${nomeEsperado}' para alinhar com os testes"
         }
 
-        // Função para preparar texto de TESTE com pacote/import corretos
+        // ---- dentro de organizarUsuario { ... } substitua a função ajustarTesteParaPacoteUsuario por esta: ----
         def ajustarTesteParaPacoteUsuario = { String texto ->
+            // 1) alinhar pacote
             String pkgTeste = extrairPacote(texto)
             if (pacoteUsuario == '') {
                 // Usuário no default package → remover package dos testes
                 texto = texto.replaceFirst(/(?m)^\s*package\s+[^;]+;\s*/, '')
-                return texto
             } else {
-                // Usuário tem pacote
                 if (pkgTeste == '') {
                     // teste sem package → coloca o MESMO package do usuário
-                    return "package ${pacoteUsuario};\n" + texto
+                    texto = "package ${pacoteUsuario};\n" + texto
+                    pkgTeste = pacoteUsuario
                 } else {
                     // teste já tem package → injeta import * se ainda não tiver
                     if (!texto.contains("import ${pacoteUsuario}.")) {
-                        return texto.replaceFirst(/(?m)^(package\s+[^;]+;\s*)/, "\$1\nimport ${pacoteUsuario}.*;\n")
-                    } else {
-                        return texto
+                        texto = texto.replaceFirst(/(?m)^(package\s+[^;]+;\s*)/, "\$1\nimport ${pacoteUsuario}.*;\n")
                     }
                 }
             }
+
+            // 2) injetar imports JDK comuns se faltarem
+            // símbolos que frequentemente aparecem nos testes gerados
+            def candidatos = [
+                [sym: 'Random',      fqcn: 'java.util.Random'],
+                [sym: 'Arrays',      fqcn: 'java.util.Arrays'],
+                [sym: 'List',        fqcn: 'java.util.List'],
+                [sym: 'ArrayList',   fqcn: 'java.util.ArrayList'],
+                [sym: 'Map',         fqcn: 'java.util.Map'],
+                [sym: 'HashMap',     fqcn: 'java.util.HashMap'],
+                [sym: 'Set',         fqcn: 'java.util.Set'],
+                [sym: 'HashSet',     fqcn: 'java.util.HashSet'],
+                [sym: 'Collections', fqcn: 'java.util.Collections'],
+                [sym: 'Optional',    fqcn: 'java.util.Optional'],
+                // às vezes usam Regex sem import:
+                [sym: 'Pattern',     fqcn: 'java.util.regex.Pattern'],
+                [sym: 'Matcher',     fqcn: 'java.util.regex.Matcher'],
+            ]
+
+            // já importados?
+            def importados = [] as Set
+            (texto =~ /(?m)^\s*import\s+([a-zA-Z0-9_.]+)\s*;/).each { m ->
+                importados << m.group(1)
+            }
+
+            // montar lista de imports a inserir
+            def paraInserir = []
+            candidatos.each { c ->
+                // se o símbolo aparece “desqualificado” (ex.: Random em vez de java.util.Random)
+                def usaSimbolo = (texto =~ /\b${c.sym}\b/).find()
+                def jaTemImportDireto = importados.contains(c.fqcn)
+                def jaTemWildcard = importados.any { it == c.fqcn.replaceAll(/\.[^.]+$/, '.*') } // ex.: java.util.*
+                def jaUsaQualificado = (texto =~ /\b${java.util.regex.Pattern.quote(c.fqcn)}\b/).find()
+                if (usaSimbolo && !jaTemImportDireto && !jaTemWildcard && !jaUsaQualificado) {
+                    paraInserir << "import ${c.fqcn};"
+                    importados << c.fqcn
+                }
+            }
+
+            if (!paraInserir.isEmpty()) {
+                if ((texto =~ /(?m)^\s*package\s+[^;]+;\s*$/).find()) {
+                    // há package → insere após o package
+                    texto = texto.replaceFirst(/(?m)^(package\s+[^;]+;\s*)/, "\$1\n" + paraInserir.join("\n") + "\n")
+                } else {
+                    // sem package → insere no topo
+                    texto = paraInserir.join("\n") + "\n" + texto
+                }
+            }
+
+            return texto
         }
+
 
         // Gravar arquivos
         def gravar = { String texto, boolean isTeste ->
