@@ -222,7 +222,7 @@ jobs:
       uses: codecov/codecov-action@v4
       with:
         token: ${{ secrets.CODECOV_TOKEN }}   # opcional p/ público, obrigatório p/ privado
-        files: app/entrada-usuario/jacoco-relatorio/jacoco.xml
+        files: ${{ env.JACOCO_XML }}
         flags: usuario
         name: cobertura-entrada-usuario
         fail_ci_if_error: false               # não quebre o CI se o upload falhar
