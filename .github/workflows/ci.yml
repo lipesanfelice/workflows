@@ -177,7 +177,16 @@ jobs:
         echo "JACOCO_DIR=${{ github.workspace }}/app/entrada-usuario/jacoco-relatorio" >> "$GITHUB_ENV"
         echo "JACOCO_XML=${{ github.workspace }}/app/entrada-usuario/jacoco-relatorio/jacoco.xml" >> "$GITHUB_ENV"
         echo "JACOCO_HTML_DIR=${{ github.workspace }}/app/entrada-usuario/jacoco-relatorio/html" >> "$GITHUB_ENV"
+    
+    - name: Garantir pasta do relatório (cria se não existir)
+      if: steps.check_usuario.outputs.tem == 'true'
+      run: |
+        set -e
+        DIR="${{ github.workspace }}/app/entrada-usuario/jacoco-relatorio"
+        mkdir -p "$DIR/html"
 
+        # Se quiser APENAS criar a pasta, pare aqui.
+        exit 0
 
     - name: Conferir relatório JaCoCo
       if: steps.check_usuario.outputs.tem == 'true'
