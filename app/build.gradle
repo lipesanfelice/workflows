@@ -164,14 +164,6 @@ sourceSets {
     }
 }
 
-tasks.register('compilarUsuario', JavaCompile) {
-    dependsOn 'organizarUsuario'
-    source = sourceSets.usuario.java
-    destinationDirectory = layout.buildDirectory.dir('classes/usuario').get().asFile
-    classpath = configurations.usuarioImplementation
-    options.encoding = 'UTF-8'
-}
-
 // 1) Compila o main do "usuario" só depois de organizarUsuario
 tasks.named(sourceSets.usuario.compileJavaTaskName) {
     dependsOn 'organizarUsuario'
@@ -185,22 +177,27 @@ tasks.named(sourceSets.usuarioTest.compileJavaTaskName) {
 // Prender o JaCoCo no seu Test custom
 tasks.named('testUsuario', Test).configure {
     jacoco {
-        // cada task Test gera um .exec próprio
         destinationFile = layout.buildDirectory.file("jacoco/${name}.exec").get().asFile
     }
 }
 
-
-// testUsuario só roda depois que tudo acima existir
 tasks.register('testUsuario', Test) {
     dependsOn tasks.named(sourceSets.usuario.classesTaskName),
               tasks.named(sourceSets.usuarioTest.classesTaskName)
+
     testClassesDirs = sourceSets.usuarioTest.output.classesDirs
     classpath       = sourceSets.usuarioTest.runtimeClasspath
     useJUnitPlatform()
     testLogging { events "PASSED","FAILED","SKIPPED" }
+
+    // prende o JaCoCo nesta task
+    jacoco {
+        destinationFile = layout.buildDirectory.file("jacoco/${name}.exec").get().asFile
+    }
+
     finalizedBy 'jacocoRelatorioUsuario'
 }
+
 
 
 jacoco {
