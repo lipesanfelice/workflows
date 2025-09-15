@@ -97,6 +97,27 @@ def dirWork = layout.buildDirectory.dir('usuario-src').get().asFile
 def dirMain = new File(dirWork, 'src/main/java')
 def dirTest = new File(dirWork, 'src/test/java')
 
+
+// Mapeia imports -> coordenadas Maven padrão (ajuste versões se quiser)
+def mapaImports = [
+    'org.apache.commons.lang3'         : 'org.apache.commons:commons-lang3:3.14.0',
+    'org.apache.commons.io'            : 'commons-io:commons-io:2.16.1',
+    'com.google.gson'                  : 'com.google.code.gson:gson:2.11.0',
+    'com.google.common'                : 'com.google.guava:guava:33.2.1-jre',
+    'org.json'                         : 'org.json:json:20240303',
+    'com.fasterxml.jackson.databind'   : 'com.fasterxml.jackson.core:jackson-databind:2.17.1',
+    'com.fasterxml.jackson.core'       : 'com.fasterxml.jackson.core:jackson-core:2.17.1',
+    'com.fasterxml.jackson.annotation' : 'com.fasterxml.jackson.core:jackson-annotations:2.17.1',
+    'org.slf4j'                        : 'org.slf4j:slf4j-api:2.0.13',
+    'ch.qos.logback'                   : 'ch.qos.logback:logback-classic:1.5.6',
+    'org.apache.http'                  : 'org.apache.httpcomponents.client5:httpclient5:5.3.1',
+    'org.jsoup'                        : 'org.jsoup:jsoup:1.18.1',
+    'org.hibernate'                    : 'org.hibernate.orm:hibernate-core:6.5.3.Final',
+    'jakarta.persistence'              : 'jakarta.persistence:jakarta.persistence-api:3.1.0',
+    'jakarta.validation'               : 'jakarta.validation:jakarta.validation-api:3.0.2',
+    'org.apache.poi'                   : 'org.apache.poi:poi-ooxml:5.2.5'
+]
+
 tasks.register('resolverDepsUsuario') {
     // varre fontes do usuário
     inputs.files(fileTree(dirEntrada) { include '**/*.java' })
@@ -167,88 +188,6 @@ tasks.register('resolverDepsUsuario') {
         println "resolverDepsUsuario → libs geradas em ${libsDir} (${coords.size()} coords)"
     }
 }
-
-
-// Mapeia imports -> coordenadas Maven padrão (ajuste versões se quiser)
-def mapaImports = [
-    'org.apache.commons.lang3'         : 'org.apache.commons:commons-lang3:3.14.0',
-    'org.apache.commons.io'            : 'commons-io:commons-io:2.16.1',
-    'com.google.gson'                  : 'com.google.code.gson:gson:2.11.0',
-    'com.google.common'                : 'com.google.guava:guava:33.2.1-jre',
-    'org.json'                         : 'org.json:json:20240303',
-    'com.fasterxml.jackson.databind'   : 'com.fasterxml.jackson.core:jackson-databind:2.17.1',
-    'com.fasterxml.jackson.core'       : 'com.fasterxml.jackson.core:jackson-core:2.17.1',
-    'com.fasterxml.jackson.annotation' : 'com.fasterxml.jackson.core:jackson-annotations:2.17.1',
-    'org.slf4j'                        : 'org.slf4j:slf4j-api:2.0.13',
-    'ch.qos.logback'                   : 'ch.qos.logback:logback-classic:1.5.6',
-    'org.apache.http'                  : 'org.apache.httpcomponents.client5:httpclient5:5.3.1',
-    'org.jsoup'                        : 'org.jsoup:jsoup:1.18.1',
-    'org.hibernate'                    : 'org.hibernate.orm:hibernate-core:6.5.3.Final',
-    'jakarta.persistence'              : 'jakarta.persistence:jakarta.persistence-api:3.1.0',
-    'jakarta.validation'               : 'jakarta.validation:jakarta.validation-api:3.0.2',
-    'org.apache.poi'                   : 'org.apache.poi:poi-ooxml:5.2.5'
-]
-
-// Cria/atualiza entrada-usuario/libs com jars detectados e declarados
-tasks.register('resolverDepsUsuario') {
-    inputs.files(fileTree(dirEntrada) { include '**/*.java' }) // varre fontes do usuário
-    inputs.file(file('entrada-usuario/deps.txt'))             // opcional
-    inputs.dir(file('entrada-usuario/vendor'))                // opcional
-    outputs.dir(file('entrada-usuario/libs'))
-
-    doLast {
-        def libsDir = file('entrada-usuario/libs')
-        libsDir.mkdirs()
-
-        // 1) JARs locais do usuário (se existir)
-        def vendorDir = file('entrada-usuario/vendor')
-        if (vendorDir.exists()) {
-            copy {
-                from(vendorDir)
-                include '*.jar'
-                into libsDir
-            }
-        }
-
-        // 2) Coordenadas explícitas em deps.txt (1 por linha: group:artifact:version)
-        def coords = [] as Set
-        def depsTxt = file('entrada-usuario/deps.txt')
-        if (depsTxt.exists()) {
-            depsTxt.readLines('UTF-8').each { line ->
-                def s = line.trim()
-                if (s && !s.startsWith('#')) coords << s
-            }
-        }
-
-        // 3) Heurística pelos imports
-        def imports = [] as Set
-        fileTree(dirEntrada) { include '**/*.java' }.each { f ->
-            f.eachLine('UTF-8') { l ->
-                def m = (l =~ /^\s*import\s+([a-zA-Z0-9_.]+)\./)
-                if (m.find()) imports << m.group(1)
-            }
-        }
-        imports.each { pkg ->
-            mapaImports.findAll { k, v -> pkg.startsWith(k) }.each { k, v -> coords << v }
-        }
-
-        // 4) Resolve e copia jars
-        if (!coords.isEmpty()) {
-            def depObjs = coords.collect { dependencies.create(it) } as org.gradle.api.artifacts.Dependency[]
-            def conf = configurations.detachedConfiguration(depObjs)
-            conf.setTransitive(true)
-            def filesResolved = conf.resolve()
-            copy {
-                from filesResolved
-                into libsDir
-            }
-        }
-
-        new File(libsDir, 'RESOLVIDO.txt').setText((coords.join('\n') + '\n'), 'UTF-8')
-        println "resolverDepsUsuario → libs geradas em ${libsDir} (${coords.size()} coords)"
-    }
-}
-
 
 tasks.register('organizarUsuario') {
     // declare entradas/saídas NA CONFIGURAÇÃO

@@ -1,25 +1,27 @@
-import java.util.Arrays;
 import java.util.Random;
+import java.util.Scanner;
 
-public class ArrayAleatorio {
+public class CaraCoroa {
     public static void main(String[] args) {
-        int[] numeros = new int[10];
+        Scanner scanner = new Scanner(System.in);
         Random random = new Random();
         
-        // Preenche array com valores aleatórios
-        for (int i = 0; i < numeros.length; i++) {
-            numeros[i] = random.nextInt(1000);
+        System.out.println("Cara ou Coroa? (0-Cara, 1-Coroa)");
+        int escolha = scanner.nextInt();
+        
+        int resultado = random.nextInt(2);
+        String resultadoTexto = (resultado == 0) ? "Cara" : "Coroa";
+        String escolhaTexto = (escolha == 0) ? "Cara" : "Coroa";
+        
+        System.out.println("Resultado: " + resultadoTexto);
+        System.out.println("Sua escolha: " + escolhaTexto);
+        
+        if (escolha == resultado) {
+            System.out.println("Você ganhou!");
+        } else {
+            System.out.println("Você perdeu!");
         }
         
-        System.out.println("Array original: " + Arrays.toString(numeros));
-        
-        // Ordena o array
-        Arrays.sort(numeros);
-        System.out.println("Array ordenado: " + Arrays.toString(numeros));
-        
-        // Encontra maior e menor valor
-        int maior = numeros[numeros.length - 1];
-        int menor = numeros[0];
-        System.out.println("Maior: " + maior + ", Menor: " + menor);
+        scanner.close();
     }
 }
