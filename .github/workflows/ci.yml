@@ -232,12 +232,12 @@ jobs:
     - name: Validar jacoco.xml para Codecov
       run: |
         set -e
-        XML="${{ github.workspace }}/app/entrada-usuario/jacoco-relatorio/jacoco.xml"
+        XML="${{ env.JACOCO_XML }}"
         test -s "$XML"
         # precisa ter ao menos um <package>
         grep -q "<package " "$XML" || { echo "jacoco.xml sem <package>; abortando upload"; exit 1; }
         # checar mapeamento de paths
-        python3 - <<'PY' "$XML" "${{ github.workspace }}/app/entrada-usuario"
+        python3 - <<'PY' "$XML" "${{ env.JACOCO_XML }}"
         import os, sys, xml.etree.ElementTree as ET
         xml, rootdir = sys.argv[1], sys.argv[2]
         root = ET.parse(xml).getroot()
