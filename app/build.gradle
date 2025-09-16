@@ -253,13 +253,30 @@ tasks.register('organizarUsuario') {
                         /(?m)(^\s*public\s+(?:class|interface|enum|record)\s+)${java.util.regex.Pattern.quote(nomePublico)}\b/,
                         "\$1${nomeEsperado}"
                     )
+
+                    // >>> PASSO 2: espelhar rename também na pasta do repositório (entrada-usuario)
+                    def pacote = extrairPacote(novoTexto)
+                    def caminhoPacote = pacote ? pacote.replace('.', File.separator) : ''
+                    def repoDir = new File(dirEntrada, caminhoPacote)
+                    repoDir.mkdirs()
+                    // grava o arquivo renomeado
+                    new File(repoDir, "${nomeEsperado}.java").setText(novoTexto, 'UTF-8')
+                    // (opcional) remove o antigo, se existia
+                    def antigo = new File(repoDir, "${nomePublico}.java")
+                    if (antigo.exists()) {
+                        antigo.delete()
+                    }
+                    // <<< PASSO 2
+
                     [file: f.file, text: novoTexto]
                 } else {
                     f
                 }
             }
+
             println "organizarUsuario → renomeado classe pública '${nomePublico}' → '${nomeEsperado}' para alinhar com os testes"
         }
+
 
         // ---- dentro de organizarUsuario { ... } substitua a função ajustarTesteParaPacoteUsuario por esta: ----
         def ajustarTesteParaPacoteUsuario = { String texto ->
@@ -495,17 +512,13 @@ def jacocoExecProv = layout.buildDirectory.file("jacoco/testUsuario.exec")
 
 tasks.register('jacocoRelatorioUsuario', JacocoReport) {
     dependsOn 'testUsuario'
-
-    // só roda se existir o .exec
     onlyIf { jacocoExecProv.get().asFile.exists() }
 
-    // arquivo .exec do testUsuario
     executionData.setFrom(jacocoExecProv)
 
-    // classes compiladas do sourceSet "usuario"
+    // classes geradas:
     classDirectories.setFrom(sourceSets.usuario.output.classesDirs)
-
-    // ⚠️ fontes apontando para o repo para o Codecov mapear corretamente
+    // ⚠️ apontar fontes para o repo (onde o Codecov lê)
     sourceDirectories.setFrom(files('entrada-usuario'))
 
     reports {
@@ -515,12 +528,11 @@ tasks.register('jacocoRelatorioUsuario', JacocoReport) {
         html.outputLocation.set(file('entrada-usuario/jacoco-relatorio/html'))
         xml.outputLocation.set(file('entrada-usuario/jacoco-relatorio/jacoco.xml'))
     }
-
     doFirst {
-        file('entrada-usuario/jacoco-relatorio').mkdirs()
         file('entrada-usuario/jacoco-relatorio/html').mkdirs()
     }
 }
+
 
 
 
