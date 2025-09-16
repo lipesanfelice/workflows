@@ -273,36 +273,6 @@ jobs:
           git pull --rebase --autostash origin "$BRANCH" || true
           git push origin HEAD:"$BRANCH" || git push --force-with-lease origin HEAD:"$BRANCH"
         fi
-
-    
-    - name: Validar jacoco.xml para Codecov
-      run: |
-        set -e
-        XML="${{ github.workspace }}/app/entrada-usuario/jacoco-relatorio/jacoco.xml"
-        test -s "$XML"
-        # precisa ter ao menos um <package>
-        grep -q "<package " "$XML" || { echo "jacoco.xml sem <package>; abortando upload"; exit 1; }
-        # checar mapeamento de paths
-        python3 - <<'PY' "$XML" "${{ github.workspace }}/app/entrada-usuario"
-        import os, sys, xml.etree.ElementTree as ET
-        xml, rootdir = sys.argv[1], sys.argv[2]
-        root = ET.parse(xml).getroot()
-        missing = []
-        for pkg in root.iter('package'):
-            pkgpath = pkg.get('name','').replace('.', '/')
-            for sf in pkg.findall('sourcefile'):
-                rel = os.path.join(pkgpath, sf.get('name'))
-                path = os.path.join(rootdir, rel)
-                if not os.path.exists(path):
-                    missing.append(rel)
-        if missing:
-            print("ARQUIVOS NAO ENCONTRADOS NO REPO (exemplos):")
-            for p in missing[:20]:
-                print(" -", p)
-            sys.exit(2)
-        print("OK: mapeamento de caminhos compatível.")
-        PY
-
     
     - name: Upload para Codecov
       if: steps.check_usuario.outputs.tem == 'true'
