@@ -512,17 +512,15 @@ def jacocoExecProv = layout.buildDirectory.file("jacoco/testUsuario.exec")
 
 // no topo já existe: def dirEntrada = file('entrada-usuario')
 
-tasks.named('jacocoRelatorioUsuario', JacocoReport).configure {
+tasks.register('jacocoRelatorioUsuario', JacocoReport) {
     dependsOn 'testUsuario'
 
     executionData.setFrom(layout.buildDirectory.file("jacoco/testUsuario.exec"))
-
-    // classes continuam vindo do build:
     classDirectories.setFrom(sourceSets.usuario.output.classesDirs)
 
-    // 👇 fontes devem ser as do REPO (para o Codecov conseguir mapear)
+    // Use a variável global já definida acima: dirEntrada
     sourceDirectories.setFrom(files(dirEntrada))
-    additionalSourceDirs.setFrom(files(dirEntrada)) // ajuda algumas UIs
+    additionalSourceDirs.setFrom(files(dirEntrada))
 
     reports {
         xml.required.set(true)
@@ -537,10 +535,6 @@ tasks.named('jacocoRelatorioUsuario', JacocoReport).configure {
         file('entrada-usuario/jacoco-relatorio/html').mkdirs()
     }
 }
-
-
-
-
 
 tasks.register('usuarioCobertura') {
     dependsOn 'testUsuario'
