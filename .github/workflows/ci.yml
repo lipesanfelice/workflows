@@ -229,61 +229,43 @@ jobs:
     #     grep -q "<counter " "$XML" || { echo "jacoco.xml sem <counter>"; exit 3; }
     #     echo "jacoco.xml OK para upload"
 
-    # Salvar relatório JaCoCo no repositório (antes do Codecov)
-    - name: Commit JaCoCo (antes do Codecov)
+    # (1) Upload para Codecov  — vem ANTES
+    - name: Upload para Codecov
+      if: steps.check_usuario.outputs.tem == 'true'
+      uses: codecov/codecov-action@v4
+      with:
+        token: ${{ secrets.CODECOV_TOKEN }}
+        working-directory: app            # << chave para path
+        files: entrada-usuario/jacoco-relatorio/jacoco.xml
+        flags: usuario
+        name: cobertura-entrada-usuario
+        verbose: true
+        fail_ci_if_error: true            # falha cedo se algo estiver errado
+
+    # (2) Commit opcional do relatório — vem DEPOIS
+    - name: Commit JaCoCo (depois do Codecov)
       if: steps.check_usuario.outputs.tem == 'true' && github.event_name != 'pull_request'
       env:
         BRANCH: main
         JACOCO_DIR: ${{ github.workspace }}/app/entrada-usuario/jacoco-relatorio
       run: |
         set -euo pipefail
-
-        # evita loops de CI
         git config user.name  "github-actions[bot]"
         git config user.email "github-actions[bot]@users.noreply.github.com"
         git config --global --add safe.directory "$GITHUB_WORKSPACE"
-
-        # Garante que estamos na main atualizada
         git fetch origin "$BRANCH" --prune
-        if git rev-parse --verify "$BRANCH" >/dev/null 2>&1; then
-          git checkout "$BRANCH"
-        else
-          git checkout -b "$BRANCH"
-        fi
+        git switch "$BRANCH" || git checkout -b "$BRANCH"
         git pull --rebase --autostash origin "$BRANCH" || true
-
-        # Confere se o jacoco.xml existe e não é placeholder
         test -s "$JACOCO_DIR/jacoco.xml"
         if grep -q 'name="sem-cobertura"' "$JACOCO_DIR/jacoco.xml"; then
           echo "jacoco.xml é placeholder; não vou commitar."
           exit 0
         fi
-
-        # Adiciona XML + HTML (se quiser só o XML, troque o add por: git add "$JACOCO_DIR/jacoco.xml")
         git add -A "$JACOCO_DIR"
-
-        if git diff --cached --quiet; then
-          echo "Sem mudanças para commit no relatório JaCoCo."
-          exit 0
-        fi
-
+        git diff --cached --quiet && { echo "Sem mudanças para commit."; exit 0; }
         git commit -m "chore(ci): salvar relatório JaCoCo (XML/HTML) [skip ci]"
-        # tenta push; se houver disputa, rebaseia e tenta de novo
-        if ! git push origin HEAD:"$BRANCH"; then
-          git pull --rebase --autostash origin "$BRANCH" || true
-          git push origin HEAD:"$BRANCH" || git push --force-with-lease origin HEAD:"$BRANCH"
-        fi
-    
-    - name: Upload para Codecov
-      if: steps.check_usuario.outputs.tem == 'true'
-      uses: codecov/codecov-action@v4
-      with:
-        token: ${{ secrets.CODECOV_TOKEN }}   # obrigatório se o repo for privado
-        # files: ${{ env.JACOCO_XML }}
-        files: ${{ github.workspace }}/app/entrada-usuario/jacoco-relatorio/jacoco.xml
-        flags: usuario
-        name: cobertura-entrada-usuario
-        verbose: true
+        git push --force-with-lease origin HEAD:"$BRANCH" || true
+
 
 
     - name: Commit e push dos arquivos gerados (na main)

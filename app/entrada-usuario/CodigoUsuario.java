@@ -1,20 +1,19 @@
-import java.util.ArrayList;
-import java.util.List;
 import java.util.Random;
 
-public class SorteioNomes {
+public class GeradorAleatorio {
     public static void main(String[] args) {
-        List<String> nomes = new ArrayList<>();
-        nomes.add("Ana");
-        nomes.add("Carlos");
-        nomes.add("Maria");
-        nomes.add("João");
-        nomes.add("Pedro");
-        nomes.add("Julia");
-        
         Random random = new Random();
-        String nomeSorteado = nomes.get(random.nextInt(nomes.size()));
         
-        System.out.println("Nome sorteado: " + nomeSorteado);
+        // Número inteiro entre 0 e 100
+        int numeroInteiro = random.nextInt(101);
+        System.out.println("Número inteiro: " + numeroInteiro);
+        
+        // Número decimal entre 0.0 e 1.0
+        double numeroDecimal = random.nextDouble();
+        System.out.println("Número decimal: " + numeroDecimal);
+        
+        // Boolean aleatório
+        boolean valorBooleano = random.nextBoolean();
+        System.out.println("Valor booleano: " + valorBooleano);
     }
 }
