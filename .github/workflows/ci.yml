@@ -230,17 +230,30 @@ jobs:
     #     echo "jacoco.xml OK para upload"
 
     # (1) Upload para Codecov  — vem ANTES
-    - name: Upload para Codecov
+        # Substitua o passo "Upload para Codecov" por este
+    - name: Upload para Codecov (CLI com --fix)
       if: steps.check_usuario.outputs.tem == 'true'
-      uses: codecov/codecov-action@v4
-      with:
-        token: ${{ secrets.CODECOV_TOKEN }}
-        working-directory: app            # << chave para path
-        files: entrada-usuario/jacoco-relatorio/jacoco.xml
-        flags: usuario
-        name: cobertura-entrada-usuario
-        verbose: true
-        fail_ci_if_error: true            # falha cedo se algo estiver errado
+      env:
+        CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+      run: |
+        set -euo pipefail
+        cd app
+        # baixa o uploader oficial
+        curl -Os https://uploader.codecov.io/latest/linux/codecov
+        chmod +x codecov
+
+        # envia o jacoco.xml com correções de caminho
+        ./codecov \
+          -t "$CODECOV_TOKEN" \
+          -f entrada-usuario/jacoco-relatorio/jacoco.xml \
+          -F usuario \
+          -n cobertura-entrada-usuario \
+          --fix "/home/runner/work/.*/.*/::" \
+          --fix "::app/" \
+          -v
+
+
+
 
     # (2) Commit opcional do relatório — vem DEPOIS
     - name: Commit JaCoCo (depois do Codecov)

@@ -511,16 +511,14 @@ jacoco {
 def jacocoExecProv = layout.buildDirectory.file("jacoco/testUsuario.exec")
 
 // no topo já existe: def dirEntrada = file('entrada-usuario')
-
 tasks.register('jacocoRelatorioUsuario', JacocoReport) {
     dependsOn 'testUsuario'
-
     executionData.setFrom(layout.buildDirectory.file("jacoco/testUsuario.exec"))
     classDirectories.setFrom(sourceSets.usuario.output.classesDirs)
 
-    // Use a variável global já definida acima: dirEntrada
-    sourceDirectories.setFrom(files(dirEntrada))
-    additionalSourceDirs.setFrom(files(dirEntrada))
+    // IMPORTANTÍSSIMO: fontes do repositório
+    sourceDirectories.setFrom(files('entrada-usuario'))
+    additionalSourceDirs.setFrom(files('entrada-usuario'))
 
     reports {
         xml.required.set(true)
@@ -529,12 +527,8 @@ tasks.register('jacocoRelatorioUsuario', JacocoReport) {
         html.outputLocation.set(file('entrada-usuario/jacoco-relatorio/html'))
         xml.outputLocation.set(file('entrada-usuario/jacoco-relatorio/jacoco.xml'))
     }
-
-    doFirst {
-        file('entrada-usuario/jacoco-relatorio').mkdirs()
-        file('entrada-usuario/jacoco-relatorio/html').mkdirs()
-    }
 }
+
 
 tasks.register('usuarioCobertura') {
     dependsOn 'testUsuario'
