@@ -1,22 +1,20 @@
-import java.util.Arrays;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Random;
 
-public class CalculadoraEstatistica {
-    
-    public static double calcularMedia(double[] numeros) {
-        return Arrays.stream(numeros).average().orElse(0.0);
-    }
-    
-    public static double calcularMediana(double[] numeros) {
-        Arrays.sort(numeros);
-        int meio = numeros.length / 2;
-        return numeros.length % 2 == 0 ? 
-            (numeros[meio - 1] + numeros[meio]) / 2.0 : 
-            numeros[meio];
-    }
-    
+public class SorteioNomes {
     public static void main(String[] args) {
-        double[] dados = {10.5, 20.3, 15.7, 8.9, 25.1};
-        System.out.println("Média: " + calcularMedia(dados));
-        System.out.println("Mediana: " + calcularMediana(dados));
+        List<String> nomes = new ArrayList<>();
+        nomes.add("Ana");
+        nomes.add("Carlos");
+        nomes.add("Maria");
+        nomes.add("João");
+        nomes.add("Pedro");
+        nomes.add("Julia");
+        
+        Random random = new Random();
+        String nomeSorteado = nomes.get(random.nextInt(nomes.size()));
+        
+        System.out.println("Nome sorteado: " + nomeSorteado);
     }
 }

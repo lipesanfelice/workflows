@@ -217,17 +217,17 @@ jobs:
           exit 1
         fi
 
-    - name: Validar jacoco.xml antes do Codecov
-      if: steps.check_usuario.outputs.tem == 'true'
-      run: |
-        set -e
-        XML="${{ github.workspace }}/app/entrada-usuario/jacoco-relatorio/jacoco.xml"
-        test -s "$XML" || { echo "jacoco.xml vazio"; exit 3; }
-        # Precisa ter pelo menos um pacote/arquivo e contadores
-        grep -q "<package " "$XML" || { echo "jacoco.xml sem <package>"; exit 3; }
-        grep -q "<sourcefile " "$XML" || { echo "jacoco.xml sem <sourcefile>"; exit 3; }
-        grep -q "<counter " "$XML" || { echo "jacoco.xml sem <counter>"; exit 3; }
-        echo "jacoco.xml OK para upload"
+    # - name: Validar jacoco.xml antes do Codecov
+    #   if: steps.check_usuario.outputs.tem == 'true'
+    #   run: |
+    #     set -e
+    #     XML="${{ github.workspace }}/app/entrada-usuario/jacoco-relatorio/jacoco.xml"
+    #     test -s "$XML" || { echo "jacoco.xml vazio"; exit 3; }
+    #     # Precisa ter pelo menos um pacote/arquivo e contadores
+    #     grep -q "<package " "$XML" || { echo "jacoco.xml sem <package>"; exit 3; }
+    #     grep -q "<sourcefile " "$XML" || { echo "jacoco.xml sem <sourcefile>"; exit 3; }
+    #     grep -q "<counter " "$XML" || { echo "jacoco.xml sem <counter>"; exit 3; }
+    #     echo "jacoco.xml OK para upload"
     
     - name: Validar jacoco.xml para Codecov
       run: |
