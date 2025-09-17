@@ -234,27 +234,7 @@ jobs:
         fi
         # sanidade mínima: precisa conter counters
         grep -q "<counter " "$REPORT" || { echo "::error::jacoco.xml sem <counter>"; exit 4; }
-
-    - name: Upload para Codecov (CLI simples)
-      if: steps.check_usuario.outputs.tem == 'true'
-      env:
-        CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
-      run: |
-        set -euo pipefail
-        cd "$GITHUB_WORKSPACE"
-        curl -Os https://uploader.codecov.io/latest/linux/codecov
-        chmod +x codecov
-
-        ./codecov \
-          -t "$CODECOV_TOKEN" \
-          -f "$GITHUB_WORKSPACE/app/entrada-usuario/jacoco-relatorio/jacoco.xml" \
-          -F usuario \
-          -n cobertura-entrada-usuario \
-          -v
-
-
-
-
+    
     - name: Commit JaCoCo (antes do Codecov)
       if: steps.check_usuario.outputs.tem == 'true' && github.event_name != 'pull_request'
       env:
@@ -303,6 +283,22 @@ jobs:
           git push --force-with-lease origin HEAD:"$BRANCH"
         fi
 
+    - name: Upload para Codecov (CLI simples)
+      if: steps.check_usuario.outputs.tem == 'true'
+      env:
+        CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+      run: |
+        set -euo pipefail
+        cd "$GITHUB_WORKSPACE"
+        curl -Os https://uploader.codecov.io/latest/linux/codecov
+        chmod +x codecov
+
+        ./codecov \
+          -t "$CODECOV_TOKEN" \
+          -f "$GITHUB_WORKSPACE/app/entrada-usuario/jacoco-relatorio/jacoco.xml" \
+          -F usuario \
+          -n cobertura-entrada-usuario \
+          -v
 
     - name: Commit e push dos arquivos gerados (na main)
       if: ${{ github.event_name != 'pull_request' }}
