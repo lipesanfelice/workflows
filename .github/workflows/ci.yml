@@ -236,29 +236,25 @@ jobs:
         grep -q "<counter " "$REPORT" || { echo "::error::jacoco.xml sem <counter>"; exit 4; }
 
 
-    # (1) Upload para Codecov  — vem ANTES
-    - name: Upload para Codecov (CLI com root-dir e fix)
+    - name: Upload para Codecov (CLI com root-dir)
       if: steps.check_usuario.outputs.tem == 'true'
       env:
-        CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}   # obrigatório p/ repo privado
+        CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
       run: |
         set -euo pipefail
         cd "$GITHUB_WORKSPACE"
         curl -Os https://uploader.codecov.io/latest/linux/codecov
         chmod +x codecov
 
-        REPORT="app/entrada-usuario/jacoco-relatorio/jacoco.xml"
-
-        # Dica: --root-dir aponta para ONDE estão as fontes no repo
-        #       --fix remove/insere prefixos até o caminho casar
+        # raiz lógica = app/entrada-usuario
         ./codecov \
           -t "$CODECOV_TOKEN" \
-          -f "$REPORT" \
+          --root-dir app/entrada-usuario \
+          -f "jacoco-relatorio/jacoco.xml" \
           -F usuario \
           -n cobertura-entrada-usuario \
-          --root-dir app/entrada-usuario \
-          --fix "::app/entrada-usuario/" \
           -v
+
 
 
     # (2) Commit opcional do relatório — vem DEPOIS

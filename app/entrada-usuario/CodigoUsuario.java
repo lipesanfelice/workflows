@@ -1,27 +1,22 @@
-import java.util.Random;
+import java.security.SecureRandom;
 
-public class SimuladorDados {
-    private static final Random random = new Random();
+public class GeradorSenha {
+    private static final String CARACTERES = 
+        "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*";
     
-    public static int lancarDado(int faces) {
-        return random.nextInt(faces) + 1;
-    }
-    
-    public static int[] lancarVariosDados(int quantidade, int faces) {
-        int[] resultados = new int[quantidade];
-        for (int i = 0; i < quantidade; i++) {
-            resultados[i] = lancarDado(faces);
+    public static String gerarSenha(int tamanho) {
+        SecureRandom random = new SecureRandom();
+        StringBuilder senha = new StringBuilder();
+        
+        for (int i = 0; i < tamanho; i++) {
+            int index = random.nextInt(CARACTERES.length());
+            senha.append(CARACTERES.charAt(index));
         }
-        return resultados;
+        
+        return senha.toString();
     }
     
     public static void main(String[] args) {
-        System.out.println("Dado de 6 faces: " + lancarDado(6));
-        
-        int[] dados = lancarVariosDados(4, 20);
-        System.out.print("4 dados de 20 faces: ");
-        for (int resultado : dados) {
-            System.out.print(resultado + " ");
-        }
+        System.out.println("Senha gerada: " + gerarSenha(12));
     }
 }

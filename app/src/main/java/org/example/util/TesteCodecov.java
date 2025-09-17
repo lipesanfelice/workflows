@@ -4,7 +4,7 @@ public class TesteCodecov {
     public static void main(String[] args) {
         String owner = "lipesanfelice";
         String repo = "workflows";
-        String token = "54705329-755b-42f7-ba92-d00741fb093c";
+        String token = "d4fdbe2e-2160-4dd1-916d-38746a0db51b";
 
         ExtratorCodecov.extrair(owner, repo, token);
     }
