@@ -215,23 +215,31 @@ jobs:
           exit 1
         fi
 
-    - name: Validar jacoco.xml e caminhos (debug)
-      if: steps.check_usuario.outputs.tem == 'true'
+    - name: Validar jacoco.xml e paths
       run: |
         set -euo pipefail
-        REPORT="${{ github.workspace }}/app/entrada-usuario/jacoco-relatorio/jacoco.xml"
-        test -s "$REPORT" || { echo "::error::jacoco.xml vazio"; exit 2; }
-        PKG=$(grep -m1 -oP '(?<=<package name=")[^"]+' "$REPORT" || true)
-        SRC=$(grep -m1 -oP '(?<=<sourcefile name=")[^"]+' "$REPORT" || true)
-        echo "Primeiro package no XML: '$PKG'"
-        echo "Primeiro sourcefile no XML: '$SRC'"
-        if [ -n "$PKG" ] && [ -n "$SRC" ]; then
-          CANDIDATE="${{ github.workspace }}/app/entrada-usuario/$PKG/$SRC"
-          echo "Verificando fonte referenciada: $CANDIDATE"
-          ls -la "$CANDIDATE" || { echo "::error::Fonte referenciada não encontrada no repo (path mismatch)."; exit 3; }
-        fi
-        # sanidade mínima: precisa conter counters
-        grep -q "<counter " "$REPORT" || { echo "::error::jacoco.xml sem <counter>"; exit 4; }
+        XML="${{ env.JACOCO_XML }}"
+        test -s "$XML"
+        grep -q "<package " "$XML"
+        grep -q "<sourcefile " "$XML"
+        # pega primeiro package e sourcefile
+        PKG=$(grep -m1 -oP '(?<=<package name=")[^"]+' "$XML" || true)
+        SRC=$(grep -m1 -oP '(?<=<sourcefile name=")[^"]+' "$XML" || true)
+        echo "Exemplo do relatório: package=$PKG  sourcefile=$SRC"
+        # tente resolver o caminho em cada root declarado
+        ok=false
+        for ROOT in "app/build/usuario-src/src/main/java" "app/entrada-usuario"; do
+          CAND="$ROOT/$PKG/$SRC"
+          if [ -f "$CAND" ]; then
+            echo "OK: encontrei $CAND"
+            ok=true
+            break
+          else
+            echo "Falhou neste root: $CAND"
+          fi
+        done
+        $ok || { echo "Nenhum root contém o arquivo do relatório. Ajuste sourceDirectories."; exit 3; }
+
 
 
     - name: Upload para Codecov (uploader CLI)

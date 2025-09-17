@@ -512,16 +512,15 @@ jacoco {
 tasks.register('jacocoRelatorioUsuario', JacocoReport) {
     dependsOn 'testUsuario'
 
-    // .exec gerado pelo testUsuario
     executionData.setFrom(layout.buildDirectory.file("jacoco/testUsuario.exec"))
-
-    // classes = compiladas do sourceSet "usuario"
     classDirectories.setFrom(sourceSets.usuario.output.classesDirs)
 
-    // FONTE: use os arquivos que o Gradle copiou p/ build/usuario-src/src/main/java
-    // (esses caminhos existem no workspace quando o CI roda)
-    sourceDirectories.setFrom(sourceSets.usuario.java.srcDirs)
-    additionalSourceDirs.setFrom(sourceSets.usuario.java.srcDirs)
+    // <- adicione as duas raízes de fonte
+    sourceDirectories.setFrom(files(
+        sourceSets.usuario.java.srcDirs,    // build/usuario-src/src/main/java
+        file('entrada-usuario')             // fontes no repo
+    ))
+    additionalSourceDirs.setFrom(sourceDirectories)
 
     reports {
         xml.required.set(true)
@@ -530,11 +529,8 @@ tasks.register('jacocoRelatorioUsuario', JacocoReport) {
         html.outputLocation.set(file('entrada-usuario/jacoco-relatorio/html'))
         xml.outputLocation.set(file('entrada-usuario/jacoco-relatorio/jacoco.xml'))
     }
-
-    doFirst {
-        file('entrada-usuario/jacoco-relatorio/html').mkdirs()
-    }
 }
+
 
 
 
