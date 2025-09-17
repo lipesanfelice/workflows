@@ -234,54 +234,7 @@ jobs:
         fi
         # sanidade mínima: precisa conter counters
         grep -q "<counter " "$REPORT" || { echo "::error::jacoco.xml sem <counter>"; exit 4; }
-    
-    - name: Commit JaCoCo (antes do Codecov)
-      if: steps.check_usuario.outputs.tem == 'true' && github.event_name != 'pull_request'
-      env:
-        BRANCH: main
-        JACOCO_DIR: ${{ github.workspace }}/app/entrada-usuario/jacoco-relatorio
-      run: |
-        set -euo pipefail
 
-        git config user.name  "github-actions[bot]"
-        git config user.email "github-actions[bot]@users.noreply.github.com"
-        git config --global --add safe.directory "$GITHUB_WORKSPACE"
-
-        # ⚠️ Limpa QUALQUER operação de merge/rebase pendente
-        git merge --abort  || true
-        git rebase --abort || true
-
-        # Sempre começar de uma árvore limpa do remoto
-        git fetch origin --prune
-        git checkout -B "$BRANCH" "origin/$BRANCH"
-        git reset --hard "origin/$BRANCH"
-        git clean -fdx
-
-        # Confere se o jacoco.xml existe e não é placeholder
-        test -s "$JACOCO_DIR/jacoco.xml"
-        if grep -q 'name="sem-cobertura"' "$JACOCO_DIR/jacoco.xml"; then
-          echo "jacoco.xml é placeholder; não vou commitar."
-          exit 0
-        fi
-
-        # Adiciona XML + HTML (ou troque por 'git add "$JACOCO_DIR/jacoco.xml"' se quiser só o XML)
-        git add -A "$JACOCO_DIR"
-
-        if git diff --cached --quiet; then
-          echo "Sem mudanças para commit no relatório JaCoCo."
-          exit 0
-        fi
-
-        git commit -m "chore(ci): salvar relatório JaCoCo (XML/HTML) [skip ci]"
-
-        # Push simples; se o remoto avançou, fazemos um update *limpo* e tentamos de novo
-        if ! git push origin HEAD:"$BRANCH"; then
-          git fetch origin --prune
-          git reset --hard "origin/$BRANCH"
-          git add -A "$JACOCO_DIR"
-          git commit -m "chore(ci): salvar relatório JaCoCo (XML/HTML) [skip ci]" || true
-          git push --force-with-lease origin HEAD:"$BRANCH"
-        fi
 
     - name: Upload para Codecov (CLI simples)
       if: steps.check_usuario.outputs.tem == 'true'
