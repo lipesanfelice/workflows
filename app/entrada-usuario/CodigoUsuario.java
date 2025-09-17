@@ -1,19 +1,22 @@
-import java.util.Random;
+import java.security.SecureRandom;
 
-public class GeradorAleatorio {
+public class GeradorSenha {
+    private static final String CARACTERES = 
+        "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*";
+    
+    public static String gerarSenha(int tamanho) {
+        SecureRandom random = new SecureRandom();
+        StringBuilder senha = new StringBuilder();
+        
+        for (int i = 0; i < tamanho; i++) {
+            int index = random.nextInt(CARACTERES.length());
+            senha.append(CARACTERES.charAt(index));
+        }
+        
+        return senha.toString();
+    }
+    
     public static void main(String[] args) {
-        Random random = new Random();
-        
-        // Número inteiro entre 0 e 100
-        int numeroInteiro = random.nextInt(101);
-        System.out.println("Número inteiro: " + numeroInteiro);
-        
-        // Número decimal entre 0.0 e 1.0
-        double numeroDecimal = random.nextDouble();
-        System.out.println("Número decimal: " + numeroDecimal);
-        
-        // Boolean aleatório
-        boolean valorBooleano = random.nextBoolean();
-        System.out.println("Valor booleano: " + valorBooleano);
+        System.out.println("Senha gerada: " + gerarSenha(12));
     }
 }
