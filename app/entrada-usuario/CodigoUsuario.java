@@ -1,19 +1,27 @@
 import java.util.Random;
 
-public class GeradorAleatorio {
+public class SimuladorDados {
+    private static final Random random = new Random();
+    
+    public static int lancarDado(int faces) {
+        return random.nextInt(faces) + 1;
+    }
+    
+    public static int[] lancarVariosDados(int quantidade, int faces) {
+        int[] resultados = new int[quantidade];
+        for (int i = 0; i < quantidade; i++) {
+            resultados[i] = lancarDado(faces);
+        }
+        return resultados;
+    }
+    
     public static void main(String[] args) {
-        Random random = new Random();
+        System.out.println("Dado de 6 faces: " + lancarDado(6));
         
-        // Número inteiro entre 0 e 100
-        int numeroInteiro = random.nextInt(101);
-        System.out.println("Número inteiro: " + numeroInteiro);
-        
-        // Número decimal entre 0.0 e 1.0
-        double numeroDecimal = random.nextDouble();
-        System.out.println("Número decimal: " + numeroDecimal);
-        
-        // Boolean aleatório
-        boolean valorBooleano = random.nextBoolean();
-        System.out.println("Valor booleano: " + valorBooleano);
+        int[] dados = lancarVariosDados(4, 20);
+        System.out.print("4 dados de 20 faces: ");
+        for (int resultado : dados) {
+            System.out.print(resultado + " ");
+        }
     }
 }
