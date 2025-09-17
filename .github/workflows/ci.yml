@@ -250,7 +250,7 @@ jobs:
         chmod +x codecov
         ./codecov \
           -t "$CODECOV_TOKEN" \
-          -f "$JACOCO_XML" \
+          -f "${{ env.JACOCO_XML }}" \
           -F usuario \
           -n cobertura-entrada-usuario \
           -v
