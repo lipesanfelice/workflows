@@ -1,22 +1,19 @@
-import java.util.Arrays;
+import java.util.Random;
 
-public class CalculadoraEstatistica {
-    
-    public static double calcularMedia(double[] numeros) {
-        return Arrays.stream(numeros).average().orElse(0.0);
-    }
-    
-    public static double calcularMediana(double[] numeros) {
-        Arrays.sort(numeros);
-        int meio = numeros.length / 2;
-        return numeros.length % 2 == 0 ? 
-            (numeros[meio - 1] + numeros[meio]) / 2.0 : 
-            numeros[meio];
-    }
-    
+public class GeradorAleatorio {
     public static void main(String[] args) {
-        double[] dados = {10.5, 20.3, 15.7, 8.9, 25.1};
-        System.out.println("Média: " + calcularMedia(dados));
-        System.out.println("Mediana: " + calcularMediana(dados));
+        Random random = new Random();
+        
+        // Número inteiro entre 0 e 100
+        int numeroInteiro = random.nextInt(101);
+        System.out.println("Número inteiro: " + numeroInteiro);
+        
+        // Número decimal entre 0.0 e 1.0
+        double numeroDecimal = random.nextDouble();
+        System.out.println("Número decimal: " + numeroDecimal);
+        
+        // Boolean aleatório
+        boolean valorBooleano = random.nextBoolean();
+        System.out.println("Valor booleano: " + valorBooleano);
     }
 }
