@@ -252,9 +252,6 @@ jobs:
           --fix "::app/" \
           -v
 
-
-
-
     # (2) Commit opcional do relatório — vem DEPOIS
     - name: Commit JaCoCo (depois do Codecov)
       if: steps.check_usuario.outputs.tem == 'true' && github.event_name != 'pull_request'
@@ -278,8 +275,6 @@ jobs:
         git diff --cached --quiet && { echo "Sem mudanças para commit."; exit 0; }
         git commit -m "chore(ci): salvar relatório JaCoCo (XML/HTML) [skip ci]"
         git push --force-with-lease origin HEAD:"$BRANCH" || true
-
-
 
     - name: Commit e push dos arquivos gerados (na main)
       if: ${{ github.event_name != 'pull_request' }}
