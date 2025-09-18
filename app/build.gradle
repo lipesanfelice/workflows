@@ -254,12 +254,22 @@ tasks.register('organizarUsuario') {
                         "\$1${nomeEsperado}"
                     )
 
-                    def pacoteNovo = extrairPacote(novoTexto)
-                    def caminhoPacote = pacoteNovo ? pacoteNovo.replace('.', File.separator) : ''
-                    def repoDir = new File(dirEntrada, caminhoPacote)
+                    // >>> PASSO 2: espelhar rename também na pasta do repositório (entrada-usuario)
+                    def pacoteNovo   = extrairPacote(novoTexto)
+                    def caminhoPacote= pacoteNovo ? pacoteNovo.replace('.', File.separator) : ''
+                    def repoDir      = new File(dirEntrada, caminhoPacote)
                     repoDir.mkdirs()
-                    // grava o arquivo renomeado no repositório versionado
+
+                    // grava o arquivo renomeado no repo
                     new File(repoDir, "${nomeEsperado}.java").setText(novoTexto, 'UTF-8')
+
+                    // remove o arquivo antigo (se existia)
+                    def antigo = new File(repoDir, "${nomePublico}.java")
+                    if (antigo.exists() && antigo.name != "${nomeEsperado}.java") {
+                        antigo.delete()
+                    }
+                    // <<< PASSO 2
+
 
                     [file: f.file, text: novoTexto]
                 } else {
@@ -520,12 +530,11 @@ jacoco {
 
 
 tasks.register('jacocoRelatorioUsuario', JacocoReport) {
-    dependsOn 'testUsuario' // pode ficar aqui sem problemas
-
+    dependsOn 'testUsuario'
     executionData.setFrom(layout.buildDirectory.file("jacoco/testUsuario.exec"))
     classDirectories.setFrom(sourceSets.usuario.output.classesDirs)
 
-    // use apenas a pasta versionada no repo para facilitar o mapeamento do Codecov
+    // apenas a fonte versionada (onde acabamos de espelhar o rename)
     sourceDirectories.setFrom(files(file('entrada-usuario')))
     additionalSourceDirs.setFrom(sourceDirectories)
 
@@ -537,6 +546,7 @@ tasks.register('jacocoRelatorioUsuario', JacocoReport) {
         xml.outputLocation.set(file('entrada-usuario/jacoco-relatorio/jacoco.xml'))
     }
 }
+
 
 
 tasks.register('usuarioCobertura') {
