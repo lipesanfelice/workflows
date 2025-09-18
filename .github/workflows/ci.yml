@@ -240,34 +240,6 @@ jobs:
           echo "::warning::Seguirei com upload, mas isso pode causar 'path mismatch' no Codecov."
         fi
 
-    - name: Publicar jacoco.xml na branch coverage (commit único)
-      if: steps.check_cov.outputs.tem_cov == 'true'
-      env:
-        BRANCH_COV: coverage
-      run: |
-        set -euo pipefail
-        JXML="${JACOCO_XML}"
-        test -s "$JXML"
-
-        CURR_SHA="${GITHUB_SHA}"
-
-        git config user.name  "github-actions[bot]"
-        git config user.email "github-actions[bot]@users.noreply.github.com"
-        git config --global --add safe.directory "$GITHUB_WORKSPACE"
-
-        git fetch origin --prune
-        git checkout --orphan "${BRANCH_COV}-tmp"
-        git rm -rf . >/dev/null 2>&1 || true
-
-        mkdir -p app/entrada-usuario/jacoco-relatorio
-        cp -f "$JXML" app/entrada-usuario/jacoco-relatorio/jacoco.xml
-
-        git add app/entrada-usuario/jacoco-relatorio/jacoco.xml
-        git commit -m "coverage: latest report [skip ci]"
-        git push -f origin HEAD:"${BRANCH_COV}"
-
-        git checkout -f "${CURR_SHA}"
-
     - name: Upload para Codecov (uploader CLI)
       if: steps.check_cov.outputs.tem_cov == 'true'
       run: |
@@ -282,51 +254,39 @@ jobs:
           -v
       env:
         CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
-  
-    - name: Commit e push dos arquivos gerados (na main)
-      if: ${{ github.event_name != 'pull_request' }}
+
+    - name: Publicar jacoco.xml na branch coverage (commit único)
+      if: steps.check_cov.outputs.tem_cov == 'true'
       env:
-        BRANCH: main
+        BRANCH_COV: coverage
       run: |
         set -euo pipefail
+        JXML="${JACOCO_XML}"
+        test -s "$JXML"
+
+        # Salva o XML em arquivo temporário fora do repo
+        TMP_XML="$(mktemp)"
+        cp -f "$JXML" "$TMP_XML"
+
+        CURR_SHA="${GITHUB_SHA}"
+
         git config user.name  "github-actions[bot]"
         git config user.email "github-actions[bot]@users.noreply.github.com"
         git config --global --add safe.directory "$GITHUB_WORKSPACE"
 
-        git stash push --include-untracked --all -m "ci-autostash" || true
+        git fetch origin --prune
 
-        git fetch origin "$BRANCH" --prune
-        if git rev-parse --verify "$BRANCH" >/dev/null 2>&1; then
-          git checkout "$BRANCH"
-        else
-          git checkout -b "$BRANCH"
-        fi
-        git reset --hard "origin/$BRANCH"
+        # Cria branch órfã e zera a árvore
+        git checkout --orphan "${BRANCH_COV}-tmp"
+        git rm -rf . >/dev/null 2>&1 || true
 
-        # restaura o que foi gerado/alterado nesta execução
-        git stash pop || true
+        # Restaura a partir do temporário (evita 'same file' no cp)
+        mkdir -p app/entrada-usuario/jacoco-relatorio
+        cp -f "$TMP_XML" app/entrada-usuario/jacoco-relatorio/jacoco.xml
 
-        # ADICIONA TODO o conteúdo de app/entrada-usuario (inclui código do usuário + testes)
-        git add -A app/entrada-usuario
+        git add app/entrada-usuario/jacoco-relatorio/jacoco.xml
+        git commit -m "coverage: latest report [skip ci]"
+        git push -f origin HEAD:"${BRANCH_COV}"
 
-        if git diff --cached --quiet; then
-          echo "Sem mudanças para commit."
-          exit 0
-        fi
-
-        msg="chore: atualizar entrada-usuario e testes gerados [skip ci] - run ${{ github.run_number }} @ ${{ github.sha }}"
-        git commit -m "$msg"
-
-        # tenta push; se falhar por avanço remoto, rebaseia e tenta de novo
-        if git push origin HEAD:"$BRANCH"; then
-          exit 0
-        fi
-
-        echo "Push falhou, tentando rebase e novo push..."
-        git pull --rebase --autostash origin "$BRANCH" || true
-        if git push origin HEAD:"$BRANCH"; then
-          exit 0
-        fi
-
-        echo "Ainda falhou; usando push com --force-with-lease de forma segura"
-        git push --force-with-lease origin HEAD:"$BRANCH"
+        # Volta ao commit original
+        git checkout -f "${CURR_SHA}"
