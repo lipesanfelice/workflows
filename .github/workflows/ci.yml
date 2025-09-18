@@ -214,31 +214,6 @@ jobs:
           find "${{ github.workspace }}/build" -maxdepth 3 -type f -printf "%p\n" 2>/dev/null | sed -n '1,400p' || true
           exit 1
         fi
-
-    - name: Validar jacoco.xml e paths
-      run: |
-        set -euo pipefail
-        XML="${{ env.JACOCO_XML }}"
-        test -s "$XML"
-        grep -q "<package " "$XML"
-        grep -q "<sourcefile " "$XML"
-        # pega primeiro package e sourcefile
-        PKG=$(grep -m1 -oP '(?<=<package name=")[^"]+' "$XML" || true)
-        SRC=$(grep -m1 -oP '(?<=<sourcefile name=")[^"]+' "$XML" || true)
-        echo "Exemplo do relatório: package=$PKG  sourcefile=$SRC"
-        # tente resolver o caminho em cada root declarado
-        ok=false
-        for ROOT in "app/build/usuario-src/src/main/java" "app/entrada-usuario"; do
-          CAND="$ROOT/$PKG/$SRC"
-          if [ -f "$CAND" ]; then
-            echo "OK: encontrei $CAND"
-            ok=true
-            break
-          else
-            echo "Falhou neste root: $CAND"
-          fi
-        done
-        $ok || { echo "Nenhum root contém o arquivo do relatório. Ajuste sourceDirectories."; exit 3; }
     
     # - name: Commit e push dos relatórios gerados (best-effort)
     #   if: ${{ github.event_name != 'pull_request' }}
@@ -333,32 +308,41 @@ jobs:
         grep -c "<package " ${{ env.JACOCO_XML }} || echo "No package elements found"
         echo "=== Checking for sourcefile elements ==="
         grep -c "<sourcefile " ${{ env.JACOCO_XML }} || echo "No sourcefile elements found"
-
     
+    - name: Validar jacoco.xml (bloquear placeholder/vazio)
+      id: valida_cov
+      run: |
+        set -euo pipefail
+        XML="${{ env.JACOCO_XML }}"
+        echo "Verificando $XML"
+        test -s "$XML"                         # não pode estar vazio
+        grep -q "<package " "$XML"             # precisa ter <package>
+        grep -q "<sourcefile " "$XML"          # precisa ter <sourcefile>
+        ! grep -q 'name="sem-cobertura"' "$XML"  # não subir placeholder
+        # (opcional) exigir contador de linhas
+        grep -q '<counter type="LINE"' "$XML" || echo "Sem <counter type=\"LINE\"> (ok se você não quiser exigir)"
+        echo "ok=true" >> "$GITHUB_OUTPUT"
+
     - name: Upload para Codecov (uploader CLI)
+      if: steps.valida_cov.outputs.ok == 'true'
       run: |
         set -euo pipefail
         cd "$GITHUB_WORKSPACE"
         curl -Os https://uploader.codecov.io/latest/linux/codecov
         chmod +x codecov
-        
-        # Debug information
-        echo "=== File to upload ==="
-        ls -la $JACOCO_XML
-        echo "=== File content sample ==="
-        head -n 5 $JACOCO_XML
-        
         ./codecov \
           -t "$CODECOV_TOKEN" \
           -f "$JACOCO_XML" \
           -F usuario \
-          -n "cobertura-entrada-usuario" \
+          -n cobertura-entrada-usuario \
           -C "$GITHUB_SHA" \
           -B "${GITHUB_REF_NAME:-main}" \
-          --verbose
+          -R "$GITHUB_WORKSPACE/app/entrada-usuario" \
+          -s "$GITHUB_WORKSPACE/app/entrada-usuario" \
+          -v
       env:
         CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
-        JACOCO_XML: ${{ github.workspace }}/app/entrada-usuario/jacoco-relatorio/jacoco.xml
+
 
     # - name: Upload para Codecov (uploader CLI)
     #   run: |

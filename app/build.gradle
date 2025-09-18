@@ -515,11 +515,10 @@ tasks.register('jacocoRelatorioUsuario', JacocoReport) {
     executionData.setFrom(layout.buildDirectory.file("jacoco/testUsuario.exec"))
     classDirectories.setFrom(sourceSets.usuario.output.classesDirs)
 
-    // Use both source directories to ensure proper path mapping
-    sourceDirectories.setFrom(files(
-        file('entrada-usuario'),
-        sourceSets.usuario.java.srcDirs
-    ))
+    // <<< raiz única (arquivos versionados)
+    sourceDirectories.setFrom(files(file('entrada-usuario')))
+    additionalSourceDirs.setFrom(sourceDirectories)
+    // >>>
 
     reports {
         xml.required.set(true)
@@ -527,12 +526,6 @@ tasks.register('jacocoRelatorioUsuario', JacocoReport) {
         csv.required.set(false)
         html.outputLocation.set(file('entrada-usuario/jacoco-relatorio/html'))
         xml.outputLocation.set(file('entrada-usuario/jacoco-relatorio/jacoco.xml'))
-    }
-
-    // Ensure correct class file path resolution
-    doFirst {
-        println "JaCoCo analyzing classes from: ${classDirectories.files}"
-        println "JaCoCo using sources from: ${sourceDirectories.files}"
     }
 }
 
