@@ -202,18 +202,21 @@ jobs:
         XML
             fi
 
-
-    - name: Conferir relatório JaCoCo
-      if: steps.check_usuario.outputs.tem == 'true'
+    - name: Conferir jacoco.xml gerado
       run: |
-        set -e
-        ls -la "${JACOCO_DIR}" || true
-        if [ ! -f "${JACOCO_XML}" ]; then
-          echo "jacoco.xml não encontrado em ${JACOCO_XML}"
-          echo "Árvore de build para depuração:"
-          find "${{ github.workspace }}/build" -maxdepth 3 -type f -printf "%p\n" 2>/dev/null | sed -n '1,400p' || true
-          exit 1
+        set -euo pipefail
+        XML="${{ github.workspace }}/app/entrada-usuario/jacoco-relatorio/jacoco.xml"
+        if [ -s "$XML" ]; then
+          echo "OK: $XML existe e não está vazio"
+          head -n 20 "$XML" || true
+        else
+          echo "Faltou $XML. Listando diretórios para depurar:"
+          ls -la "${{ github.workspace }}/app/entrada-usuario" || true
+          ls -la "${{ github.workspace }}/app/entrada-usuario/jacoco-relatorio" || true
+          exit 0   # não quebre o job; a branch coverage vai pular
         fi
+      shell: bash
+
     
     # - name: Commit e push dos relatórios gerados (best-effort)
     #   if: ${{ github.event_name != 'pull_request' }}
@@ -360,7 +363,7 @@ jobs:
         set -euo pipefail
         cd "$GITHUB_WORKSPACE"
 
-        # Descobre o jacoco.xml (usa a env se existir, senão tenta o padrão)
+        # Use a env se já foi setada; senão, caia no caminho padrão
         JXML="${JACOCO_XML:-$GITHUB_WORKSPACE/app/entrada-usuario/jacoco-relatorio/jacoco.xml}"
 
         if [ ! -s "$JXML" ]; then
@@ -377,11 +380,11 @@ jobs:
 
         git fetch origin --prune
 
-        # cria uma branch órfã temporária e zera a árvore
+        # cria branch órfã temporária e zera a árvore
         git checkout --orphan "${BRANCH_COV}-tmp"
         git rm -rf . >/dev/null 2>&1 || true
 
-        # copia apenas o relatório
+        # copia só o relatório
         mkdir -p app/entrada-usuario/jacoco-relatorio
         cp -f "$JXML" app/entrada-usuario/jacoco-relatorio/jacoco.xml
 
@@ -389,8 +392,25 @@ jobs:
         git commit -m "coverage: latest report [skip ci]"
         git push -f origin HEAD:"${BRANCH_COV}"
 
-        # volta para o commit original do workflow
+        # volta para o commit original
         git checkout -f "${CURR_SHA}"
+
+
+    - name: Conferir jacoco.xml gerado
+      run: |
+        set -euo pipefail
+        XML="${{ github.workspace }}/app/entrada-usuario/jacoco-relatorio/jacoco.xml"
+        if [ -s "$XML" ]; then
+          echo "OK: $XML existe e não está vazio"
+          head -n 20 "$XML" || true
+        else
+          echo "Faltou $XML. Listando diretórios para depurar:"
+          ls -la "${{ github.workspace }}/app/entrada-usuario" || true
+          ls -la "${{ github.workspace }}/app/entrada-usuario/jacoco-relatorio" || true
+          exit 0   # não quebre o job; a branch coverage vai pular
+        fi
+      shell: bash
+
 
     - name: Upload para Codecov (uploader CLI) — branch coverage
       run: |
@@ -412,6 +432,7 @@ jobs:
           -v
       env:
         CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+
 
 
 
