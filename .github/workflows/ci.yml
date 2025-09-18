@@ -312,28 +312,46 @@ jobs:
     - name: Validar jacoco.xml e paths
       run: |
         set -euo pipefail
-        XML="${{ github.workspace }}/app/entrada-usuario/jacoco-relatorio/jacoco.xml"
+        XML="${{ env.JACOCO_XML }}"
         test -s "$XML"
+
         # não subir placeholder
         if grep -q 'name="sem-cobertura"' "$XML"; then
           echo "Relatório é placeholder (sem cobertura). Abortando upload."
           exit 12
         fi
 
-        # precisa ter pelo menos 1 package/sourcefile/counter
+        # precisa ter dados minimamente válidos
         grep -q "<sourcefile " "$XML"
         grep -q "<counter " "$XML"
 
-        # teste de resolução de caminho com default package
+        PKG=$(grep -m1 -oP '(?<=<package name=")[^"]*' "$XML" || true)
         SRC=$(grep -m1 -oP '(?<=<sourcefile name=")[^"]+' "$XML" || true)
-        test -n "$SRC"
-        CAND="app/entrada-usuario/$SRC"
-        if [ -f "$CAND" ]; then
-          echo "OK: mapeou $SRC -> $CAND"
+        echo "Do relatório: package='${PKG}'  sourcefile='${SRC}'"
+
+        ROOT="app/entrada-usuario"
+        if [ -z "${PKG}" ]; then
+          CAND="${ROOT}/${SRC}"
         else
-          echo "Falha ao mapear $SRC -> $CAND"
-          exit 13
+          PKG_PATH=$(printf "%s" "$PKG" | sed 's|\.+|/|g')
+          CAND="${ROOT}/${PKG_PATH}/${SRC}"
         fi
+
+        echo "Tentando mapear: ${CAND}"
+        if [ -f "$CAND" ]; then
+          echo "OK: mapeou ${SRC} -> ${CAND}"
+          exit 0
+        fi
+
+        echo "Não achei ${CAND}. Fazendo debug de árvore e alternativas:"
+        echo "== Árvore (2 níveis) em ${ROOT} =="
+        find "${ROOT}" -maxdepth 2 -type f -name "${SRC}" -print || true
+        echo "== Busca geral por nome =="
+        find "${ROOT}" -type f -name "${SRC}" -print | sed -n '1,50p' || true
+
+        echo "Falha ao mapear ${SRC} usando package '${PKG}'."
+        exit 13
+
 
     - name: Upload para Codecov (uploader CLI)
       working-directory: app
@@ -352,8 +370,6 @@ jobs:
           -n cobertura-entrada-usuario \
           -r "$PWD" \
           -v
-
-
 
     # - name: Upload para Codecov (uploader CLI)
     #   run: |
