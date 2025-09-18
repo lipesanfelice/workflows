@@ -351,25 +351,60 @@ jobs:
 
         echo "Falha ao mapear ${SRC} usando package '${PKG}'."
         exit 13
-
-
-    - name: Upload para Codecov (uploader CLI)
-      working-directory: app
+    
+    - name: Branch de cobertura (um único commit sempre)
+      if: always()
       env:
-        CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+        BRANCH_COV: coverage
       run: |
         set -euo pipefail
+        cd "$GITHUB_WORKSPACE"
+
+        # SHA atual (commit do workflow)
+        CURR_SHA="${GITHUB_SHA}"
+
+        git config user.name  "github-actions[bot]"
+        git config user.email "github-actions[bot]@users.noreply.github.com"
+        git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+        # Baixa refs para conseguirmos empurrar a nova branch
+        git fetch origin --prune
+
+        # Cria uma branch órfã temporária, sem histórico
+        git checkout --orphan "${BRANCH_COV}-tmp"
+
+        # Limpa a árvore de trabalho (ficamos com índice vazio)
+        git rm -rf . >/dev/null 2>&1 || true
+
+        # Copia APENAS o jacoco.xml para a estrutura que você já usa
+        mkdir -p app/entrada-usuario/jacoco-relatorio
+        cp -f "${JACOCO_XML}" app/entrada-usuario/jacoco-relatorio/jacoco.xml
+
+        git add app/entrada-usuario/jacoco-relatorio/jacoco.xml
+        git commit -m "coverage: latest report [skip ci]"
+
+        # Force-push para a branch 'coverage' (ela terá sempre só este commit)
+        git push -f origin HEAD:"${BRANCH_COV}"
+
+        # Volta para o commit original (detached HEAD do workflow)
+        git checkout -f "${CURR_SHA}"
+
+    - name: Upload para Codecov (uploader CLI) — branch coverage
+      run: |
+        set -euo pipefail
+        cd "$GITHUB_WORKSPACE"
         curl -Os https://uploader.codecov.io/latest/linux/codecov
         chmod +x codecov
-        # -f relativo ao working-directory (app)
-        # -r define explicitamente o root (app)
         ./codecov \
           -t "$CODECOV_TOKEN" \
-          -f "entrada-usuario/jacoco-relatorio/jacoco.xml" \
+          -f "$JACOCO_XML" \
           -F usuario \
           -n cobertura-entrada-usuario \
-          -r "$PWD" \
+          -B coverage \
           -v
+      env:
+        CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+
 
     # - name: Upload para Codecov (uploader CLI)
     #   run: |
