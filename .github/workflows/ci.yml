@@ -309,39 +309,50 @@ jobs:
         echo "=== Checking for sourcefile elements ==="
         grep -c "<sourcefile " ${{ env.JACOCO_XML }} || echo "No sourcefile elements found"
     
-    - name: Validar jacoco.xml (bloquear placeholder/vazio)
-      id: valida_cov
+    - name: Validar jacoco.xml e paths
       run: |
         set -euo pipefail
-        XML="${{ env.JACOCO_XML }}"
-        echo "Verificando $XML"
-        test -s "$XML"                         # não pode estar vazio
-        grep -q "<package " "$XML"             # precisa ter <package>
-        grep -q "<sourcefile " "$XML"          # precisa ter <sourcefile>
-        ! grep -q 'name="sem-cobertura"' "$XML"  # não subir placeholder
-        # (opcional) exigir contador de linhas
-        grep -q '<counter type="LINE"' "$XML" || echo "Sem <counter type=\"LINE\"> (ok se você não quiser exigir)"
-        echo "ok=true" >> "$GITHUB_OUTPUT"
+        XML="${{ github.workspace }}/app/entrada-usuario/jacoco-relatorio/jacoco.xml"
+        test -s "$XML"
+        # não subir placeholder
+        if grep -q 'name="sem-cobertura"' "$XML"; then
+          echo "Relatório é placeholder (sem cobertura). Abortando upload."
+          exit 12
+        fi
+
+        # precisa ter pelo menos 1 package/sourcefile/counter
+        grep -q "<sourcefile " "$XML"
+        grep -q "<counter " "$XML"
+
+        # teste de resolução de caminho com default package
+        SRC=$(grep -m1 -oP '(?<=<sourcefile name=")[^"]+' "$XML" || true)
+        test -n "$SRC"
+        CAND="app/entrada-usuario/$SRC"
+        if [ -f "$CAND" ]; then
+          echo "OK: mapeou $SRC -> $CAND"
+        else
+          echo "Falha ao mapear $SRC -> $CAND"
+          exit 13
+        fi
 
     - name: Upload para Codecov (uploader CLI)
-      if: steps.valida_cov.outputs.ok == 'true'
-      run: |
-        set -euo pipefail
-        cd "$GITHUB_WORKSPACE"
-        curl -Os https://uploader.codecov.io/latest/linux/codecov
-        chmod +x codecov
-        ./codecov \
-          -t "$CODECOV_TOKEN" \
-          -f "$JACOCO_XML" \
-          -F usuario \
-          -n cobertura-entrada-usuario \
-          -C "$GITHUB_SHA" \
-          -B "${GITHUB_REF_NAME:-main}" \
-          -R "$GITHUB_WORKSPACE/app/entrada-usuario" \
-          -s "$GITHUB_WORKSPACE/app/entrada-usuario" \
-          -v
+      working-directory: app
       env:
         CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+      run: |
+        set -euo pipefail
+        curl -Os https://uploader.codecov.io/latest/linux/codecov
+        chmod +x codecov
+        # -f relativo ao working-directory (app)
+        # -r define explicitamente o root (app)
+        ./codecov \
+          -t "$CODECOV_TOKEN" \
+          -f "entrada-usuario/jacoco-relatorio/jacoco.xml" \
+          -F usuario \
+          -n cobertura-entrada-usuario \
+          -r "$PWD" \
+          -v
+
 
 
     # - name: Upload para Codecov (uploader CLI)

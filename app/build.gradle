@@ -512,13 +512,15 @@ jacoco {
 tasks.register('jacocoRelatorioUsuario', JacocoReport) {
     dependsOn 'testUsuario'
 
+    // .exec gerado pelos seus testes
     executionData.setFrom(layout.buildDirectory.file("jacoco/testUsuario.exec"))
+
+    // classes compiladas (OK ficar no build)
     classDirectories.setFrom(sourceSets.usuario.output.classesDirs)
 
-    // <<< raiz única (arquivos versionados)
+    // 👇 **APENAS** as fontes do repositório
     sourceDirectories.setFrom(files(file('entrada-usuario')))
     additionalSourceDirs.setFrom(sourceDirectories)
-    // >>>
 
     reports {
         xml.required.set(true)
@@ -528,6 +530,7 @@ tasks.register('jacocoRelatorioUsuario', JacocoReport) {
         xml.outputLocation.set(file('entrada-usuario/jacoco-relatorio/jacoco.xml'))
     }
 }
+
 
 tasks.register('usuarioCobertura') {
     dependsOn 'testUsuario'
