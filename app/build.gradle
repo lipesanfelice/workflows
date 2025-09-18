@@ -531,9 +531,6 @@ tasks.register('jacocoRelatorioUsuario', JacocoReport) {
     }
 }
 
-
-
-
 tasks.register('usuarioCobertura') {
     dependsOn 'testUsuario'
 }

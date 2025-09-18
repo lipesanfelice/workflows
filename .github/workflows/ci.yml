@@ -332,19 +332,24 @@ jobs:
         cd "$GITHUB_WORKSPACE"
         curl -Os https://uploader.codecov.io/latest/linux/codecov
         chmod +x codecov
+        
+        # Debug information
+        echo "=== File to upload ==="
+        ls -la $JACOCO_XML
+        echo "=== File content sample ==="
+        head -n 5 $JACOCO_XML
+        
         ./codecov \
           -t "$CODECOV_TOKEN" \
           -f "$JACOCO_XML" \
           -F usuario \
-          -n cobertura-entrada-usuario \
+          -n "cobertura-entrada-usuario" \
           -C "$GITHUB_SHA" \
           -B "${GITHUB_REF_NAME:-main}" \
-          -v
+          --verbose
       env:
         CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
-
-
-
+        JACOCO_XML: ${{ github.workspace }}/app/entrada-usuario/jacoco-relatorio/jacoco.xml
 
     # - name: Upload para Codecov (uploader CLI)
     #   run: |
