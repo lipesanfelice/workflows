@@ -535,39 +535,27 @@ jacoco {
 
 tasks.register('jacocoRelatorioUsuario', JacocoReport) {
     dependsOn 'testUsuario'
-    mustRunAfter 'testUsuario'
 
-    // pegue QUALQUER .exec gerado pelo testUsuario
-    executionData.setFrom(fileTree(layout.buildDirectory) {
-        include 'jacoco/*.exec'
-    })
-
-    // classes compiladas a partir do sourceSet "usuario"
+    executionData.setFrom(layout.buildDirectory.file("jacoco/testUsuario.exec"))
     classDirectories.setFrom(sourceSets.usuario.output.classesDirs)
 
-    // fontes: apenas o que está versionado no repo
-    def srcRepo = file('entrada-usuario')
-    sourceDirectories.setFrom(files(srcRepo))
+    // **só** fontes versionadas no repo para o Codecov mapear
+    sourceDirectories.setFrom(files(file('entrada-usuario')))
     additionalSourceDirs.setFrom(sourceDirectories)
 
     reports {
         xml.required.set(true)
         html.required.set(true)
         csv.required.set(false)
-        xml.outputLocation.set(layout.projectDirectory.file('entrada-usuario/jacoco-relatorio/jacoco.xml'))
-        html.outputLocation.set(layout.projectDirectory.dir('entrada-usuario/jacoco-relatorio/html'))
+        html.outputLocation.set(file('entrada-usuario/jacoco-relatorio/html'))
+        xml.outputLocation.set(file('entrada-usuario/jacoco-relatorio/jacoco.xml'))
     }
 
     doFirst {
-        // garanta as pastas
-        file("$projectDir/entrada-usuario/jacoco-relatorio/html").mkdirs()
-        println ">> Execs encontrados:"
-        fileTree(layout.buildDirectory) { include 'jacoco/*.exec' }.files.each { println "   - ${it}" }
-        println ">> Classes dirs:"
-        sourceSets.usuario.output.classesDirs.each { println "   - ${it}" }
-        println ">> Fontes raiz: ${srcRepo.absolutePath}"
+        file('entrada-usuario/jacoco-relatorio/html').mkdirs()
     }
 }
+
 
 
 
