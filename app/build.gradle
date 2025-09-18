@@ -345,7 +345,17 @@ tasks.register('organizarUsuario') {
         }
 
 
-        // Gravar arquivos
+        def espelharParaRepo = { String texto ->
+            String pacote = extrairPacote(texto)
+            String caminhoPacote = pacote ? pacote.replace('.', File.separator) : ''
+            File repoDir = caminhoPacote ? new File(dirEntrada, caminhoPacote) : dirEntrada
+            repoDir.mkdirs()
+
+            String nomePublicoLocal = extrairNomePublico(texto)
+            String nomeArquivo = nomePublicoLocal ? "${nomePublicoLocal}.java" : "Arquivo_${System.nanoTime()}.java"
+            new File(repoDir, nomeArquivo).setText(texto, 'UTF-8')
+        }
+
         def gravar = { String texto, boolean isTeste ->
             if (isTeste) {
                 texto = ajustarTesteParaPacoteUsuario(texto)
@@ -359,6 +369,12 @@ tasks.register('organizarUsuario') {
             String nomePublicoLocal = extrairNomePublico(texto)
             String nomeArquivo = nomePublicoLocal ? "${nomePublicoLocal}.java" : "Arquivo_${System.nanoTime()}.java"
             new File(destinoDir, nomeArquivo).setText(texto, 'UTF-8')
+
+            // >>> espelha os fontes de PRODUÇÃO no repositório (não espelha testes gerados)
+            if (!isTeste) {
+                espelharParaRepo(texto)
+            }
+            // <<<
         }
 
         // Grava tudo
