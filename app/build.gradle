@@ -493,7 +493,7 @@ tasks.register('testUsuario', Test) {
         }
     }
 
-    finalizedBy 'jacocoRelatorioUsuario'
+    finalizedBy('jacocoRelatorioUsuario') // string -> não força resolução antecipada
 }
 
 
@@ -502,13 +502,14 @@ jacoco {
     toolVersion = '0.8.12'
 }
 
-tasks.named('jacocoRelatorioUsuario', JacocoReport).configure {
-    dependsOn 'testUsuario'
+
+tasks.register('jacocoRelatorioUsuario', JacocoReport) {
+    dependsOn 'testUsuario' // pode ficar aqui sem problemas
 
     executionData.setFrom(layout.buildDirectory.file("jacoco/testUsuario.exec"))
     classDirectories.setFrom(sourceSets.usuario.output.classesDirs)
 
-    // Apenas fontes versionadas no repo:
+    // use apenas a pasta versionada no repo para facilitar o mapeamento do Codecov
     sourceDirectories.setFrom(files(file('entrada-usuario')))
     additionalSourceDirs.setFrom(sourceDirectories)
 
@@ -520,7 +521,6 @@ tasks.named('jacocoRelatorioUsuario', JacocoReport).configure {
         xml.outputLocation.set(file('entrada-usuario/jacoco-relatorio/jacoco.xml'))
     }
 }
-
 
 
 tasks.register('usuarioCobertura') {
