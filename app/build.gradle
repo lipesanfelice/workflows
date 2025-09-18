@@ -528,22 +528,44 @@ jacoco {
     toolVersion = '0.8.12'
 }
 
+// === JaCoCo (relatório para o Codecov) ===
+jacoco {
+    toolVersion = '0.8.12'
+}
 
 tasks.register('jacocoRelatorioUsuario', JacocoReport) {
     dependsOn 'testUsuario'
-    executionData.setFrom(layout.buildDirectory.file("jacoco/testUsuario.exec"))
+    mustRunAfter 'testUsuario'
+
+    // pegue QUALQUER .exec gerado pelo testUsuario
+    executionData.setFrom(fileTree(layout.buildDirectory) {
+        include 'jacoco/*.exec'
+    })
+
+    // classes compiladas a partir do sourceSet "usuario"
     classDirectories.setFrom(sourceSets.usuario.output.classesDirs)
 
-    // apenas a fonte versionada (onde acabamos de espelhar o rename)
-    sourceDirectories.setFrom(files(file('entrada-usuario')))
+    // fontes: apenas o que está versionado no repo
+    def srcRepo = file('entrada-usuario')
+    sourceDirectories.setFrom(files(srcRepo))
     additionalSourceDirs.setFrom(sourceDirectories)
 
     reports {
         xml.required.set(true)
         html.required.set(true)
         csv.required.set(false)
-        html.outputLocation.set(file('entrada-usuario/jacoco-relatorio/html'))
-        xml.outputLocation.set(file('entrada-usuario/jacoco-relatorio/jacoco.xml'))
+        xml.outputLocation.set(layout.projectDirectory.file('entrada-usuario/jacoco-relatorio/jacoco.xml'))
+        html.outputLocation.set(layout.projectDirectory.dir('entrada-usuario/jacoco-relatorio/html'))
+    }
+
+    doFirst {
+        // garanta as pastas
+        file("$projectDir/entrada-usuario/jacoco-relatorio/html").mkdirs()
+        println ">> Execs encontrados:"
+        fileTree(layout.buildDirectory) { include 'jacoco/*.exec' }.files.each { println "   - ${it}" }
+        println ">> Classes dirs:"
+        sourceSets.usuario.output.classesDirs.each { println "   - ${it}" }
+        println ">> Fontes raiz: ${srcRepo.absolutePath}"
     }
 }
 

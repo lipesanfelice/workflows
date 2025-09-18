@@ -175,7 +175,18 @@ jobs:
         ./gradlew --no-daemon -Dorg.gradle.configuration-cache=false -p app clean testUsuario jacocoRelatorioUsuario
         echo "JACOCO_XML=${{ github.workspace }}/app/entrada-usuario/jacoco-relatorio/jacoco.xml" >> $GITHUB_ENV
 
-    
+      
+    - name: Inspecionar artefatos JaCoCo
+      if: always()
+      run: |
+        echo "== build/jacoco =="
+        ls -la app/build/jacoco || true
+        echo "== reports/jacoco =="
+        ls -la app/build/reports/jacoco || true
+        echo "== saida no repo =="
+        ls -la app/entrada-usuario/jacoco-relatorio || true
+
+        
     - name: Mostrar relatório JUnit do testUsuario
       if: always()
       run: |
@@ -210,12 +221,11 @@ jobs:
           echo "OK: $XML existe e não está vazio"
           head -n 20 "$XML" || true
         else
-          echo "Faltou $XML. Listando diretórios para depurar:"
-          ls -la "${{ github.workspace }}/app/entrada-usuario" || true
-          ls -la "${{ github.workspace }}/app/entrada-usuario/jacoco-relatorio" || true
-          exit 0   # não quebre o job; a branch coverage vai pular
+          echo "Faltou $XML. Vou pular os passos de cópia/Codecov nesta execução."
+          # Sinaliza para passos posteriores
+          echo "JACOCO_MISSING=1" >> $GITHUB_ENV
         fi
-      shell: bash
+
 
     
     # - name: Commit e push dos relatórios gerados (best-effort)
@@ -395,6 +405,19 @@ jobs:
         # volta para o commit original
         git checkout -f "${CURR_SHA}"
 
+    - name: Publicar jacoco.xml na branch coverage
+      if: env.JACOCO_MISSING != '1'
+      run: |
+        set -euo pipefail
+        git checkout -B coverage-tmp
+        XML="${{ env.JACOCO_XML }}"
+        test -s "$XML"
+        mkdir -p coverage
+        cp "$XML" coverage/jacoco.xml
+        git add coverage/jacoco.xml
+        git commit -m "chore(coverage): publicar jacoco.xml [skip ci]" || echo "Nada a commitar"
+        git push -u origin coverage-tmp --force
+
 
     - name: Conferir jacoco.xml gerado
       run: |
@@ -432,9 +455,6 @@ jobs:
           -v
       env:
         CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
-
-
-
 
     # - name: Upload para Codecov (uploader CLI)
     #   run: |
