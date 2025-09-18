@@ -324,6 +324,15 @@ jobs:
 
         echo "Ainda falhou; usando push com --force-with-lease de forma segura"
         git push --force-with-lease origin HEAD:"$BRANCH"
+    
+    - name: Debug JaCoCo XML
+      run: |
+        echo "=== JaCoCo XML Content ==="
+        head -n 20 ${{ env.JACOCO_XML }}
+        echo "=== Checking for package elements ==="
+        grep -c "<package " ${{ env.JACOCO_XML }} || echo "No package elements found"
+        echo "=== Checking for sourcefile elements ==="
+        grep -c "<sourcefile " ${{ env.JACOCO_XML }} || echo "No sourcefile elements found"
 
     
     - name: Upload para Codecov (uploader CLI)
