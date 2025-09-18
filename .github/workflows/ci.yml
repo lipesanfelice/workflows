@@ -240,7 +240,44 @@ jobs:
         done
         $ok || { echo "Nenhum root contém o arquivo do relatório. Ajuste sourceDirectories."; exit 3; }
     
-    - name: Commit e push dos relatórios gerados (best-effort)
+    # - name: Commit e push dos relatórios gerados (best-effort)
+    #   if: ${{ github.event_name != 'pull_request' }}
+    #   env:
+    #     BRANCH: main
+    #   run: |
+    #     set -euo pipefail
+    #     git config user.name  "github-actions[bot]"
+    #     git config user.email "github-actions[bot]@users.noreply.github.com"
+    #     git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+    #     git fetch origin "$BRANCH" --prune || true
+    #     git checkout "$BRANCH" || git checkout -b "$BRANCH"
+
+    #     # tenta rebase; se falhar, não bloqueia o job
+    #     git pull --rebase --autostash origin "$BRANCH" || {
+    #       echo "Rebase falhou; pulando commit para evitar estado de merge."
+    #       exit 0
+    #     }
+
+    #     # adicione SOMENTE artefatos gerados
+    #     git add -A app/entrada-usuario/jacoco-relatorio \
+    #                 app/entrada-usuario/testes_explicações \
+    #                 app/entrada-usuario/relatorio-sonar.json || true
+
+    #     if git diff --cached --quiet; then
+    #       echo "Sem mudanças para commit."
+    #       exit 0
+    #     fi
+
+    #     git commit -m "chore(ci): salvar relatórios (JaCoCo/IA/Sonar) [skip ci]"
+
+    #     # push não bloqueante
+    #     git push origin HEAD:"$BRANCH" || {
+    #       echo "Push falhou; evitando conflito. Artefatos já foram enviados ao Codecov/Artifacts."
+    #       exit 0
+    #     }
+
+    - name: Commit e push dos arquivos gerados (na main)
       if: ${{ github.event_name != 'pull_request' }}
       env:
         BRANCH: main
@@ -250,32 +287,43 @@ jobs:
         git config user.email "github-actions[bot]@users.noreply.github.com"
         git config --global --add safe.directory "$GITHUB_WORKSPACE"
 
-        git fetch origin "$BRANCH" --prune || true
-        git checkout "$BRANCH" || git checkout -b "$BRANCH"
+        git stash push --include-untracked --all -m "ci-autostash" || true
 
-        # tenta rebase; se falhar, não bloqueia o job
-        git pull --rebase --autostash origin "$BRANCH" || {
-          echo "Rebase falhou; pulando commit para evitar estado de merge."
-          exit 0
-        }
+        git fetch origin "$BRANCH" --prune
+        if git rev-parse --verify "$BRANCH" >/dev/null 2>&1; then
+          git checkout "$BRANCH"
+        else
+          git checkout -b "$BRANCH"
+        fi
+        git reset --hard "origin/$BRANCH"
 
-        # adicione SOMENTE artefatos gerados
-        git add -A app/entrada-usuario/jacoco-relatorio \
-                    app/entrada-usuario/testes_explicações \
-                    app/entrada-usuario/relatorio-sonar.json || true
+        # restaura o que foi gerado/alterado nesta execução
+        git stash pop || true
+
+        # ADICIONA TODO o conteúdo de app/entrada-usuario (inclui código do usuário + testes)
+        git add -A app/entrada-usuario
 
         if git diff --cached --quiet; then
           echo "Sem mudanças para commit."
           exit 0
         fi
 
-        git commit -m "chore(ci): salvar relatórios (JaCoCo/IA/Sonar) [skip ci]"
+        msg="chore: atualizar entrada-usuario e testes gerados [skip ci] - run ${{ github.run_number }} @ ${{ github.sha }}"
+        git commit -m "$msg"
 
-        # push não bloqueante
-        git push origin HEAD:"$BRANCH" || {
-          echo "Push falhou; evitando conflito. Artefatos já foram enviados ao Codecov/Artifacts."
+        # tenta push; se falhar por avanço remoto, rebaseia e tenta de novo
+        if git push origin HEAD:"$BRANCH"; then
           exit 0
-        }
+        fi
+
+        echo "Push falhou, tentando rebase e novo push..."
+        git pull --rebase --autostash origin "$BRANCH" || true
+        if git push origin HEAD:"$BRANCH"; then
+          exit 0
+        fi
+
+        echo "Ainda falhou; usando push com --force-with-lease de forma segura"
+        git push --force-with-lease origin HEAD:"$BRANCH"
 
     
     - name: Upload para Codecov (uploader CLI)
