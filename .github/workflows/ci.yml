@@ -360,50 +360,59 @@ jobs:
         set -euo pipefail
         cd "$GITHUB_WORKSPACE"
 
-        # SHA atual (commit do workflow)
+        # Descobre o jacoco.xml (usa a env se existir, senão tenta o padrão)
+        JXML="${JACOCO_XML:-$GITHUB_WORKSPACE/app/entrada-usuario/jacoco-relatorio/jacoco.xml}"
+
+        if [ ! -s "$JXML" ]; then
+          echo "jacoco.xml não encontrado ou vazio em: $JXML"
+          echo "Nada a publicar na branch '${BRANCH_COV}'. Encerrando passo sem erro."
+          exit 0
+        fi
+
         CURR_SHA="${GITHUB_SHA}"
 
         git config user.name  "github-actions[bot]"
         git config user.email "github-actions[bot]@users.noreply.github.com"
         git config --global --add safe.directory "$GITHUB_WORKSPACE"
 
-        # Baixa refs para conseguirmos empurrar a nova branch
         git fetch origin --prune
 
-        # Cria uma branch órfã temporária, sem histórico
+        # cria uma branch órfã temporária e zera a árvore
         git checkout --orphan "${BRANCH_COV}-tmp"
-
-        # Limpa a árvore de trabalho (ficamos com índice vazio)
         git rm -rf . >/dev/null 2>&1 || true
 
-        # Copia APENAS o jacoco.xml para a estrutura que você já usa
+        # copia apenas o relatório
         mkdir -p app/entrada-usuario/jacoco-relatorio
-        cp -f "${JACOCO_XML}" app/entrada-usuario/jacoco-relatorio/jacoco.xml
+        cp -f "$JXML" app/entrada-usuario/jacoco-relatorio/jacoco.xml
 
         git add app/entrada-usuario/jacoco-relatorio/jacoco.xml
         git commit -m "coverage: latest report [skip ci]"
-
-        # Force-push para a branch 'coverage' (ela terá sempre só este commit)
         git push -f origin HEAD:"${BRANCH_COV}"
 
-        # Volta para o commit original (detached HEAD do workflow)
+        # volta para o commit original do workflow
         git checkout -f "${CURR_SHA}"
 
     - name: Upload para Codecov (uploader CLI) — branch coverage
       run: |
         set -euo pipefail
+        JXML="${JACOCO_XML:-$GITHUB_WORKSPACE/app/entrada-usuario/jacoco-relatorio/jacoco.xml}"
+        if [ ! -s "$JXML" ]; then
+          echo "jacoco.xml não encontrado; pulando upload ao Codecov."
+          exit 0
+        fi
         cd "$GITHUB_WORKSPACE"
         curl -Os https://uploader.codecov.io/latest/linux/codecov
         chmod +x codecov
         ./codecov \
           -t "$CODECOV_TOKEN" \
-          -f "$JACOCO_XML" \
+          -f "$JXML" \
           -F usuario \
           -n cobertura-entrada-usuario \
           -B coverage \
           -v
       env:
         CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+
 
 
     # - name: Upload para Codecov (uploader CLI)
