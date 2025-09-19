@@ -239,7 +239,45 @@ jobs:
           find "${ROOT}" -type f -name "${SRC}" -print | sed -n '1,50p' || true
           echo "::warning::Seguirei com upload, mas isso pode causar 'path mismatch' no Codecov."
         fi
+    
+    - name: Commit e push dos arquivos gerados (na main)
+      if: ${{ github.event_name != 'pull_request' }}
+      env:
+        BRANCH: main
+      run: |
+        set -euo pipefail
+        git config user.name  "github-actions[bot]"
+        git config user.email "github-actions[bot]@users.noreply.github.com"
+        git config --global --add safe.directory "$GITHUB_WORKSPACE"
 
+        git stash push --include-untracked --all -m "ci-autostash" || true
+        git fetch origin "$BRANCH" --prune
+        if git rev-parse --verify "$BRANCH" >/dev/null 2>&1; then
+          git checkout "$BRANCH"
+        else
+          git checkout -b "$BRANCH"
+        fi
+        git reset --hard "origin/$BRANCH"
+        git stash pop || true
+
+        # Adiciona o que interessa: fontes do usuário + relatorios/gerados
+        git add -A app/entrada-usuario
+
+        if git diff --cached --quiet; then
+          echo "Sem mudanças para commit."
+        else
+          msg="chore: atualizar entrada-usuario e testes gerados [skip ci] - run ${{ github.run_number }} @ ${{ github.sha }}"
+          git commit -m "$msg"
+          # tenta push com rebase; se precisar, usa --force-with-lease
+          if ! git push origin HEAD:"$BRANCH"; then
+            git pull --rebase --autostash origin "$BRANCH" || true
+            git push --force-with-lease origin HEAD:"$BRANCH"
+          fi
+        fi
+
+        # Exporta o SHA ATUAL (após push) para usar no Codecov
+        echo "COV_SHA=$(git rev-parse HEAD)" >> $GITHUB_ENV
+      
     - name: Upload para Codecov (uploader CLI)
       if: steps.check_cov.outputs.tem_cov == 'true'
       run: |
@@ -251,42 +289,10 @@ jobs:
           -f "$JACOCO_XML" \
           -F usuario \
           -n cobertura-entrada-usuario \
+          -C "$COV_SHA" \
           -v
       env:
         CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
-    - name: Publicar jacoco.xml na branch coverage (commit único)
-      if: steps.check_cov.outputs.tem_cov == 'true'
-      env:
-        BRANCH_COV: coverage
-      run: |
-        set -euo pipefail
-        JXML="${JACOCO_XML}"
-        test -s "$JXML"
 
-        # Salva o XML em arquivo temporário fora do repo
-        TMP_XML="$(mktemp)"
-        cp -f "$JXML" "$TMP_XML"
-
-        CURR_SHA="${GITHUB_SHA}"
-
-        git config user.name  "github-actions[bot]"
-        git config user.email "github-actions[bot]@users.noreply.github.com"
-        git config --global --add safe.directory "$GITHUB_WORKSPACE"
-
-        git fetch origin --prune
-
-        # Cria branch órfã e zera a árvore
-        git checkout --orphan "${BRANCH_COV}-tmp"
-        git rm -rf . >/dev/null 2>&1 || true
-
-        # Restaura a partir do temporário (evita 'same file' no cp)
-        mkdir -p app/entrada-usuario/jacoco-relatorio
-        cp -f "$TMP_XML" app/entrada-usuario/jacoco-relatorio/jacoco.xml
-
-        git add app/entrada-usuario/jacoco-relatorio/jacoco.xml
-        git commit -m "coverage: latest report [skip ci]"
-        git push -f origin HEAD:"${BRANCH_COV}"
-
-        # Volta ao commit original
-        git checkout -f "${CURR_SHA}"
+    

@@ -254,21 +254,17 @@ tasks.register('organizarUsuario') {
                         "\$1${nomeEsperado}"
                     )
 
-                    // >>> PASSO 2: espelhar rename também na pasta do repositório (entrada-usuario)
-                    def pacoteNovo   = extrairPacote(novoTexto)
-                    def caminhoPacote= pacoteNovo ? pacoteNovo.replace('.', File.separator) : ''
-                    def repoDir      = new File(dirEntrada, caminhoPacote)
+                    def pacote = extrairPacote(novoTexto)
+                    def caminhoPacote = pacote ? pacote.replace('.', File.separator) : ''
+                    def repoDir = new File(dirEntrada, caminhoPacote)
                     repoDir.mkdirs()
-
-                    // grava o arquivo renomeado no repo
+                    // grava o arquivo renomeado
                     new File(repoDir, "${nomeEsperado}.java").setText(novoTexto, 'UTF-8')
-
-                    // remove o arquivo antigo (se existia)
+                    // (opcional) remove o antigo, se existia
                     def antigo = new File(repoDir, "${nomePublico}.java")
-                    if (antigo.exists() && antigo.name != "${nomeEsperado}.java") {
+                    if (antigo.exists()) {
                         antigo.delete()
                     }
-                    // <<< PASSO 2
 
 
                     [file: f.file, text: novoTexto]
@@ -520,12 +516,6 @@ tasks.register('testUsuario', Test) {
     }
 
     finalizedBy('jacocoRelatorioUsuario') // string -> não força resolução antecipada
-}
-
-
-// === JaCoCo (relatório para o Codecov) ===
-jacoco {
-    toolVersion = '0.8.12'
 }
 
 // === JaCoCo (relatório para o Codecov) ===
