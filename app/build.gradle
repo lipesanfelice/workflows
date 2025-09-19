@@ -506,6 +506,64 @@ tasks.register('organizarUsuario') {
             new File(repoDir, nomeArquivo).setText(texto, 'UTF-8')
         }
 
+        // --- Helpers p/ testes: stub + hook por reflexão ---
+
+        def injetarStubLoginAttempt = {
+            // injeta em TEST (mesmo pacote do usuário, se existir)
+            String pacote = pacoteUsuario ?: ''
+            String header = pacote ? "package ${pacote};\n" : ""
+            def destinoDir = pacote ? new File(dirTest, pacote.replace('.', File.separator)) : dirTest
+            destinoDir.mkdirs()
+            new File(destinoDir, "LoginAttempt.java").setText(
+                """${header}
+                public class LoginAttempt {
+                    public String user;
+                    public boolean success;
+                    public long timestamp;
+                    public LoginAttempt() {}
+                    public LoginAttempt(String user, boolean success, long ts){
+                        this.user = user; this.success = success; this.timestamp = ts;
+                    }
+                }
+                """.stripIndent(), "UTF-8")
+            println "organizarUsuario → stub LoginAttempt injetado em testes"
+        }
+
+        def injetarTestHooks = {
+            String pacote = pacoteUsuario ?: ''
+            String header = pacote ? "package ${pacote};\n" : ""
+            def destinoDir = pacote ? new File(dirTest, pacote.replace('.', File.separator)) : dirTest
+            destinoDir.mkdirs()
+            new File(destinoDir, "TestHooks.java").setText(
+                """${header}
+                import java.lang.reflect.Field;
+                import java.util.Map;
+
+                public final class TestHooks {
+                    private TestHooks() {}
+
+                    @SuppressWarnings("unchecked")
+                    public static void setActive(Object ums, String username, boolean active) {
+                        try {
+                            Class<?> cls = ums.getClass();
+                            Field fUsers = cls.getDeclaredField("users");
+                            fUsers.setAccessible(true);
+                            Object mapObj = fUsers.get(ums);
+                            Object userObj = ((Map<String, ?>) mapObj).get(username);
+                            if (userObj == null) return;
+                            Field fActive = userObj.getClass().getDeclaredField("isActive");
+                            fActive.setAccessible(true);
+                            fActive.setBoolean(userObj, active);
+                        } catch (Exception e) {
+                            throw new RuntimeException("TestHooks.setActive falhou", e);
+                        }
+                    }
+                }
+                """.stripIndent(), "UTF-8")
+            println "organizarUsuario → TestHooks injetado em testes"
+        }
+
+
         def gravar = { String texto, boolean isTeste ->
             if (isTeste) {
                 texto = ajustarTesteParaPacoteUsuario(texto)
@@ -526,6 +584,28 @@ tasks.register('organizarUsuario') {
             }
             // <<<
         }
+
+        // Se o teste tentar acessar .users.get(...).isActive = X; troca por TestHooks.setActive(...)
+        testesIA = testesIA.collect { ti ->
+            String t = ti.text
+            String patched = t.replaceAll(
+                /(\b[A-Za-z_][A-Za-z0-9_]*)\.users\.get\(([^)]+)\)\.isActive\s*=\s*(true|false)\s*;/,
+                'TestHooks.setActive($1, $2, $3);'
+            )
+
+            // se o teste referir LoginAttempt, injeta stub
+            if (patched.contains("LoginAttempt")) {
+                injetarStubLoginAttempt()
+            }
+            // se precisou setActive, injeta TestHooks
+            if (!patched.equals(t) || patched.contains("TestHooks.setActive(")) {
+                injetarTestHooks()
+            }
+
+            [file: ti.file, text: patched]
+        }
+
+
 
         // Grava tudo
         fontesUsuario.each { gravar(it.text, false) }
