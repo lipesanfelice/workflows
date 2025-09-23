@@ -98,25 +98,91 @@ def dirMain = new File(dirWork, 'src/main/java')
 def dirTest = new File(dirWork, 'src/test/java')
 
 
-// Mapeia imports -> coordenadas Maven padrão (ajuste versões se quiser)
+// Mapeia imports -> coordenadas Maven padrão (versões estáveis p/ Java 21 / Spring Boot 3.x)
 def mapaImports = [
+    // === Apache Commons ===
     'org.apache.commons.lang3'         : 'org.apache.commons:commons-lang3:3.14.0',
     'org.apache.commons.io'            : 'commons-io:commons-io:2.16.1',
-    'com.google.gson'                  : 'com.google.code.gson:gson:2.11.0',
+    'org.apache.commons.text'          : 'org.apache.commons:commons-text:1.11.0',
+    'org.apache.commons.collections4'  : 'org.apache.commons:commons-collections4:4.4',
+    'org.apache.commons.csv'           : 'org.apache.commons:commons-csv:1.10.0',
+    'org.apache.commons.codec'         : 'commons-codec:commons-codec:1.16.1',
+    'org.apache.commons.compress'      : 'org.apache.commons:commons-compress:1.26.2',
+    'org.apache.commons.math3'         : 'org.apache.commons:commons-math3:3.6.1',
+    'org.apache.commons.beanutils'     : 'commons-beanutils:commons-beanutils:1.9.4',
+    'org.apache.commons.validator'     : 'commons-validator:commons-validator:1.9.0',
+
+    // === Google / JSON / Utils ===
     'com.google.common'                : 'com.google.guava:guava:33.2.1-jre',
-    'org.json'                         : 'org.json:json:20240303',
-    'com.fasterxml.jackson.databind'   : 'com.fasterxml.jackson.core:jackson-databind:2.17.1',
+    'com.google.gson'                  : 'com.google.code.gson:gson:2.11.0',
+    'com.google.protobuf'              : 'com.google.protobuf:protobuf-java:3.25.3',
+    'com.google.truth'                 : 'com.google.truth:truth:1.4.2',
+    'org.yaml.snakeyaml'               : 'org.yaml:snakeyaml:2.2',
+
+    // === Jackson (core + módulos comuns) ===
     'com.fasterxml.jackson.core'       : 'com.fasterxml.jackson.core:jackson-core:2.17.1',
     'com.fasterxml.jackson.annotation' : 'com.fasterxml.jackson.core:jackson-annotations:2.17.1',
+    'com.fasterxml.jackson.databind'   : 'com.fasterxml.jackson.core:jackson-databind:2.17.1',
+    'com.fasterxml.jackson.dataformat' : 'com.fasterxml.jackson.dataformat:jackson-dataformat-xml:2.17.1',
+    'com.fasterxml.jackson.datatype'   : 'com.fasterxml.jackson.datatype:jackson-datatype-jsr310:2.17.1',
+
+    // === Logging ===
     'org.slf4j'                        : 'org.slf4j:slf4j-api:2.0.13',
+    'org.slf4j.simple'                 : 'org.slf4j:slf4j-simple:2.0.13',
     'ch.qos.logback'                   : 'ch.qos.logback:logback-classic:1.5.6',
+    'org.apache.logging.log4j'         : 'org.apache.logging.log4j:log4j-api:2.23.1',
+    'org.apache.logging.log4j.core'    : 'org.apache.logging.log4j:log4j-core:2.23.1',
+
+    // === HTTP / Cliente Web ===
+    // Cliente Apache 5.x (pacotes org.apache.httpcomponents.client5 / org.apache.hc)
     'org.apache.http'                  : 'org.apache.httpcomponents.client5:httpclient5:5.3.1',
+    // Cliente Apache 4.x legacy (pacotes org.apache.http.client.* antigos)
+    'org.apache.http.client'           : 'org.apache.httpcomponents:httpclient:4.5.14',
+    // OkHttp & Retrofit
+    'okhttp3'                          : 'com.squareup.okhttp3:okhttp:4.12.0',
+    'retrofit2'                        : 'com.squareup.retrofit2:retrofit:2.11.0',
+    'okio'                             : 'com.squareup.okio:okio:3.9.0',
+    // Jsoup
     'org.jsoup'                        : 'org.jsoup:jsoup:1.18.1',
+
+    // === Banco de dados / JDBC (úteis pra testes rápidos) ===
+    'org.xerial.sqlitejdbc'            : 'org.xerial:sqlite-jdbc:3.45.3.0',
+    'com.h2database'                   : 'com.h2database:h2:2.2.224',
+    'org.postgresql'                   : 'org.postgresql:postgresql:42.7.3',
+    'com.mysql'                        : 'com.mysql:mysql-connector-j:8.3.0',
+
+    // === ORM / Jakarta ===
     'org.hibernate'                    : 'org.hibernate.orm:hibernate-core:6.5.3.Final',
     'jakarta.persistence'              : 'jakarta.persistence:jakarta.persistence-api:3.1.0',
     'jakarta.validation'               : 'jakarta.validation:jakarta.validation-api:3.0.2',
-    'org.apache.poi'                   : 'org.apache.poi:poi-ooxml:5.2.5'
+    'jakarta.xml.bind'                 : 'jakarta.xml.bind:jakarta.xml.bind-api:4.0.2',
+
+    // === Arquivos Office / CSV ===
+    'org.apache.poi'                   : 'org.apache.poi:poi-ooxml:5.2.5',
+    'com.opencsv'                      : 'com.opencsv:opencsv:5.9',
+
+    // === Segurança / Cripto ===
+    'org.jose4j'                       : 'org.bitbucket.b_c:jose4j:0.9.6',
+    'org.mindrot.jbcrypt'              : 'org.mindrot:jbcrypt:0.4',
+
+    // === Mapping / Utils extras ===
+    'org.mapstruct'                    : 'org.mapstruct:mapstruct:1.5.5.Final',
+    'org.modelmapper'                  : 'org.modelmapper:modelmapper:3.2.0',
+    'org.jetbrains.annotations'        : 'org.jetbrains:annotations:24.1.0',
+
+    // === Testes ===
+    'org.junit.jupiter'                : 'org.junit.jupiter:junit-jupiter:5.10.2',
+    'org.junit.platform'               : 'org.junit.platform:junit-platform-launcher:1.10.2',
+    'org.mockito'                      : 'org.mockito:mockito-core:5.13.0',
+    'org.hamcrest'                     : 'org.hamcrest:hamcrest:2.2',
+    'org.assertj'                      : 'org.assertj:assertj-core:3.26.0',
+
+    // === Outras utilidades ===
+    'org.json'                         : 'org.json:json:20240303',
+    'org.joda.time'                    : 'joda-time:joda-time:2.12.7',
+    'javax.annotation'                 : 'com.google.code.findbugs:jsr305:3.0.2', // só anotações (legado)
 ]
+
 
 tasks.register('resolverDepsUsuario') {
     // varre fontes do usuário
@@ -254,19 +320,18 @@ tasks.register('organizarUsuario') {
                         "\$1${nomeEsperado}"
                     )
 
-                    // // >>> PASSO 2: espelhar rename também na pasta do repositório (entrada-usuario)
-                    // def pacote = extrairPacote(novoTexto)
-                    // def caminhoPacote = pacote ? pacote.replace('.', File.separator) : ''
-                    // def repoDir = new File(dirEntrada, caminhoPacote)
-                    // repoDir.mkdirs()
-                    // // grava o arquivo renomeado
-                    // new File(repoDir, "${nomeEsperado}.java").setText(novoTexto, 'UTF-8')
-                    // // (opcional) remove o antigo, se existia
-                    // def antigo = new File(repoDir, "${nomePublico}.java")
-                    // if (antigo.exists()) {
-                    //     antigo.delete()
-                    // }
-                    // // <<< PASSO 2
+                    def pacote = extrairPacote(novoTexto)
+                    def caminhoPacote = pacote ? pacote.replace('.', File.separator) : ''
+                    def repoDir = new File(dirEntrada, caminhoPacote)
+                    repoDir.mkdirs()
+                    // grava o arquivo renomeado
+                    new File(repoDir, "${nomeEsperado}.java").setText(novoTexto, 'UTF-8')
+                    // (opcional) remove o antigo, se existia
+                    def antigo = new File(repoDir, "${nomePublico}.java")
+                    if (antigo.exists()) {
+                        antigo.delete()
+                    }
+
 
                     [file: f.file, text: novoTexto]
                 } else {
@@ -301,20 +366,98 @@ tasks.register('organizarUsuario') {
             // 2) injetar imports JDK comuns se faltarem
             // símbolos que frequentemente aparecem nos testes gerados
             def candidatos = [
-                [sym: 'Random',      fqcn: 'java.util.Random'],
-                [sym: 'Arrays',      fqcn: 'java.util.Arrays'],
-                [sym: 'List',        fqcn: 'java.util.List'],
-                [sym: 'ArrayList',   fqcn: 'java.util.ArrayList'],
-                [sym: 'Map',         fqcn: 'java.util.Map'],
-                [sym: 'HashMap',     fqcn: 'java.util.HashMap'],
-                [sym: 'Set',         fqcn: 'java.util.Set'],
-                [sym: 'HashSet',     fqcn: 'java.util.HashSet'],
-                [sym: 'Collections', fqcn: 'java.util.Collections'],
-                [sym: 'Optional',    fqcn: 'java.util.Optional'],
-                // às vezes usam Regex sem import:
-                [sym: 'Pattern',     fqcn: 'java.util.regex.Pattern'],
-                [sym: 'Matcher',     fqcn: 'java.util.regex.Matcher'],
+                // --- java.util ---
+                [sym: 'Random',              fqcn: 'java.util.Random'],
+                [sym: 'Scanner',             fqcn: 'java.util.Scanner'],
+                [sym: 'Arrays',              fqcn: 'java.util.Arrays'],
+                [sym: 'List',                fqcn: 'java.util.List'],
+                [sym: 'ArrayList',           fqcn: 'java.util.ArrayList'],
+                [sym: 'LinkedList',          fqcn: 'java.util.LinkedList'],
+                [sym: 'Deque',               fqcn: 'java.util.Deque'],
+                [sym: 'ArrayDeque',          fqcn: 'java.util.ArrayDeque'],
+                [sym: 'Queue',               fqcn: 'java.util.Queue'],
+                [sym: 'Set',                 fqcn: 'java.util.Set'],
+                [sym: 'HashSet',             fqcn: 'java.util.HashSet'],
+                [sym: 'TreeSet',             fqcn: 'java.util.TreeSet'],
+                [sym: 'Map',                 fqcn: 'java.util.Map'],
+                [sym: 'HashMap',             fqcn: 'java.util.HashMap'],
+                [sym: 'LinkedHashMap',       fqcn: 'java.util.LinkedHashMap'],
+                [sym: 'TreeMap',             fqcn: 'java.util.TreeMap'],
+                [sym: 'Collections',         fqcn: 'java.util.Collections'],
+                [sym: 'Optional',            fqcn: 'java.util.Optional'],
+                [sym: 'OptionalInt',         fqcn: 'java.util.OptionalInt'],
+                [sym: 'OptionalLong',        fqcn: 'java.util.OptionalLong'],
+                [sym: 'OptionalDouble',      fqcn: 'java.util.OptionalDouble'],
+                [sym: 'Comparator',          fqcn: 'java.util.Comparator'],
+                [sym: 'UUID',                fqcn: 'java.util.UUID'],
+                [sym: 'Properties',          fqcn: 'java.util.Properties'],
+                [sym: 'BitSet',              fqcn: 'java.util.BitSet'],
+                [sym: 'Stream',              fqcn: 'java.util.stream.Stream'],
+                [sym: 'IntStream',           fqcn: 'java.util.stream.IntStream'],
+                [sym: 'LongStream',          fqcn: 'java.util.stream.LongStream'],
+                [sym: 'DoubleStream',        fqcn: 'java.util.stream.DoubleStream'],
+
+                // --- java.time ---
+                [sym: 'Instant',             fqcn: 'java.time.Instant'],
+                [sym: 'Duration',            fqcn: 'java.time.Duration'],
+                [sym: 'Period',              fqcn: 'java.time.Period'],
+                [sym: 'LocalDate',           fqcn: 'java.time.LocalDate'],
+                [sym: 'LocalTime',           fqcn: 'java.time.LocalTime'],
+                [sym: 'LocalDateTime',       fqcn: 'java.time.LocalDateTime'],
+                [sym: 'ZonedDateTime',       fqcn: 'java.time.ZonedDateTime'],
+                [sym: 'OffsetDateTime',      fqcn: 'java.time.OffsetDateTime'],
+                [sym: 'ZoneId',              fqcn: 'java.time.ZoneId'],
+                [sym: 'DateTimeFormatter',   fqcn: 'java.time.format.DateTimeFormatter'],
+
+                // --- java.nio.file / charset ---
+                [sym: 'Path',                fqcn: 'java.nio.file.Path'],
+                [sym: 'Paths',               fqcn: 'java.nio.file.Paths'],
+                [sym: 'Files',               fqcn: 'java.nio.file.Files'],
+                [sym: 'StandardOpenOption',  fqcn: 'java.nio.file.StandardOpenOption'],
+                [sym: 'Charset',             fqcn: 'java.nio.charset.Charset'],
+                [sym: 'StandardCharsets',    fqcn: 'java.nio.charset.StandardCharsets'],
+
+                // --- java.io ---
+                [sym: 'File',                fqcn: 'java.io.File'],
+                [sym: 'IOException',         fqcn: 'java.io.IOException'],
+                [sym: 'InputStream',         fqcn: 'java.io.InputStream'],
+                [sym: 'OutputStream',        fqcn: 'java.io.OutputStream'],
+                [sym: 'FileInputStream',     fqcn: 'java.io.FileInputStream'],
+                [sym: 'FileOutputStream',    fqcn: 'java.io.FileOutputStream'],
+                [sym: 'Reader',              fqcn: 'java.io.Reader'],
+                [sym: 'Writer',              fqcn: 'java.io.Writer'],
+                [sym: 'BufferedReader',      fqcn: 'java.io.BufferedReader'],
+                [sym: 'BufferedWriter',      fqcn: 'java.io.BufferedWriter'],
+                [sym: 'InputStreamReader',   fqcn: 'java.io.InputStreamReader'],
+                [sym: 'OutputStreamWriter',  fqcn: 'java.io.OutputStreamWriter'],
+                [sym: 'FileReader',          fqcn: 'java.io.FileReader'],
+                [sym: 'FileWriter',          fqcn: 'java.io.FileWriter'],
+                [sym: 'PrintWriter',         fqcn: 'java.io.PrintWriter'],
+
+                // --- java.math ---
+                [sym: 'BigDecimal',          fqcn: 'java.math.BigDecimal'],
+                [sym: 'BigInteger',          fqcn: 'java.math.BigInteger'],
+                [sym: 'RoundingMode',        fqcn: 'java.math.RoundingMode'],
+
+                // --- java.util.regex ---
+                [sym: 'Pattern',             fqcn: 'java.util.regex.Pattern'],
+                [sym: 'Matcher',             fqcn: 'java.util.regex.Matcher'],
+
+                // --- java.net / http ---
+                [sym: 'URI',                 fqcn: 'java.net.URI'],
+                [sym: 'URL',                 fqcn: 'java.net.URL'],
+                [sym: 'URLEncoder',          fqcn: 'java.net.URLEncoder'],
+                [sym: 'URLDecoder',          fqcn: 'java.net.URLDecoder'],
+                [sym: 'HttpClient',          fqcn: 'java.net.http.HttpClient'],
+                [sym: 'HttpRequest',         fqcn: 'java.net.http.HttpRequest'],
+                [sym: 'HttpResponse',        fqcn: 'java.net.http.HttpResponse'],
+
+                // --- utilidades diversas ---
+                [sym: 'Objects',             fqcn: 'java.util.Objects'],
+                [sym: 'StringJoiner',        fqcn: 'java.util.StringJoiner'],
+                [sym: 'Spliterator',         fqcn: 'java.util.Spliterator'],
             ]
+
 
             // já importados?
             def importados = [] as Set
@@ -352,7 +495,75 @@ tasks.register('organizarUsuario') {
         }
 
 
-        // Gravar arquivos
+        def espelharParaRepo = { String texto ->
+            String pacote = extrairPacote(texto)
+            String caminhoPacote = pacote ? pacote.replace('.', File.separator) : ''
+            File repoDir = caminhoPacote ? new File(dirEntrada, caminhoPacote) : dirEntrada
+            repoDir.mkdirs()
+
+            String nomePublicoLocal = extrairNomePublico(texto)
+            String nomeArquivo = nomePublicoLocal ? "${nomePublicoLocal}.java" : "Arquivo_${System.nanoTime()}.java"
+            new File(repoDir, nomeArquivo).setText(texto, 'UTF-8')
+        }
+
+        // --- Helpers p/ testes: stub + hook por reflexão ---
+
+        def injetarStubLoginAttempt = {
+            // injeta em TEST (mesmo pacote do usuário, se existir)
+            String pacote = pacoteUsuario ?: ''
+            String header = pacote ? "package ${pacote};\n" : ""
+            def destinoDir = pacote ? new File(dirTest, pacote.replace('.', File.separator)) : dirTest
+            destinoDir.mkdirs()
+            new File(destinoDir, "LoginAttempt.java").setText(
+                """${header}
+                public class LoginAttempt {
+                    public String user;
+                    public boolean success;
+                    public long timestamp;
+                    public LoginAttempt() {}
+                    public LoginAttempt(String user, boolean success, long ts){
+                        this.user = user; this.success = success; this.timestamp = ts;
+                    }
+                }
+                """.stripIndent(), "UTF-8")
+            println "organizarUsuario → stub LoginAttempt injetado em testes"
+        }
+
+        def injetarTestHooks = {
+            String pacote = pacoteUsuario ?: ''
+            String header = pacote ? "package ${pacote};\n" : ""
+            def destinoDir = pacote ? new File(dirTest, pacote.replace('.', File.separator)) : dirTest
+            destinoDir.mkdirs()
+            new File(destinoDir, "TestHooks.java").setText(
+                """${header}
+                import java.lang.reflect.Field;
+                import java.util.Map;
+
+                public final class TestHooks {
+                    private TestHooks() {}
+
+                    @SuppressWarnings("unchecked")
+                    public static void setActive(Object ums, String username, boolean active) {
+                        try {
+                            Class<?> cls = ums.getClass();
+                            Field fUsers = cls.getDeclaredField("users");
+                            fUsers.setAccessible(true);
+                            Object mapObj = fUsers.get(ums);
+                            Object userObj = ((Map<String, ?>) mapObj).get(username);
+                            if (userObj == null) return;
+                            Field fActive = userObj.getClass().getDeclaredField("isActive");
+                            fActive.setAccessible(true);
+                            fActive.setBoolean(userObj, active);
+                        } catch (Exception e) {
+                            throw new RuntimeException("TestHooks.setActive falhou", e);
+                        }
+                    }
+                }
+                """.stripIndent(), "UTF-8")
+            println "organizarUsuario → TestHooks injetado em testes"
+        }
+
+
         def gravar = { String texto, boolean isTeste ->
             if (isTeste) {
                 texto = ajustarTesteParaPacoteUsuario(texto)
@@ -366,7 +577,35 @@ tasks.register('organizarUsuario') {
             String nomePublicoLocal = extrairNomePublico(texto)
             String nomeArquivo = nomePublicoLocal ? "${nomePublicoLocal}.java" : "Arquivo_${System.nanoTime()}.java"
             new File(destinoDir, nomeArquivo).setText(texto, 'UTF-8')
+
+            // >>> espelha os fontes de PRODUÇÃO no repositório (não espelha testes gerados)
+            if (!isTeste) {
+                espelharParaRepo(texto)
+            }
+            // <<<
         }
+
+        // Se o teste tentar acessar .users.get(...).isActive = X; troca por TestHooks.setActive(...)
+        testesIA = testesIA.collect { ti ->
+            String t = ti.text
+            String patched = t.replaceAll(
+                /(\b[A-Za-z_][A-Za-z0-9_]*)\.users\.get\(([^)]+)\)\.isActive\s*=\s*(true|false)\s*;/,
+                'TestHooks.setActive($1, $2, $3);'
+            )
+
+            // se o teste referir LoginAttempt, injeta stub
+            if (patched.contains("LoginAttempt")) {
+                injetarStubLoginAttempt()
+            }
+            // se precisou setActive, injeta TestHooks
+            if (!patched.equals(t) || patched.contains("TestHooks.setActive(")) {
+                injetarTestHooks()
+            }
+
+            [file: ti.file, text: patched]
+        }
+
+
 
         // Grava tudo
         fontesUsuario.each { gravar(it.text, false) }
@@ -500,25 +739,23 @@ tasks.register('testUsuario', Test) {
         }
     }
 
-    finalizedBy 'jacocoRelatorioUsuario'
+    finalizedBy('jacocoRelatorioUsuario') // string -> não força resolução antecipada
 }
 
-
+// === JaCoCo (relatório para o Codecov) ===
 jacoco {
     toolVersion = '0.8.12'
 }
 
-def jacocoExecProv = layout.buildDirectory.file("jacoco/testUsuario.exec")
-
-// no topo já existe: def dirEntrada = file('entrada-usuario')
 tasks.register('jacocoRelatorioUsuario', JacocoReport) {
     dependsOn 'testUsuario'
+
     executionData.setFrom(layout.buildDirectory.file("jacoco/testUsuario.exec"))
     classDirectories.setFrom(sourceSets.usuario.output.classesDirs)
 
-    // IMPORTANTÍSSIMO: fontes do repositório
-    sourceDirectories.setFrom(files('entrada-usuario'))
-    additionalSourceDirs.setFrom(files('entrada-usuario'))
+    // **só** fontes versionadas no repo para o Codecov mapear
+    sourceDirectories.setFrom(files(file('entrada-usuario')))
+    additionalSourceDirs.setFrom(sourceDirectories)
 
     reports {
         xml.required.set(true)
@@ -527,7 +764,13 @@ tasks.register('jacocoRelatorioUsuario', JacocoReport) {
         html.outputLocation.set(file('entrada-usuario/jacoco-relatorio/html'))
         xml.outputLocation.set(file('entrada-usuario/jacoco-relatorio/jacoco.xml'))
     }
+
+    doFirst {
+        file('entrada-usuario/jacoco-relatorio/html').mkdirs()
+    }
 }
+
+
 
 
 tasks.register('usuarioCobertura') {

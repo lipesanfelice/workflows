@@ -9,7 +9,8 @@ Regras:
 - Sem comentários, sem markdown, apenas código Java compilável.
 - Nome do teste: <NomeDaClasseAlvo>Test.java
 - Mockito só se necessário.
-- Cubra caminho feliz e 1 caminho de erro se existir.
+- Cubra o que o sonar mostra que está errado e procure possiveis erros que os testes possam ajudar.
+- Maximizar a cobertura de linhas, ramos e instruções.
 """;
         String contexto = ("""
 ARQUIVO_ALVO: %s
@@ -25,3 +26,4 @@ Retorne SOMENTE nas marcações exigidas.
         return regras + "\n" + contexto;
     }
 }
+

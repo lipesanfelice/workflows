@@ -171,88 +171,75 @@ jobs:
         fi
 
     - name: Testes + Cobertura (testUsuario + jacocoRelatorioUsuario)
-      if: steps.check_usuario.outputs.tem == 'true'
       run: |
-        ./gradlew --no-daemon -Dorg.gradle.configuration-cache=false -p app clean testUsuario jacocoRelatorioUsuario
-        echo "JACOCO_DIR=${{ github.workspace }}/app/entrada-usuario/jacoco-relatorio" >> "$GITHUB_ENV"
-        echo "JACOCO_XML=${{ github.workspace }}/app/entrada-usuario/jacoco-relatorio/jacoco.xml" >> "$GITHUB_ENV"
-        echo "JACOCO_HTML_DIR=${{ github.workspace }}/app/entrada-usuario/jacoco-relatorio/html" >> "$GITHUB_ENV"
-    
-    - name: Mostrar relatório JUnit do testUsuario
+        ./gradlew --no-daemon -Dorg.gradle.configuration-cache=false -p app clean testUsuario jacocoRelatorioUsuario --info
+        echo "JACOCO_XML=${{ github.workspace }}/app/entrada-usuario/jacoco-relatorio/jacoco.xml" >> $GITHUB_ENV
+        echo "JACOCO_EXEC=${{ github.workspace }}/app/build/jacoco/testUsuario.exec" >> $GITHUB_ENV
+
+    - name: Inspecionar artefatos de cobertura
       if: always()
       run: |
-        echo "=== SUMÁRIO TESTES (HTML) ==="
-        ls -la app/build/reports/tests/testUsuario || true
-        echo "=== XMLs JUnit ==="
-        find app/build/test-results/testUsuario -type f -name "*.xml" -maxdepth 1 2>/dev/null | sed -n '1,50p' || true
+        echo "== .exec =="
+        ls -la app/build/jacoco || true
+        echo "== jacoco.xml destino =="
+        ls -la app/entrada-usuario/jacoco-relatorio || true
 
+    - name: Conferir jacoco.exec e jacoco.xml
+      id: check_cov
+      run: |
+        set -euo pipefail
+        XML="${{ env.JACOCO_XML }}"
+        EXEC="${{ env.JACOCO_EXEC }}"
 
+        ok=1
+        if [ ! -s "$EXEC" ]; then
+          echo "::warning::testUsuario.exec ausente ou vazio: $EXEC"
+          ok=0
+        fi
+
+        if [ ! -s "$XML" ]; then
+          echo "::warning::jacoco.xml ausente ou vazio: $XML"
+          ok=0
+        fi
+
+        if [ "$ok" = "1" ]; then
+          echo "tem_cov=true" >> "$GITHUB_OUTPUT"
+          echo "Primeiras linhas do jacoco.xml:"
+          head -n 20 "$XML" || true
+        else
+          echo "tem_cov=false" >> "$GITHUB_OUTPUT"
+        fi
+
+    - name: Validar jacoco.xml (estrutura mínima) e mapear 1 arquivo
+      if: steps.check_cov.outputs.tem_cov == 'true'
+      run: |
+        set -euo pipefail
+        XML="${{ env.JACOCO_XML }}"
+        # estrutura mínima
+        grep -q "<sourcefile " "$XML"
+        grep -q "<counter " "$XML"
+
+        PKG=$(grep -m1 -oP '(?<=<package name=")[^"]*' "$XML" || true)
+        SRC=$(grep -m1 -oP '(?<=<sourcefile name=")[^"]+' "$XML" || true)
+        echo "Do relatório: package='${PKG}'  sourcefile='${SRC}'"
+
+        ROOT="app/entrada-usuario"
+        if [ -z "${PKG}" ]; then
+          CAND="${ROOT}/${SRC}"
+        else
+          PKG_PATH=$(printf "%s" "$PKG" | sed 's|\.+|/|g')
+          CAND="${ROOT}/${PKG_PATH}/${SRC}"
+        fi
+        echo "Tentando mapear: ${CAND}"
+
+        if [ -f "$CAND" ]; then
+          echo "OK: mapeou ${SRC} -> ${CAND}"
+        else
+          echo "::warning::Não achei ${CAND}. Tentando busca por nome…"
+          find "${ROOT}" -type f -name "${SRC}" -print | sed -n '1,50p' || true
+          echo "::warning::Seguirei com upload, mas isso pode causar 'path mismatch' no Codecov."
+        fi
     
-    - name: Garantir pasta/arquivo do relatório JaCoCo
-      if: steps.check_usuario.outputs.tem == 'true'
-      run: |
-        set -e
-        DIR="${{ github.workspace }}/app/entrada-usuario/jacoco-relatorio"
-        mkdir -p "$DIR/html"
-        # cria jacoco.xml se ainda não existir
-        if [ ! -s "$DIR/jacoco.xml" ]; then
-          cat > "$DIR/jacoco.xml" <<'XML'
-        <?xml version="1.0" encoding="UTF-8"?>
-        <report name="sem-cobertura">
-          <!-- Placeholder criado pelo CI quando não há execução de testes/cobertura -->
-        </report>
-        XML
-            fi
-
-
-    - name: Conferir relatório JaCoCo
-      if: steps.check_usuario.outputs.tem == 'true'
-      run: |
-        set -e
-        ls -la "${JACOCO_DIR}" || true
-        if [ ! -f "${JACOCO_XML}" ]; then
-          echo "jacoco.xml não encontrado em ${JACOCO_XML}"
-          echo "Árvore de build para depuração:"
-          find "${{ github.workspace }}/build" -maxdepth 3 -type f -printf "%p\n" 2>/dev/null | sed -n '1,400p' || true
-          exit 1
-        fi
-
-    - name: Validar jacoco.xml e caminhos (debug)
-      if: steps.check_usuario.outputs.tem == 'true'
-      run: |
-        set -euo pipefail
-        REPORT="${{ github.workspace }}/app/entrada-usuario/jacoco-relatorio/jacoco.xml"
-        test -s "$REPORT" || { echo "::error::jacoco.xml vazio"; exit 2; }
-        PKG=$(grep -m1 -oP '(?<=<package name=")[^"]+' "$REPORT" || true)
-        SRC=$(grep -m1 -oP '(?<=<sourcefile name=")[^"]+' "$REPORT" || true)
-        echo "Primeiro package no XML: '$PKG'"
-        echo "Primeiro sourcefile no XML: '$SRC'"
-        if [ -n "$PKG" ] && [ -n "$SRC" ]; then
-          CANDIDATE="${{ github.workspace }}/app/entrada-usuario/$PKG/$SRC"
-          echo "Verificando fonte referenciada: $CANDIDATE"
-          ls -la "$CANDIDATE" || { echo "::error::Fonte referenciada não encontrada no repo (path mismatch)."; exit 3; }
-        fi
-        # sanidade mínima: precisa conter counters
-        grep -q "<counter " "$REPORT" || { echo "::error::jacoco.xml sem <counter>"; exit 4; }
-
-
-    - name: Upload para Codecov (CLI simples)
-      if: steps.check_usuario.outputs.tem == 'true'
-      env:
-        CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
-      run: |
-        set -euo pipefail
-        cd "$GITHUB_WORKSPACE"
-        curl -Os https://uploader.codecov.io/latest/linux/codecov
-        chmod +x codecov
-
-        ./codecov \
-          -t "$CODECOV_TOKEN" \
-          -f "$GITHUB_WORKSPACE/app/entrada-usuario/jacoco-relatorio/jacoco.xml" \
-          -F usuario \
-          -n cobertura-entrada-usuario \
-          -v
-
     - name: Commit e push dos arquivos gerados (na main)
       if: ${{ github.event_name != 'pull_request' }}
       env:
@@ -264,7 +251,6 @@ jobs:
         git config --global --add safe.directory "$GITHUB_WORKSPACE"
 
         git stash push --include-untracked --all -m "ci-autostash" || true
-
         git fetch origin "$BRANCH" --prune
         if git rev-parse --verify "$BRANCH" >/dev/null 2>&1; then
           git checkout "$BRANCH"
@@ -272,31 +258,93 @@ jobs:
           git checkout -b "$BRANCH"
         fi
         git reset --hard "origin/$BRANCH"
-
-        # restaura o que foi gerado/alterado nesta execução
         git stash pop || true
 
-        # ADICIONA TODO o conteúdo de app/entrada-usuario (inclui código do usuário + testes)
+        # Se houve conflitos, aceite o lado do stash (as mudanças geradas nesta execução)
+        if git diff --name-only --diff-filter=U | grep -q .; then
+          echo "Resolvendo conflitos preferindo as alterações geradas (stash/theirs)…"
+          git checkout --theirs -- .
+          git add -A
+        fi
+
+        # Adiciona o que interessa: fontes do usuário + relatorios/gerados
         git add -A app/entrada-usuario
 
         if git diff --cached --quiet; then
           echo "Sem mudanças para commit."
-          exit 0
+        else
+          msg="chore: atualizar entrada-usuario e testes gerados [skip ci] - run ${{ github.run_number }} @ ${{ github.sha }}"
+          git commit -m "$msg"
+          # tenta push com rebase; se precisar, usa --force-with-lease
+          if ! git push origin HEAD:"$BRANCH"; then
+            git pull --rebase --autostash origin "$BRANCH" || true
+            git push --force-with-lease origin HEAD:"$BRANCH"
+          fi
         fi
 
-        msg="chore: atualizar entrada-usuario e testes gerados [skip ci] - run ${{ github.run_number }} @ ${{ github.sha }}"
-        git commit -m "$msg"
+        # Exporta o SHA ATUAL (após push) para usar no Codecov
+        echo "COV_SHA=$(git rev-parse HEAD)" >> $GITHUB_ENV
+      
+    - name: Upload para Codecov (uploader CLI)
+      if: steps.check_cov.outputs.tem_cov == 'true'
+      run: |
+        set -euo pipefail
+        curl -Os https://uploader.codecov.io/latest/linux/codecov
+        chmod +x codecov
+        ./codecov \
+          -t "$CODECOV_TOKEN" \
+          -f "$JACOCO_XML" \
+          -F usuario \
+          -n cobertura-entrada-usuario \
+          -C "$COV_SHA" \
+          -v
+      env:
+        CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
-        # tenta push; se falhar por avanço remoto, rebaseia e tenta de novo
-        if git push origin HEAD:"$BRANCH"; then
-          exit 0
-        fi
+    - name: Verificar status no Codecov (API)
+      env:
+        OWNER_REPO: ${{ github.repository }}   # ex: lipesanfelice/workflows
+        COMMIT_SHA: ${{ env.COV_SHA }}         # SHA que você usou no -C
+        CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+      run: |
+        set -euo pipefail
+        owner="${OWNER_REPO%/*}"
+        repo="${OWNER_REPO#*/}"
+        url="https://codecov.io/api/gh/${owner}/${repo}/commit/${COMMIT_SHA}"
 
-        echo "Push falhou, tentando rebase e novo push..."
-        git pull --rebase --autostash origin "$BRANCH" || true
-        if git push origin HEAD:"$BRANCH"; then
-          exit 0
-        fi
+        # pega JSON e extrai alguns campos-chave
+        json="$(curl -sfL "$url")" || { echo "Falha ao consultar Codecov"; exit 2; }
 
-        echo "Ainda falhou; usando push com --force-with-lease de forma segura"
-        git push --force-with-lease origin HEAD:"$BRANCH"
+        # Totais de cobertura (linhas cobertas/existentes)
+        covered="$(echo "$json" | python3 - <<'PY'
+        import sys, json
+        j=json.load(sys.stdin)
+        print(j.get("commit",{}).get("totals",{}).get("c", ""))
+        PY
+        )"
+            files_count="$(echo "$json" | python3 - <<'PY'
+        import sys, json
+        j=json.load(sys.stdin)
+        print(j.get("commit",{}).get("files_count", ""))
+        PY
+        )"
+
+            echo "covered%: ${covered}, files_count: ${files_count}"
+
+            # Heurísticas de sucesso:
+            # - há algum arquivo mapeado
+            # - (opcional) há porcentagem numérica
+            if [ -n "$files_count" ] && [ "$files_count" != "0" ]; then
+              echo "OK: Codecov processou e mapeou arquivos."
+              exit 0
+            fi
+
+            echo "::error::Codecov não mapeou arquivos (files_count=${files_count})."
+            # Mostra mensagens de erro do Codecov (se houver)
+            echo "$json" | python3 - <<'PY'
+        import sys, json
+        j=json.load(sys.stdin)
+        msgs = j.get("messages") or j.get("commit",{}).get("message")
+        print("Mensagens do Codecov:", msgs)
+        PY
+            exit 3
