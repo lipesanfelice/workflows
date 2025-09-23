@@ -20,15 +20,13 @@ public class GitServico {
 
     public void sincronizarMain() {
         exec(pastaRepo, "git", "config", "--global", "--add", "safe.directory", pastaRepo.getAbsolutePath());
-        execSilencioso(pastaRepo, "git", "stash", "push", "--include-untracked", "--all", "-m", "autostash");
-        exec(pastaRepo, "git", "fetch", "origin", "main", "--prune");
-        if (exec(pastaRepo, "git", "rev-parse", "--verify", "main") != 0) {
-            exec(pastaRepo, "git", "checkout", "-b", "main");
-        } else {
-            exec(pastaRepo, "git", "checkout", "main");
-        }
+        execSilencioso(pastaRepo, "git", "merge", "--abort");
+        execSilencioso(pastaRepo, "git", "rebase", "--abort");
+        exec(pastaRepo, "git", "fetch", "origin", "--prune");
+        if (exec(pastaRepo, "git", "rev-parse", "--verify", "main") != 0) exec(pastaRepo, "git", "checkout", "-b", "main");
+        else exec(pastaRepo, "git", "checkout", "main");
         exec(pastaRepo, "git", "reset", "--hard", "origin/main");
-        execSilencioso(pastaRepo, "git", "stash", "pop");
+        exec(pastaRepo, "git", "clean", "-fdx");
     }
 
     public void configurarIdentidade(String nome, String email) {
@@ -36,15 +34,23 @@ public class GitServico {
         exec(pastaRepo, "git", "config", "user.email", email);
     }
 
+    public void aplicarPoliticaRemotoArquivosSensiveis() {
+        execSilencioso(pastaRepo, "git", "restore", "--source=origin/main", "--", "app/src/main/java/org/example/util/Prompts.java");
+        execSilencioso(pastaRepo, "git", "restore", "--source=origin/main", "--", "app/src/main/resources/static/index.html");
+    }
+
     public void adicionarCommitarEmpurrar(String caminhoRelativo, String mensagem) {
+        aplicarPoliticaRemotoArquivosSensiveis();
         exec(pastaRepo, "git", "add", "-A", caminhoRelativo);
         if (exec(pastaRepo, "git", "diff", "--cached", "--quiet") == 0) return;
         exec(pastaRepo, "git", "commit", "-m", mensagem);
         if (exec(pastaRepo, "git", "push", "origin", "HEAD:main") != 0) {
-            execSilencioso(pastaRepo, "git", "pull", "--rebase", "--autostash", "origin", "main");
-            if (exec(pastaRepo, "git", "push", "origin", "HEAD:main") != 0) {
-                exec(pastaRepo, "git", "push", "--force-with-lease", "origin", "HEAD:main");
-            }
+            exec(pastaRepo, "git", "fetch", "origin", "--prune");
+            exec(pastaRepo, "git", "rebase", "origin/main");
+            aplicarPoliticaRemotoArquivosSensiveis();
+            exec(pastaRepo, "git", "add", "-A", caminhoRelativo);
+            if (exec(pastaRepo, "git", "diff", "--cached", "--quiet") != 0) exec(pastaRepo, "git", "commit", "-m", mensagem);
+            if (exec(pastaRepo, "git", "push", "origin", "HEAD:main") != 0) exec(pastaRepo, "git", "push", "--force-with-lease", "origin", "HEAD:main");
         }
     }
 
