@@ -1,36 +1,97 @@
 <!DOCTYPE html>
-<html lang="pt-BR">
+<html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Processando...</title>
-<link rel="stylesheet" href="estilo.css">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Processing Analysis</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/feather-icons"></script>
+    <script src="https://cdn.jsdelivr.net/npm/feather-icons/dist/feather.min.js"></script>
+    <style>
+        .progress-bar {
+            transition: width 0.5s ease-in-out;
+        }
+        .spin {
+            animation: spin 1.5s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
 </head>
-<body>
-<header class="topo">
-  <h1>Processando</h1>
-</header>
-<main class="conteudo">
-  <section class="cartao alinhado-centro">
-    <div class="spinner"></div>
-    <h2 id="etapa">Inicializando</h2>
-    <p id="detalhes">Preparando ambiente</p>
-    <div class="barra">
-      <div class="progresso" id="progresso" style="width:0%"></div>
+<body class="bg-gray-100 h-screen flex items-center justify-center">
+    <div class="fixed inset-0 bg-black bg-opacity-50 z-10"></div>
+    <div class="bg-white rounded-xl shadow-2xl p-8 max-w-md w-full z-20 relative">
+        <div class="flex flex-col items-center space-y-6">
+            <div class="relative">
+                <i data-feather="loader" class="w-12 h-12 text-blue-500 spin"></i>
+            </div>
+            <h2 class="text-2xl font-bold text-gray-800">Processing Your Analysis</h2>
+            
+            <div class="w-full bg-gray-200 rounded-full h-2.5">
+                <div id="progressBar" class="progress-bar bg-blue-600 h-2.5 rounded-full" style="width: 0%"></div>
+            </div>
+            
+            <div id="progressSteps" class="w-full space-y-3">
+                <div class="flex items-center">
+                    <span id="step1" class="text-gray-600">Analisando estrutura do código...</span>
+                </div>
+                <div class="flex items-center">
+                    <span id="step2" class="text-gray-400">Executando análise estática...</span>
+                </div>
+                <div class="flex items-center">
+                    <span id="step3" class="text-gray-400">Gerando casos de teste...</span>
+                </div>
+                <div class="flex items-center">
+                    <span id="step4" class="text-gray-400">Calculando cobertura...</span>
+                </div>
+                <div class="flex items-center">
+                    <span id="step5" class="text-gray-400">Finalizando relatórios...</span>
+                </div>
+            </div>
+        </div>
     </div>
-    <p id="porcentagem">0%</p>
-    <button id="ver-log" class="botao secundario">Ver log</button>
-    <pre id="log" class="log oculto"></pre>
-  </section>
-</main>
-<script src="script.js"></script>
-<script>
-const p = new URLSearchParams(location.search)
-const execId = p.get('execId')
-iniciarAcompanhamento(execId)
-document.getElementById('ver-log').onclick = function(){
-  document.getElementById('log').classList.toggle('oculto')
-}
-</script>
+
+    <script>
+        feather.replace();
+        
+        const steps = [
+            { id: 'step1', text: 'Analisando estrutura do código...', duration: 1500 },
+            { id: 'step2', text: 'Executando análise estática...', duration: 2000 },
+            { id: 'step3', text: 'Gerando casos de teste...', duration: 2500 },
+            { id: 'step4', text: 'Calculando cobertura...', duration: 1800 },
+            { id: 'step5', text: 'Finalizando relatórios...', duration: 1200 }
+        ];
+
+        const progressBar = document.getElementById('progressBar');
+        
+        function updateProgress(stepIndex) {
+            if (stepIndex >= steps.length) {
+                setTimeout(() => {
+                    window.location.href = 'results.html';
+                }, 1000);
+                return;
+            }
+            
+            const step = steps[stepIndex];
+            const element = document.getElementById(step.id);
+            
+            // Update current step
+            element.textContent = step.text + ' ✔️';
+            element.classList.remove('text-gray-400', 'text-gray-600');
+            element.classList.add('text-green-500', 'font-medium');
+            
+            // Update progress bar
+            const progress = ((stepIndex + 1) / steps.length) * 100;
+            progressBar.style.width = `${progress}%`;
+            
+            // Move to next step
+            setTimeout(() => updateProgress(stepIndex + 1), step.duration);
+        }
+        
+        // Start the progress
+        setTimeout(() => updateProgress(0), 500);
+    </script>
 </body>
 </html>
