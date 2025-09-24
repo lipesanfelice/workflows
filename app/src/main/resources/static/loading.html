@@ -70,6 +70,9 @@ const actions     = document.getElementById('actions');
 const btnRetry    = document.getElementById('btnRetry');
 const verResultados = document.getElementById('verResultados');
 
+const STATUS_ENDPOINTS = ['/api/process/status','/api/status','/status','/pipeline/status'];
+const RESULTS_ENDPOINTS = ['/api/resultados','/api/results','/results'];
+
 const steps = [
   { id: 'step1', labels: ['INICIADO','QUEUED','PREPARANDO','STARTING','PREPARING'] },
   { id: 'step2', labels: ['ANALISE_ESTATICA','STATIC','ANALYZE','ANALYSIS'] },
@@ -93,11 +96,7 @@ function markActive(idx){
   el.classList.remove('text-gray-400');
   el.classList.add('text-gray-600');
 }
-function fallbackPulse(){
-  // animação leve pra não “parecer travado” quando não há progresso do backend
-  progressBar.classList.add('pulse');
-  setTimeout(()=>progressBar.classList.remove('pulse'), 1600);
-}
+function fallbackPulse(){ progressBar.classList.add('pulse'); setTimeout(()=>progressBar.classList.remove('pulse'), 1600); }
 function logDiag(obj){
   if (!DEBUG) return;
   diag.classList.remove('hidden');
@@ -105,6 +104,7 @@ function logDiag(obj){
   diagPre.textContent = (diagPre.textContent + '\n' + line).trim();
 }
 
+/* ===================== Normalizadores ===================== */
 function mapEstadoToStep(estadoRaw){
   const e = (estadoRaw||'').toString().toUpperCase();
   if (!e) return 0;
@@ -112,8 +112,20 @@ function mapEstadoToStep(estadoRaw){
     if (steps[i].labels.some(lbl => e.includes(lbl))) return i;
   }
   if (e.includes('FINAL')) return 4;
+  if (e.includes('DONE')) return 4;
+  if (e.includes('COMPLETE')) return 4;
+  if (e.includes('SUCCESS')) return 4;
+  if (e.includes('SUCCEED')) return 4;
   if (e.includes('ERROR') || e.includes('ERRO') || e.includes('FAIL')) return -1;
   return 0;
+}
+function isDoneState(s){
+  const e = (s || '').toString().toUpperCase();
+  return e.includes('FINAL') || e.includes('DONE') || e.includes('COMPLETE') || e.includes('SUCCESS') || e.includes('SUCCEED');
+}
+function isErrorState(s){
+  const e = (s || '').toString().toUpperCase();
+  return e.includes('ERROR') || e.includes('ERRO') || e.includes('FAIL');
 }
 
 function extractExecId(j){
@@ -126,11 +138,17 @@ function extractMsg(j){
   return j?.mensagem ?? j?.message ?? j?.detail ?? '';
 }
 function extractPct(j){
-  const raw = j?.progresso ?? j?.progress ?? j?.percentage ?? j?.percent ?? j?.pct;
+  let raw = j?.progresso ?? j?.progress ?? j?.percentage ?? j?.percent ?? j?.pct;
+  if (raw == null) return null;
+  if (typeof raw === 'string'){
+    const m = raw.match(/([\d.]+)/);
+    if (m) raw = parseFloat(m[1]);
+  }
   const n = Number(raw);
   return Number.isFinite(n) ? Math.max(0, Math.min(100, n)) : null;
 }
 
+/* ===================== Utils ===================== */
 function setStatusBadge(text, tone){
   statusChip.textContent = text;
   statusChip.className = 'px-2 py-1 rounded text-xs ' + (tone==='err'
@@ -139,12 +157,44 @@ function setStatusBadge(text, tone){
         ? 'bg-green-100 text-green-700'
         : 'bg-gray-100 text-gray-700');
 }
-
 function base64ToBlob(b64, mime) {
   const byteChars = atob(b64);
   const byteNums = new Array(byteChars.length);
   for (let i=0;i<byteChars.length;i++) byteNums[i]=byteChars.charCodeAt(i);
   return new Blob([new Uint8Array(byteNums)], { type: mime || 'application/octet-stream' });
+}
+async function tryFetchJSON(url){
+  try{
+    const r = await fetch(url, { credentials:'include' });
+    if (!r.ok) return { ok:false, status:r.status, url };
+    const ct = (r.headers.get('content-type')||'').toLowerCase();
+    if (!ct.includes('application/json')) return { ok:false, status:r.status, url, note:'non-json' };
+    const j = await r.json();
+    return { ok:true, status:r.status, url, json:j };
+  }catch(e){
+    return { ok:false, error:e.message, url };
+  }
+}
+async function fetchFirst(urls, maker){
+  let last;
+  for (const u of urls){
+    const res = await maker(u);
+    if (res.ok) return { ...res, chosen:u };
+    last = res;
+  }
+  return { ok:false, last };
+}
+
+/* ===================== Pipeline start ===================== */
+function getExecFromURL(){
+  const p = new URLSearchParams(location.search).get('execId');
+  return p || null;
+}
+function setExecInURL(id){
+  const u = new URL(location.href);
+  u.searchParams.set('execId', id);
+  history.replaceState(null, '', u.toString());
+  execChip.textContent = 'execId: ' + id;
 }
 
 async function startPipelineFromPending() {
@@ -195,42 +245,73 @@ async function startPipelineFromPending() {
   }
 
   const execId = extractExecId(data);
-  if (execId) {
-    const u = new URL(location.href); u.searchParams.set('execId', execId); history.replaceState(null, '', u.toString());
-    execChip.textContent = 'execId: '+execId;
-  } else {
-    setStatusBadge('Aguardando id de execução…');
-  }
+  if (execId) setExecInURL(execId); else setStatusBadge('Aguardando id de execução…');
   return execId;
 }
 
+/* ===================== Polling ===================== */
+let chosenStatusEndpoint = null;
+let chosenResultsEndpoint = null;
+
 async function pollByExecId(execId) {
   let delay = 900;
+  let stagnation = 0; // contagem de loops sem avanço, para acionar verificação por resultados
+  let lastPct = 0;
+
+  async function getStatus(){
+    if (chosenStatusEndpoint){
+      const res = await tryFetchJSON(chosenStatusEndpoint + '?execId=' + encodeURIComponent(execId));
+      if (res.ok) return res;
+      logDiag({retryStatusFrom:chosenStatusEndpoint, err:res.status || res.error});
+      chosenStatusEndpoint = null; // força fallback
+    }
+    const probe = await fetchFirst(STATUS_ENDPOINTS.map(b=>b+'?execId='+encodeURIComponent(execId)), tryFetchJSON);
+    if (probe.ok) { chosenStatusEndpoint = probe.chosen.replace(/\?.*$/,''); logDiag({usingStatus:chosenStatusEndpoint}); }
+    return probe;
+  }
+
+  async function getResults(){
+    if (chosenResultsEndpoint){
+      const res = await tryFetchJSON(chosenResultsEndpoint + '?execId=' + encodeURIComponent(execId));
+      if (res.ok) return res;
+      chosenResultsEndpoint = null;
+    }
+    const probe = await fetchFirst(RESULTS_ENDPOINTS.map(b=>b+'?execId='+encodeURIComponent(execId)), tryFetchJSON);
+    if (probe.ok) { chosenResultsEndpoint = probe.chosen.replace(/\?.*$/,''); logDiag({usingResults:chosenResultsEndpoint}); }
+    return probe;
+  }
+
   async function loop(){
     try {
-      const url = '/api/process/status?execId=' + encodeURIComponent(execId);
-      const r = await fetch(url, { credentials:'include' });
-      if (!r.ok) {
-        setStatusBadge('Status HTTP '+r.status);
-        logDiag('GET '+url+' -> HTTP '+r.status);
+      const st = await getStatus();
+      if (!st.ok) {
+        setStatusBadge('Sem status ('+(st.last?.status || st.last?.error || 'erro')+')');
+        logDiag({statusFail:st.last});
         fallbackPulse();
+        // plano B: tentar resultados mesmo sem status
+        const rr = await getResults();
+        if (rr.ok && resultadosSugeremPronto(rr.json)) {
+          return concluir(execId);
+        }
         delay = Math.min(delay*2, 5000);
         setTimeout(loop, delay); return;
       }
-      let s={};
-      try { s = await r.json(); } catch(e){ setStatusBadge('Status inválido', 'err'); logDiag('JSON inválido: '+e.message); }
 
+      const s = st.json || {};
       const estado = extractEstado(s);
       const pct    = extractPct(s);
       const msg    = extractMsg(s);
 
-      if (pct != null) progressBar.style.width = pct + '%';
+      if (pct != null) {
+        progressBar.style.width = pct + '%';
+        if (pct <= lastPct) stagnation++; else stagnation = 0;
+        lastPct = pct;
+      } else {
+        stagnation++;
+      }
       if (msg) logDiag({msg});
 
-      const isDone   = (estado||'').toUpperCase().includes('FINAL') || s.done === true || s.finished === true || s.success === true;
-      const isError  = (estado||'').toUpperCase().includes('ERRO') || (estado||'').toUpperCase().includes('ERROR') || s.error || s.failed;
-
-      if (isError) {
+      if (isErrorState(estado) || s.error || s.failed) {
         setStatusBadge('Erro na pipeline', 'err');
         document.getElementById('step5').textContent = 'Falha no processamento';
         document.getElementById('step5').className = 'text-red-600 font-semibold';
@@ -244,17 +325,21 @@ async function pollByExecId(execId) {
         if (i < stepIdx) markDone(i);
         else if (i === stepIdx) markActive(i);
       }
-      if (isDone) {
-        for (let i=0;i<steps.length;i++) markDone(i);
-        setStatusBadge('Concluído', 'ok');
-        const to = 'results.html?execId='+encodeURIComponent(execId);
-        verResultados.href = to; verResultados.classList.remove('hidden');
-        setTimeout(()=>location.href = to, 700);
-        return;
-      }
+
+      const done = isDoneState(estado) || s.done === true || s.finished === true || s.success === true || s.completed === true;
+      if (done) return concluir(execId);
 
       setStatusBadge(estado ? ('Status: '+estado) : 'Aguardando status…');
       delay = 900; // reset backoff em sucesso
+
+      // se está “parado” por tempo demais, tente verificar resultados
+      if (stagnation >= 4) { // ~ 4 ciclos sem mudança
+        const rr = await getResults();
+        if (rr.ok && resultadosSugeremPronto(rr.json)) {
+          return concluir(execId);
+        }
+      }
+
       setTimeout(loop, delay);
     } catch (e) {
       setStatusBadge('Erro de rede', 'err'); logDiag('Network: '+e.message);
@@ -263,19 +348,39 @@ async function pollByExecId(execId) {
       setTimeout(loop, delay);
     }
   }
+
+  function resultadosSugeremPronto(j){
+    if (!j) return false;
+    if (Array.isArray(j.arquivos) && j.arquivos.length) return true;
+    if (Array.isArray(j.tests) && j.tests.length) return true;
+    if (Array.isArray(j.testes) && j.testes.length) return true;
+    if (j.done === true || j.finished === true || j.success === true) return true;
+    if (typeof j.cobertura === 'number' || typeof j.cobertura === 'string') return true;
+    return false;
+  }
+
+  function concluir(id){
+    for (let i=0;i<steps.length;i++) markDone(i);
+    setStatusBadge('Concluído', 'ok');
+    const to = 'results.html?execId='+encodeURIComponent(id);
+    verResultados.href = to; verResultados.classList.remove('hidden');
+    setTimeout(()=>location.href = to, 600);
+  }
+
   loop();
 }
 
+/* ===================== Boot ===================== */
 btnRetry.addEventListener('click', async ()=>{
   actions.classList.add('hidden');
-  const id = new URLSearchParams(location.search).get('execId');
-  if (id) pollByExecId(id); else init(); // tenta tudo de novo
+  const id = getExecFromURL();
+  if (id) pollByExecId(id); else init();
 });
 
 async function init(){
   if (DEBUG) diag.classList.remove('hidden');
 
-  let execId = new URLSearchParams(location.search).get('execId');
+  let execId = getExecFromURL();
   if (execId) {
     execChip.textContent = 'execId: '+execId;
     setStatusBadge('Retomando…');
@@ -292,15 +397,6 @@ async function init(){
   }
 
   setStatusBadge('Aguardando tarefa…');
-  // Fallback opcional: tente buscar o último execId se seu backend expõe algo assim.
-  // try {
-  //   const r = await fetch('/api/process/status/latest', { credentials:'include' });
-  //   const j = await r.json();
-  //   const latest = extractExecId(j);
-  //   if (latest) { const u=new URL(location.href); u.searchParams.set('execId', latest); history.replaceState(null,'',u.toString()); execChip.textContent='execId: '+latest; pollByExecId(latest); return; }
-  // } catch (e) { logDiag('latest: '+e.message); }
-
-  // Sem execId e sem pendingJob -> habilita ações
   actions.classList.remove('hidden');
 }
 
