@@ -1,119 +1,94 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>Resultados • Gerador de Testes</title>
+<script src="https://cdn.tailwindcss.com"></script>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
 <style>
-:root{--bg:#0b0b10;--card:#12121a;--muted:#9596a8;--text:#e8e8f2;--cta:#7c5cff;--cta2:#9d8bff;--ok:#2ecc71;--warn:#f39c12;--err:#e74c3c;--chip:#1a1a24}
+:root{--bg:#0b0b10;--card:#12121a;--muted:#9aa0a6;--txt:#e8e8f2;--cta:#2563eb;--ok:#16a34a;--warn:#f59e0b;--err:#ef4444}
 *{box-sizing:border-box}
 html,body{height:100%}
-body{margin:0;background:radial-gradient(1200px 800px at 20% -10%,#1b1633 0%,transparent 55%),radial-gradient(900px 700px at 120% 10%,#10243e 0%,transparent 50%),var(--bg);color:var(--text);font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif}
-a{color:var(--cta)}
-.container{max-width:1160px;margin:0 auto;padding:28px}
-.header{display:flex;gap:14px;align-items:center;justify-content:space-between;margin-bottom:20px}
-.brand{display:flex;gap:12px;align-items:center}
-.logo{width:36px;height:36px;border-radius:10px;background:linear-gradient(135deg,var(--cta),var(--cta2));display:grid;place-items:center;font-weight:800;color:white;box-shadow:0 10px 22px rgba(124,92,255,.35)}
-.titulo{font-size:20px;font-weight:800;letter-spacing:.3px}
-.controles{display:flex;gap:10px;flex-wrap:wrap}
-.btn{appearance:none;border:0;border-radius:12px;padding:10px 14px;background:var(--chip);color:var(--text);font-weight:600;cursor:pointer;transition:transform .08s ease,opacity .2s ease}
-.btn:hover{transform:translateY(-1px)}
-.btn.cta{background:linear-gradient(135deg,var(--cta),var(--cta2));color:#fff}
-.grid{display:grid;grid-template-columns:1fr;gap:16px}
-@media(min-width:960px){.grid{grid-template-columns:1.2fr .8fr}}
-.card{background:linear-gradient(180deg,rgba(255,255,255,0.04),rgba(255,255,255,0.02));border:1px solid rgba(255,255,255,0.06);box-shadow:0 12px 30px rgba(0,0,0,.35),inset 0 0 0 1px rgba(255,255,255,0.02);backdrop-filter:blur(8px);border-radius:16px;padding:18px}
-.card h2{margin:0 0 12px 0;font-size:16px;font-weight:800;letter-spacing:.2px}
-.linha{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px;flex-wrap:wrap}
-.status{display:flex;align-items:center;gap:12px}
-.ponto{width:10px;height:10px;border-radius:50%;background:var(--warn);box-shadow:0 0 12px var(--warn)}
-.badges{display:flex;gap:8px;flex-wrap:wrap}
-.badge{background:var(--chip);padding:6px 10px;border-radius:999px;font-size:12px}
-.lista{display:flex;flex-direction:column;gap:10px;max-height:420px;overflow:auto;padding-right:4px}
-.item{display:flex;gap:12px;align-items:center;justify-content:space-between;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);padding:12px;border-radius:12px}
+body{margin:0;background:#0b0b10;color:var(--txt);font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif}
+a{color:#93c5fd}
+.card{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:16px}
+.btn{appearance:none;border:0;border-radius:12px;padding:10px 14px;background:rgba(255,255,255,.06);color:var(--txt);font-weight:600;cursor:pointer}
+.btn:hover{filter:brightness(1.08)}
+.btn-cta{background:linear-gradient(135deg,#2563eb,#3b82f6);color:#fff}
+.lista{display:flex;flex-direction:column;gap:10px;max-height:440px;overflow:auto}
+.item{display:flex;align-items:center;justify-content:space-between;gap:12px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.08);padding:12px;border-radius:12px}
 .item span{font-weight:600;word-break:break-all}
-.kpis{display:flex;gap:8px;flex-wrap:wrap}
-.kpi{background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);padding:10px 12px;border-radius:12px;display:flex;gap:10px;align-items:baseline}
-.kpi b{font-size:18px}
-.vazio{opacity:.75}
-.separador{height:1px;background:rgba(255,255,255,0.08);margin:12px 0}
-.explicacao{background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);padding:12px;border-radius:12px}
-.explicacao h3{margin:0 0 6px 0;font-size:14px}
-.embed{width:100%;min-height:280px;background:rgba(255,255,255,0.02);border:1px dashed rgba(255,255,255,0.12);border-radius:12px;display:grid;place-items:center;overflow:hidden}
-.iframe{width:100%;height:420px;border:0}
-.rodape{opacity:.65;font-size:12px;margin-top:14px}
+.etiqueta{background:rgba(255,255,255,.06);padding:6px 10px;border-radius:999px;font-size:12px}
+.ponto{width:10px;height:10px;border-radius:999px}
+.embed{width:100%;min-height:280px;background:rgba(255,255,255,.02);border:1px dashed rgba(255,255,255,.12);border-radius:12px;display:grid;place-items:center;overflow:hidden}
+.ifr{width:100%;height:420px;border:0}
 </style>
 </head>
 <body>
-<div class="container">
-    <div class="header">
-        <div class="brand">
-            <div class="logo">GT</div>
-            <div class="titulo">Resultados do Processamento</div>
+<div class="max-w-6xl mx-auto px-4 py-6">
+  <div class="flex items-center justify-between mb-4">
+    <div class="flex items-center gap-3">
+      <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-blue-500 to-blue-300 grid place-items-center font-extrabold">GT</div>
+      <div class="text-lg font-extrabold">Resultados do Processamento</div>
+    </div>
+    <div class="flex gap-2">
+      <button id="botaoRecarregar" class="btn">Recarregar</button>
+      <a href="index.html" class="btn">Nova análise</a>
+      <a id="atalhoLoading" href="loading.html" class="btn btn-cta">Ver loading</a>
+    </div>
+  </div>
+
+  <div class="grid grid-cols-1 gap-4 md:grid-cols-3">
+    <div class="card p-4 md:col-span-2">
+      <div class="flex items-center justify-between flex-wrap gap-3 mb-3">
+        <div class="flex items-center gap-2">
+          <div id="bolinha" class="ponto" style="background:var(--warn);box-shadow:0 0 10px var(--warn)"></div>
+          <div id="textoStatus" class="text-sm text-gray-300">Atualizando…</div>
         </div>
-        <div class="controles">
-            <button id="btnRecarregar" class="btn">Recarregar</button>
-            <a id="btnVoltar" class="btn" href="index.html">Nova análise</a>
-            <a id="btnLoading" class="btn cta" href="loading.html">Ver loading</a>
+        <div class="flex gap-2 flex-wrap">
+          <div id="etqExec" class="etiqueta">execId: —</div>
+          <div id="etqTempo" class="etiqueta">—</div>
         </div>
+      </div>
+      <div class="flex gap-2 flex-wrap mb-4">
+        <div class="etiqueta"><span class="opacity-75 mr-1">Testes</span><b id="kpiTestes">0</b></div>
+        <div class="etiqueta"><span class="opacity-75 mr-1">Arquivos</span><b id="kpiArquivos">0</b></div>
+        <div class="etiqueta"><span class="opacity-75 mr-1">Cobertura</span><b id="kpiCobertura">—</b></div>
+      </div>
+      <h2 class="font-bold mb-2">Arquivos de Teste (entrada-usuário)</h2>
+      <div id="listaArquivos" class="lista text-gray-300"></div>
     </div>
 
-    <div class="grid">
-        <div class="card">
-            <div class="linha">
-                <div class="status">
-                    <div class="ponto" id="ponto"></div>
-                    <div id="textoStatus">Atualizando...</div>
-                </div>
-                <div class="badges">
-                    <div class="badge" id="badgeExec">execId: —</div>
-                    <div class="badge" id="badgeTempo">—</div>
-                </div>
-            </div>
-            <div class="kpis">
-                <div class="kpi"><span>Testes</span><b id="kpiTestes">0</b></div>
-                <div class="kpi"><span>Arquivos</span><b id="kpiArquivos">0</b></div>
-                <div class="kpi"><span>Cobertura</span><b id="kpiCobertura">—</b></div>
-            </div>
-            <div class="separador"></div>
-            <h2>Arquivos de Teste (entrada-usuário)</h2>
-            <div id="listaArquivos" class="lista vazio"></div>
-        </div>
-
-        <div class="card">
-            <h2>Dashboards Codecov</h2>
-            <div id="areaCodecov" class="lista">
-                <div class="embed" id="placeholderCodecov">Aguardando dados do Codecov</div>
-            </div>
-            <div class="rodape">É possível exigir autenticação do Codecov para gráficos privados.</div>
-        </div>
+    <div class="card p-4">
+      <h2 class="font-bold mb-3">Dashboards Codecov</h2>
+      <div id="areaCodecov" class="lista">
+        <div class="embed text-gray-400">Aguardando dados do Codecov</div>
+      </div>
+      <div class="text-xs text-gray-400 mt-3">Para repositórios privados, os embeds podem exigir autenticação no Codecov.</div>
     </div>
+  </div>
 
-    <div class="card" style="margin-top:16px">
-        <h2>Explicações</h2>
-        <div id="listaExplicacoes" class="lista vazio"></div>
-    </div>
+  <div class="card p-4 mt-4">
+    <h2 class="font-bold mb-2">Explicações</h2>
+    <div id="listaExplicacoes" class="lista text-gray-200"></div>
+  </div>
 </div>
 
 <script>
-function qs(n){return new URLSearchParams(location.search).get(n)||""}
-function el(n){return document.getElementById(n)}
-function txt(n,v){el(n).textContent=v}
-function chip(elem,ok){elem.style.background=ok?"#13251a":"#2a2413";elem.style.borderColor=ok?"#214a33":"#4a3d21"}
-function formatoTempo(ms){if(!ms||ms<1000)return ms?ms+" ms":"—";let s=Math.floor(ms/1000);let m=Math.floor(s/60);s=s%60;let h=Math.floor(m/60);m=m%60;return (h?h+"h ":"")+(m?m+"m ":"")+(s?s+"s":"")}
-function segura(v){return v==null?"":String(v)}
-function urlApiResultados(exec){return "/api/resultados"+(exec?"?execId="+encodeURIComponent(exec):"")}
-function urlApiStatus(exec){return "/api/process/status"+(exec?"?execId="+encodeURIComponent(exec):"")}
-function criarItemArquivo(a){let d=document.createElement("div");d.className="item";let nome=document.createElement("span");nome.textContent=segura(a.nome||a.arquivo||"arquivo.java");let acoes=document.createElement("div");acoes.style.display="flex";acoes.style.gap="8px";let ver=document.createElement("a");ver.className="btn";ver.textContent="Baixar";ver.href=a.link||a.download||"#";ver.target="_blank";let abrir=document.createElement("a");abrir.className="btn";abrir.textContent="Abrir";abrir.href=a.preview||a.link||"#";abrir.target="_blank";acoes.appendChild(ver);acoes.appendChild(abrir);d.appendChild(nome);d.appendChild(acoes);return d}
-function criarExplicacao(e){let d=document.createElement("div");d.className="explicacao";let h=document.createElement("h3");h.textContent=segura(e.titulo||e.arquivo||"Explicação");let p=document.createElement("div");p.innerText=segura(e.texto||e.descricao||"");d.appendChild(h);d.appendChild(p);return d}
-function limpar(c){while(c.firstChild)c.removeChild(c.firstChild)}
-async function carregar(){let exec=qs("execId");txt("badgeExec","execId: "+(exec||"—"));el("ponto").style.background="#f39c12";el("ponto").style.boxShadow="0 0 12px #f39c12";txt("textoStatus","Buscando resultados");try{let r=await fetch(urlApiResultados(exec),{credentials:"include"});if(!r.ok)throw new Error("falha");let j=await r.json();let ar=j.arquivos||j.tests||j.testes||[];let ex=j.explicacoes||j.explanacoes||[];let cc=j.codecov||{};txt("kpiArquivos",ar.length);txt("kpiTestes",j.totalTestes||j.testsCount||ar.length);txt("kpiCobertura",j.cobertura||cc.cobertura||"—");let la=el("listaArquivos");limpar(la);if(ar.length){la.classList.remove("vazio");ar.forEach(a=>la.appendChild(criarItemArquivo(a)))}else{la.classList.add("vazio");la.textContent="Nenhum arquivo localizado em entrada-usuário"}let le=el("listaExplicacoes");limpar(le);if(ex.length){le.classList.remove("vazio");ex.forEach(e=>le.appendChild(criarExplicacao(e)))}else{le.classList.add("vazio");le.textContent="Sem explicações disponíveis"}let ac=el("areaCodecov");limpar(ac);let emb=[];if(cc.badge)emb.push({tipo:"img",src:cc.badge});if(cc.imagens)cc.imagens.forEach(u=>emb.push({tipo:"img",src:u}));if(cc.iframes)cc.iframes.forEach(u=>emb.push({tipo:"iframe",src:u}));if(cc.coverageSvg)emb.push({tipo:"img",src:cc.coverageSvg});if(cc.sunburst)emb.push({tipo:"iframe",src:cc.sunburst});if(emb.length==0){let ph=document.createElement("div");ph.className="embed";ph.textContent="Sem dados do Codecov";ac.appendChild(ph)}else{emb.forEach(e=>{if(e.tipo==="img"){let w=document.createElement("div");w.className="embed";let i=document.createElement("img");i.src=e.src;i.alt="Codecov";i.style.maxWidth="100%";i.style.height="auto";w.appendChild(i);ac.appendChild(w)}else{let f=document.createElement("iframe");f.className="iframe";f.loading="lazy";f.src=e.src;ac.appendChild(f)}})}
-el("ponto").style.background="#2ecc71";el("ponto").style.boxShadow="0 0 12px #2ecc71";txt("textoStatus","Finalizado")}
-catch(e){txt("textoStatus","Erro ao carregar resultados");el("ponto").style.background="#e74c3c";el("ponto").style.boxShadow="0 0 12px #e74c3c"}}
-async function verificar(){let exec=qs("execId");try{let r=await fetch(urlApiStatus(exec),{credentials:"include"});if(!r.ok)throw new Error("falha");let j=await r.json();txt("badgeTempo",formatoTempo(j.duracaoMs||j.tempo||0));if(j.estado==="FINALIZADO"||j.done){await carregar()}else{txt("textoStatus","Processando");el("ponto").style.background="#f39c12";el("ponto").style.boxShadow="0 0 12px #f39c12"}}
-catch(e){}}
-el("btnRecarregar").addEventListener("click",carregar)
-document.addEventListener("DOMContentLoaded",async()=>{await verificar();await carregar()})
+function pegar(id){return document.getElementById(id)}
+function parametro(nome){return new URLSearchParams(location.search).get(nome)||""}
+function escrever(id,valor){pegar(id).textContent=valor}
+function tempoFmt(ms){if(!ms||ms<1)return"—";let s=Math.floor(ms/1000);let m=Math.floor(s/60);s=s%60;let h=Math.floor(m/60);m=m%60;let r=[];if(h)r.push(h+"h");if(m)r.push(m+"m");if(s)r.push(s+"s");return r.join(" ")||ms+" ms"}
+function urlStatus(exec){return "/api/process/status"+(exec?"?execId="+encodeURIComponent(exec):"")}
+function urlResultados(exec){return "/api/resultados"+(exec?"?execId="+encodeURIComponent(exec):"")}
+function limpar(el){while(el.firstChild)el.removeChild(el.firstChild)}
+function criarItemArquivo(a){let d=document.createElement("div");d.className="item";let n=document.createElement("span");n.textContent=String(a.nome||a.arquivo||"arquivo.java");let ac=document.createElement("div");ac.className="flex gap-2";let b1=document.createElement("a");b1.className="btn";b1.textContent="Baixar";b1.href=a.link||a.download||"#";b1.target="_blank";let b2=document.createElement("a");b2.className="btn";b2.textContent="Abrir";b2.href=a.preview||a.link||"#";b2.target="_blank";ac.appendChild(b1);ac.appendChild(b2);d.appendChild(n);d.appendChild(ac);return d}
+function criarExplicacao(e){let d=document.createElement("div");d.className="p-3 rounded-lg border border-white/10 bg-white/5";let h=document.createElement("div");h.className="font-semibold mb-1";h.textContent=String(e.titulo||e.arquivo||"Explicação");let p=document.createElement("div");p.className="text-sm opacity-90";p.innerText=String(e.texto||e.descricao||"");d.appendChild(h);d.appendChild(p);return d}
+async function carregarResultados(){let exec=parametro("execId");escrever("etqExec","execId: "+(exec||"—"));pegar("bolinha").style.background="var(--warn)";pegar("bolinha").style.boxShadow="0 0 10px var(--warn)";escrever("textoStatus","Buscando resultados");try{let r=await fetch(urlResultados(exec),{credentials:"include"});if(!r.ok)throw new Error("falha");let j=await r.json();let ar=j.arquivos||j.tests||j.testes||[];let ex=j.explicacoes||j.explanacoes||[];let cc=j.codecov||{};escrever("kpiArquivos",ar.length);escrever("kpiTestes",j.totalTestes||j.testsCount||ar.length);escrever("kpiCobertura",j.cobertura||cc.cobertura||"—");let la=pegar("listaArquivos");limpar(la);if(ar.length){ar.forEach(a=>la.appendChild(criarItemArquivo(a)))}else{la.appendChild(Object.assign(document.createElement("div"),{className:"text-gray-400",textContent:"Nenhum arquivo localizado em entrada-usuário"}))}let le=pegar("listaExplicacoes");limpar(le);if(ex.length){ex.forEach(e=>le.appendChild(criarExplicacao(e)))}else{le.appendChild(Object.assign(document.createElement("div"),{className:"text-gray-400",textContent:"Sem explicações disponíveis"}))}let ac=pegar("areaCodecov");limpar(ac);let em=[];if(cc.badge)em.push({t:"img",u:cc.badge});if(cc.imagens)cc.imagens.forEach(u=>em.push({t:"img",u:u}));if(cc.iframes)cc.iframes.forEach(u=>em.push({t:"ifr",u:u}));if(cc.coverageSvg)em.push({t:"img",u:cc.coverageSvg});if(cc.sunburst)em.push({t:"ifr",u:cc.sunburst});if(!em.length){ac.appendChild(Object.assign(document.createElement("div"),{className:"embed text-gray-400",textContent:"Sem dados do Codecov"}))}else{em.forEach(e=>{if(e.t==="img"){let w=document.createElement("div");w.className="embed";let i=document.createElement("img");i.src=e.u;i.alt="Codecov";i.style.maxWidth="100%";i.style.height="auto";w.appendChild(i);ac.appendChild(w)}else{let f=document.createElement("iframe");f.className="ifr";f.loading="lazy";f.src=e.u;ac.appendChild(f)}})}pegar("bolinha").style.background="var(--ok)";pegar("bolinha").style.boxShadow="0 0 10px var(--ok)";escrever("textoStatus","Finalizado")}catch(e){escrever("textoStatus","Erro ao carregar resultados");pegar("bolinha").style.background="var(--err)";pegar("bolinha").style.boxShadow="0 0 10px var(--err)"}}
+async function verificarStatus(){let exec=parametro("execId");try{let r=await fetch(urlStatus(exec),{credentials:"include"});if(!r.ok)throw new Error("falha");let j=await r.json();escrever("etqTempo",tempoFmt(j.duracaoMs||j.tempo||0));if((j.estado||"").toUpperCase()==="FINALIZADO"||j.done){await carregarResultados()}else{escrever("textoStatus","Processando");pegar("bolinha").style.background="var(--warn)";pegar("bolinha").style.boxShadow="0 0 10px var(--warn)"}}catch(e){}}
+pegar("botaoRecarregar").addEventListener("click",carregarResultados)
+document.addEventListener("DOMContentLoaded",async()=>{let exec=parametro("execId");let atalho=pegar("atalhoLoading");if(exec)atalho.href="loading.html?execId="+encodeURIComponent(exec);await verificarStatus();await carregarResultados()})
 </script>
 </body>
 </html>

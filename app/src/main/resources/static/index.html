@@ -335,7 +335,6 @@
 </head>
 <body class="bg-gray-50">
 <div id="app" class="min-h-screen flex flex-col">
-  <!-- Navbar -->
   <nav class="bg-blue-600 text-white shadow-lg">
     <div class="container mx-auto px-4 py-3 flex justify-between items-center">
       <div class="flex items-center space-x-2">
@@ -353,7 +352,6 @@
     </div>
   </nav>
 
-  <!-- Main -->
   <main class="flex-grow container mx-auto px-4 py-8">
     <section id="upload-section" class="mb-8">
       <div class="text-center mb-8">
@@ -364,7 +362,6 @@
       </div>
 
       <div class="grid md:grid-cols-3 gap-6">
-        <!-- Colar código -->
         <div class="bg-white rounded-lg shadow-md overflow-hidden" data-aos="fade-up">
           <div class="bg-blue-50 px-4 py-3 border-b border-blue-100">
             <h3 class="font-semibold text-blue-700 flex items-center">
@@ -383,7 +380,6 @@
           </div>
         </div>
 
-        <!-- Upload .java -->
         <div class="bg-white rounded-lg shadow-md overflow-hidden" data-aos="fade-up" data-aos-delay="100">
           <div class="bg-blue-50 px-4 py-3 border-b border-blue-100">
             <h3 class="font-semibold text-blue-700 flex items-center">
@@ -409,7 +405,6 @@
           </div>
         </div>
 
-        <!-- Upload .zip -->
         <div class="bg-white rounded-lg shadow-md overflow-hidden" data-aos="fade-up" data-aos-delay="200">
           <div class="bg-blue-50 px-4 py-3 border-b border-blue-100">
             <h3 class="font-semibold text-blue-700 flex items-center">
@@ -437,10 +432,8 @@
       </div>
     </section>
 
-    <!-- Status -->
     <div id="status" class="hidden rounded-md p-3 text-sm"></div>
 
-    <!-- Resultado -->
     <section class="bg-white rounded-lg shadow-md p-4">
       <h2 class="text-lg font-semibold mb-2 flex items-center text-gray-800">
         <i data-feather="activity" class="mr-2"></i>
@@ -450,7 +443,6 @@
     </section>
   </main>
 
-  <!-- Footer -->
   <footer class="bg-gray-800 text-white py-6">
     <div class="container mx-auto px-4 text-center">
       <p>&copy; 2023 CodeAnalyzer. Todos os direitos reservados.</p>
@@ -458,7 +450,6 @@
   </footer>
 </div>
 
-<!-- Modal de carregamento -->
 <div id="loading-modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 hidden">
   <div class="bg-white rounded-lg p-6 max-w-md w-full mx-4" data-aos="zoom-in">
     <div class="text-center">
@@ -479,45 +470,25 @@
   AOS.init();
   feather.replace();
 
-  // ---------- util ----------
   const statusDiv = document.getElementById('status');
   const resultPre = document.getElementById('result');
   const loadingModal = document.getElementById('loading-modal');
   const progressBar = document.getElementById('progress-bar');
   const progressText = document.getElementById('progress-text');
 
-  function showStatus(msg, type='success') {
-    statusDiv.classList.remove('hidden', 'bg-green-100','text-green-800','border','border-green-200','bg-red-100','text-red-800','border-red-200');
-    if (type === 'success') {
-      statusDiv.classList.add('bg-green-100','text-green-800','border','border-green-200');
-    } else {
-      statusDiv.classList.add('bg-red-100','text-red-800','border','border-red-200');
-    }
+  function mostrarStatus(msg, tipo='success') {
+    statusDiv.classList.remove('hidden','bg-green-100','text-green-800','border','border-green-200','bg-red-100','text-red-800','border-red-200');
+    if (tipo==='success') statusDiv.classList.add('bg-green-100','text-green-800','border','border-green-200');
+    else statusDiv.classList.add('bg-red-100','text-red-800','border','border-red-200');
     statusDiv.textContent = msg;
   }
+  function mostrarResultado(obj) {
+    try { resultPre.textContent = JSON.stringify(obj,null,2); } catch(e){ resultPre.textContent = String(obj ?? ''); }
+  }
+  function iniciarLoading(txt){ loadingModal.classList.remove('hidden'); progressBar.style.width='0%'; progressText.textContent=txt||'Iniciando…'; }
+  function progresso(p,t){ progressBar.style.width=`${Math.max(0,Math.min(100,p))}%`; if(t) progressText.textContent=t; }
+  function pararLoading(){ loadingModal.classList.add('hidden'); }
 
-  function showResultJson(obj) {
-    try {
-      resultPre.textContent = JSON.stringify(obj, null, 2);
-    } catch(e) {
-      resultPre.textContent = String(obj ?? '');
-    }
-  }
-
-  function startLoading(text) {
-    loadingModal.classList.remove('hidden');
-    progressBar.style.width = '0%';
-    progressText.textContent = text || 'Iniciando…';
-  }
-  function setProgress(pct, text) {
-    progressBar.style.width = `${Math.max(0, Math.min(100, pct))}%`;
-    if (text) progressText.textContent = text;
-  }
-  function stopLoading() {
-    loadingModal.classList.add('hidden');
-  }
-
-  // ---------- elementos layout ----------
   const fileUpload = document.getElementById('file-upload');
   const fileDropzone = document.getElementById('file-dropzone');
   const fileInfo = document.getElementById('file-info');
@@ -532,166 +503,82 @@
   const zipSize = document.getElementById('zip-size');
   const submitZipBtn = document.getElementById('submit-zip');
 
-  // Eventos drag & drop
-  ['dragenter','dragover'].forEach(ev => {
-    [fileDropzone, zipDropzone].forEach(zone => zone.addEventListener(ev, e => {
-      e.preventDefault(); zone.classList.add('active');
-    }));
+  ['dragenter','dragover'].forEach(ev=>{
+    [fileDropzone,zipDropzone].forEach(zone=>zone.addEventListener(ev,e=>{e.preventDefault();zone.classList.add('active');}));
   });
-  ['dragleave','drop'].forEach(ev => {
-    [fileDropzone, zipDropzone].forEach(zone => zone.addEventListener(ev, e => {
-      e.preventDefault(); zone.classList.remove('active');
-    }));
+  ['dragleave','drop'].forEach(ev=>{
+    [fileDropzone,zipDropzone].forEach(zone=>zone.addEventListener(ev,e=>{e.preventDefault();zone.classList.remove('active');}));
   });
 
-  fileDropzone.addEventListener('drop', e => {
-    const f = e.dataTransfer.files?.[0];
-    if (f && f.name.endsWith('.java')) handleFileSelection(f, 'java');
+  fileDropzone.addEventListener('drop', e=>{
+    const f=e.dataTransfer.files?.[0];
+    if(f&&f.name.endsWith('.java')) selecionarArquivo(f,'java');
   });
-  zipDropzone.addEventListener('drop', e => {
-    const f = e.dataTransfer.files?.[0];
-    if (f && f.name.endsWith('.zip')) handleFileSelection(f, 'zip');
+  zipDropzone.addEventListener('drop', e=>{
+    const f=e.dataTransfer.files?.[0];
+    if(f&&f.name.endsWith('.zip')) selecionarArquivo(f,'zip');
   });
-  fileUpload.addEventListener('change', () => {
-    if (fileUpload.files.length) handleFileSelection(fileUpload.files[0], 'java');
-  });
-  zipUpload.addEventListener('change', () => {
-    if (zipUpload.files.length) handleFileSelection(zipUpload.files[0], 'zip');
-  });
+  fileUpload.addEventListener('change', ()=>{ if(fileUpload.files.length) selecionarArquivo(fileUpload.files[0],'java'); });
+  zipUpload.addEventListener('change', ()=>{ if(zipUpload.files.length) selecionarArquivo(zipUpload.files[0],'zip'); });
 
-  function handleFileSelection(file, kind) {
-    const isJava = kind === 'java';
-    const info = isJava ? fileInfo : zipInfo;
-    const nameEl = isJava ? fileName : zipName;
-    const sizeEl = isJava ? fileSize : zipSize;
-    const btn = isJava ? submitFileBtn : submitZipBtn;
-
-    nameEl.textContent = file.name;
-    sizeEl.textContent = `(${(file.size/1024).toFixed(2)} KB)`;
+  function selecionarArquivo(arq,tipo){
+    const java = tipo==='java';
+    const info = java?fileInfo:zipInfo;
+    const nome = java?fileName:zipName;
+    const tam = java?fileSize:zipSize;
+    const btn = java?submitFileBtn:submitZipBtn;
+    nome.textContent = arq.name;
+    tam.textContent = `(${(arq.size/1024).toFixed(2)} KB)`;
     info.classList.remove('hidden');
     btn.classList.remove('hidden');
-
-    if (isJava) window.selectedJavaFile = file;
-    else window.selectedZipFile = file;
+    if(java) window.arquivoJavaSelecionado = arq; else window.zipSelecionado = arq;
   }
 
-  // ---------- lógica preservada das chamadas ----------
-  async function submitCodigo(code) {
-    // 1) salva no GitHub (/entrada/codigo)
-    const saveResp = await fetch('/entrada/codigo', {
-      method: 'POST',
-      headers: {'Content-Type':'application/x-www-form-urlencoded'},
-      body: 'codigo=' + encodeURIComponent(code)
+  function arquivoParaBase64(arquivo){
+    return new Promise((resolve,reject)=>{
+      const r=new FileReader();
+      r.onload=()=>resolve(r.result.split(',')[1]);
+      r.onerror=reject;
+      r.readAsDataURL(arquivo);
     });
-    const saveText = await saveResp.text();
-    showStatus(saveText, saveResp.ok ? 'success' : 'error');
-    // 2) processa (/api/codigo)
-    const procResp = await fetch('/api/codigo', {
-      method: 'POST',
-      headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ codigo: code })
-    });
-    const data = await procResp.json();
-    showResultJson(data);
-    return procResp.ok;
   }
 
-  async function submitArquivo(file) {
-    // 1) salva no GitHub (/entrada/arquivo)
-    const fd1 = new FormData();
-    fd1.append('arquivo', file);
-    const saveResp = await fetch('/entrada/arquivo', { method:'POST', body: fd1 });
-    const saveText = await saveResp.text();
-    showStatus(saveText, saveResp.ok ? 'success' : 'error');
-    // 2) processa (/api/arquivo)
-    const fd2 = new FormData();
-    fd2.append('file', file);
-    const procResp = await fetch('/api/arquivo', { method:'POST', body: fd2 });
-    const data = await procResp.json();
-    showResultJson(data);
-    return procResp.ok;
+  async function enviarParaLoading(tipo,payload){
+    sessionStorage.setItem('pendingJob', JSON.stringify({ tipo, quando: Date.now(), payload }));
+    const ts = Date.now();
+    window.location.href = `loading.html?startedAt=${ts}`;
   }
 
-  async function submitZip(file) {
-    // 1) salva no GitHub (/entrada/projeto)
-    const fd1 = new FormData();
-    fd1.append('projetoZip', file);
-    const saveResp = await fetch('/entrada/projeto', { method:'POST', body: fd1 });
-    const saveText = await saveResp.text();
-    showStatus(saveText, saveResp.ok ? 'success' : 'error');
-    // 2) processa (/api/projeto)
-    const fd2 = new FormData();
-    fd2.append('file', file);
-    const procResp = await fetch('/api/projeto', { method:'POST', body: fd2 });
-    const data = await procResp.json();
-    showResultJson(data);
-    return procResp.ok;
-  }
-
-  // ---------- handlers dos botões ----------
-  document.getElementById('submit-code').addEventListener('click', async () => {
-    const code = (document.getElementById('code-input').value || '').trim();
-    if (!code) { showStatus('Por favor, insira algum código Java.', 'error'); return; }
-
-    startLoading('Enviando e analisando código…'); setProgress(20,'Salvando código…');
-    try {
-      const ok = await submitCodigo(code);
-      setProgress(100,'Concluído!');
-    } catch (e) {
-      showStatus('Erro ao processar código: ' + e.message, 'error');
-    } finally { setTimeout(stopLoading, 400); }
+  document.getElementById('submit-code').addEventListener('click', async ()=>{
+    const codigo=(document.getElementById('code-input').value||'').trim();
+    if(!codigo){ mostrarStatus('Por favor, insira algum código Java.','error'); return; }
+    iniciarLoading('Iniciando pipeline…'); progresso(15,'Preparando envio…');
+    try{
+      await enviarParaLoading('codigo',{ codigo });
+    } finally { setTimeout(pararLoading,200); }
   });
 
-  submitFileBtn.addEventListener('click', async () => {
-    const f = window.selectedJavaFile;
-    if (!f) { showStatus('Selecione um arquivo .java.', 'error'); return; }
-    startLoading('Enviando e analisando arquivo…'); setProgress(20,'Salvando arquivo…');
-    try {
-      const ok = await submitArquivo(f);
-      setProgress(100,'Concluído!');
-    } catch (e) {
-      showStatus('Erro ao processar arquivo: ' + e.message, 'error');
-    } finally { setTimeout(stopLoading, 400); }
+  submitFileBtn.addEventListener('click', async ()=>{
+    const f=window.arquivoJavaSelecionado;
+    if(!f){ mostrarStatus('Selecione um arquivo .java.','error'); return; }
+    iniciarLoading('Iniciando pipeline…'); progresso(15,'Preparando envio…');
+    try{
+      const b64=await arquivoParaBase64(f);
+      await enviarParaLoading('arquivo',{ nome:f.name, mime:f.type||'text/x-java', base64:b64 });
+    } finally { setTimeout(pararLoading,200); }
   });
 
-  submitZipBtn.addEventListener('click', async () => {
-    const f = window.selectedZipFile;
-    if (!f) { showStatus('Selecione um arquivo .zip.', 'error'); return; }
-    startLoading('Enviando e analisando projeto…'); setProgress(20,'Salvando ZIP…');
-    try {
-      const ok = await submitZip(f);
-      setProgress(100,'Concluído!');
-    } catch (e) {
-      showStatus('Erro ao processar projeto: ' + e.message, 'error');
-    } finally { setTimeout(stopLoading, 400); }
+  submitZipBtn.addEventListener('click', async ()=>{
+    const f=window.zipSelecionado;
+    if(!f){ mostrarStatus('Selecione um arquivo .zip.','error'); return; }
+    iniciarLoading('Iniciando pipeline…'); progresso(15,'Preparando envio…');
+    try{
+      const b64=await arquivoParaBase64(f);
+      await enviarParaLoading('zip',{ nome:f.name, mime:f.type||'application/zip', base64:b64 });
+    } finally { setTimeout(pararLoading,200); }
   });
 </script>
-
-<script>
-// --- Redireciona automaticamente para loading.html quando qualquer fetch JSON retornar execId ---
-(function(){
-  const _fetch = window.fetch;
-  window.fetch = async function(...args){
-    const resp = await _fetch.apply(this, args);
-    try {
-      const clone = resp.clone();
-      const ct = (clone.headers.get('content-type')||'').toLowerCase();
-      if (ct.includes('application/json')){
-        const data = await clone.json();
-        const execId = data && (data.execId || data.id || data.exec || data.executionId || (data.meta && data.meta.execId));
-        if (execId) {
-          // Evita loop de redirecionamento
-          if (!/loading\.html/i.test(location.pathname)) {
-            location.href = 'loading.html?execId=' + encodeURIComponent(execId);
-          }
-        }
-      }
-    } catch(_) {}
-    return resp;
-  };
-})();
-</script>
-
 </body>
 </html>
+
 

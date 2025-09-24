@@ -1,20 +1,23 @@
-import java.util.ArrayList;
-import java.util.List;
 import java.util.Random;
+import java.util.Scanner;
 
-public class SorteioNomes {
+public class JogoDados {
     public static void main(String[] args) {
-        List<String> nomes = new ArrayList<>();
-        nomes.add("Ana");
-        nomes.add("Carlos");
-        nomes.add("Maria");
-        nomes.add("João");
-        nomes.add("Pedro");
-        nomes.add("Julia");
-        
+        Scanner scanner = new Scanner(System.in);
         Random random = new Random();
-        String nomeSorteado = nomes.get(random.nextInt(nomes.size()));
         
-        System.out.println("Nome sorteado: " + nomeSorteado);
+        System.out.println("Jogo de Dados - Quantos dados quer lançar?");
+        int quantidade = scanner.nextInt();
+        
+        int total = 0;
+        System.out.println("Resultados:");
+        for (int i = 0; i < quantidade; i++) {
+            int dado = random.nextInt(6) + 1;
+            System.out.println("Dado " + (i+1) + ": " + dado);
+            total += dado;
+        }
+        
+        System.out.println("Total: " + total);
+        scanner.close();
     }
 }
