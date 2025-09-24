@@ -6,206 +6,305 @@
   <title>Processando…</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.jsdelivr.net/npm/feather-icons/dist/feather.min.js"></script>
+  <style>
+    .pulse { animation: pulse 1.6s ease-in-out infinite }
+    @keyframes pulse { 0%{opacity:.45} 50%{opacity:1} 100%{opacity:.45} }
+  </style>
 </head>
 <body class="min-h-screen bg-gray-50 flex items-center justify-center">
-  <div class="w-full max-w-lg mx-4">
-    <div class="bg-white shadow rounded-xl p-6">
+  <div class="w-full max-w-2xl mx-4">
+    <div class="bg-white shadow rounded-2xl p-6">
       <div class="flex items-center justify-center mb-4">
         <i data-feather="loader" class="w-10 h-10 animate-spin text-blue-600"></i>
       </div>
       <h1 class="text-xl font-semibold text-gray-800 text-center mb-2">Processando…</h1>
-      <p class="text-center text-gray-500 mb-6">Estamos executando a pipeline. Você será redirecionado aos resultados quando terminar.</p>
+      <p id="headline" class="text-center text-gray-500 mb-6">Estamos executando a pipeline.</p>
 
-      <!-- barra de progresso -->
-      <div class="w-full bg-gray-200 rounded-full h-2.5 mb-6">
+      <div class="w-full bg-gray-200 rounded-full h-2.5 mb-4 overflow-hidden">
         <div id="progressBar" class="bg-blue-600 h-2.5 rounded-full transition-all" style="width: 8%"></div>
       </div>
 
-      <!-- passos -->
-      <ul class="space-y-2 text-sm">
-        <li id="step1" class="text-gray-400">Analisando estrutura do código…</li>
-        <li id="step2" class="text-gray-400">Executando análise estática…</li>
-        <li id="step3" class="text-gray-400">Gerando casos de teste…</li>
+      <ul class="grid grid-cols-1 gap-2 text-sm mb-4">
+        <li id="step1" class="text-gray-400">Preparando envio…</li>
+        <li id="step2" class="text-gray-400">Análise estática…</li>
+        <li id="step3" class="text-gray-400">Gerando testes…</li>
         <li id="step4" class="text-gray-400">Calculando cobertura…</li>
         <li id="step5" class="text-gray-400">Finalizando relatórios…</li>
       </ul>
 
-      <div id="msg" class="mt-4 text-center text-xs text-gray-400"></div>
+      <div class="flex items-center justify-between text-xs text-gray-500">
+        <div id="statusChip" class="px-2 py-1 rounded bg-gray-100 text-gray-700">Aguardando…</div>
+        <div id="execChip" class="px-2 py-1 rounded bg-gray-100 text-gray-700">execId: —</div>
+      </div>
+
+      <div id="diag" class="mt-4 hidden">
+        <div class="text-xs font-semibold text-gray-700 mb-1">Diagnóstico</div>
+        <pre id="diagPre" class="text-xs bg-gray-100 rounded p-2 overflow-auto max-h-40"></pre>
+      </div>
+
+      <div id="actions" class="mt-4 hidden">
+        <div class="flex gap-2 justify-end">
+          <a id="btnRetry" class="px-3 py-2 rounded bg-blue-600 text-white text-sm cursor-pointer">Tentar novamente</a>
+          <a href="index.html" class="px-3 py-2 rounded bg-gray-200 text-gray-800 text-sm">Voltar</a>
+        </div>
+      </div>
     </div>
 
-    <div class="text-center mt-4">
-      <a href="index.html" class="text-blue-600 text-sm hover:underline">Cancelar e voltar</a>
+    <div class="text-center mt-4 text-sm">
+      <a id="verResultados" href="#" class="text-blue-600 hover:underline hidden">Ir para resultados</a>
     </div>
   </div>
 
 <script>
-  feather.replace();
+feather.replace();
 
-  // ---------- helpers visuais ----------
-  const progressBar = document.getElementById('progressBar');
-  const steps = [
-    { id: 'step1', label: 'Analisando estrutura do código…' },
-    { id: 'step2', label: 'Executando análise estática…' },
-    { id: 'step3', label: 'Gerando casos de teste…' },
-    { id: 'step4', label: 'Calculando cobertura…' },
-    { id: 'step5', label: 'Finalizando relatórios…' }
-  ];
-  function markDone(idx){
-    const el = document.getElementById(steps[idx].id);
-    if (!el) return;
-    el.textContent = steps[idx].label + ' ✔️';
-    el.classList.remove('text-gray-400','text-gray-600');
-    el.classList.add('text-green-600','font-medium');
-    const pct = Math.round(((idx+1)/steps.length)*100);
-    progressBar.style.width = pct + '%';
+const qs = new URLSearchParams(location.search);
+const DEBUG = qs.get('debug') === '1';
+
+const progressBar = document.getElementById('progressBar');
+const statusChip  = document.getElementById('statusChip');
+const execChip    = document.getElementById('execChip');
+const diag        = document.getElementById('diag');
+const diagPre     = document.getElementById('diagPre');
+const actions     = document.getElementById('actions');
+const btnRetry    = document.getElementById('btnRetry');
+const verResultados = document.getElementById('verResultados');
+
+const steps = [
+  { id: 'step1', labels: ['INICIADO','QUEUED','PREPARANDO','STARTING','PREPARING'] },
+  { id: 'step2', labels: ['ANALISE_ESTATICA','STATIC','ANALYZE','ANALYSIS'] },
+  { id: 'step3', labels: ['GERANDO_TESTES','TEST','GENERATE','RUNNING_TESTS'] },
+  { id: 'step4', labels: ['CALCULANDO_COBERTURA','COVERAGE'] },
+  { id: 'step5', labels: ['FINALIZANDO','FINALIZING','POST','REPORT'] },
+];
+
+function markDone(idx){
+  const el = document.getElementById(steps[idx].id);
+  if (!el) return;
+  el.textContent = el.textContent.replace(/…?$/,'') + ' ✔️';
+  el.classList.remove('text-gray-400','text-gray-600');
+  el.classList.add('text-green-600','font-medium');
+  const pct = Math.max(parseInt(progressBar.style.width)||0, Math.round(((idx+1)/steps.length)*100));
+  progressBar.style.width = pct + '%';
+}
+function markActive(idx){
+  const el = document.getElementById(steps[idx].id);
+  if (!el) return;
+  el.classList.remove('text-gray-400');
+  el.classList.add('text-gray-600');
+}
+function fallbackPulse(){
+  // animação leve pra não “parecer travado” quando não há progresso do backend
+  progressBar.classList.add('pulse');
+  setTimeout(()=>progressBar.classList.remove('pulse'), 1600);
+}
+function logDiag(obj){
+  if (!DEBUG) return;
+  diag.classList.remove('hidden');
+  const line = typeof obj === 'string' ? obj : JSON.stringify(obj, null, 2);
+  diagPre.textContent = (diagPre.textContent + '\n' + line).trim();
+}
+
+function mapEstadoToStep(estadoRaw){
+  const e = (estadoRaw||'').toString().toUpperCase();
+  if (!e) return 0;
+  for (let i=0;i<steps.length;i++){
+    if (steps[i].labels.some(lbl => e.includes(lbl))) return i;
   }
-  function markActive(idx){
-    const el = document.getElementById(steps[idx].id);
-    if (!el) return;
-    el.textContent = steps[idx].label;
-    el.classList.remove('text-gray-400');
-    el.classList.add('text-gray-600');
+  if (e.includes('FINAL')) return 4;
+  if (e.includes('ERROR') || e.includes('ERRO') || e.includes('FAIL')) return -1;
+  return 0;
+}
+
+function extractExecId(j){
+  return j?.execId || j?.id || j?.executionId || j?.runId || j?.jobId || j?.exec || j?.meta?.execId || null;
+}
+function extractEstado(j){
+  return j?.estado ?? j?.status ?? j?.phase ?? j?.stage ?? j?.step ?? '';
+}
+function extractMsg(j){
+  return j?.mensagem ?? j?.message ?? j?.detail ?? '';
+}
+function extractPct(j){
+  const raw = j?.progresso ?? j?.progress ?? j?.percentage ?? j?.percent ?? j?.pct;
+  const n = Number(raw);
+  return Number.isFinite(n) ? Math.max(0, Math.min(100, n)) : null;
+}
+
+function setStatusBadge(text, tone){
+  statusChip.textContent = text;
+  statusChip.className = 'px-2 py-1 rounded text-xs ' + (tone==='err'
+      ? 'bg-red-100 text-red-700'
+      : tone==='ok'
+        ? 'bg-green-100 text-green-700'
+        : 'bg-gray-100 text-gray-700');
+}
+
+function base64ToBlob(b64, mime) {
+  const byteChars = atob(b64);
+  const byteNums = new Array(byteChars.length);
+  for (let i=0;i<byteChars.length;i++) byteNums[i]=byteChars.charCodeAt(i);
+  return new Blob([new Uint8Array(byteNums)], { type: mime || 'application/octet-stream' });
+}
+
+async function startPipelineFromPending() {
+  const raw = sessionStorage.getItem('pendingJob');
+  if (!raw) return null;
+
+  const job = JSON.parse(raw);
+  let url = null, body = null, headers;
+
+  if (job.tipo === 'codigo') {
+    url = '/api/codigo';
+    headers = { 'Content-Type':'application/json' };
+    body = JSON.stringify({ codigo: job.payload.codigo });
+  } else if (job.tipo === 'arquivo') {
+    url = '/api/arquivo';
+    const fd = new FormData();
+    const blob = base64ToBlob(job.payload.base64, job.payload.mime);
+    fd.append('file', new File([blob], job.payload.nome || 'Codigo.java', { type: job.payload.mime }));
+    body = fd;
+  } else if (job.tipo === 'zip') {
+    url = '/api/projeto';
+    const fd = new FormData();
+    const blob = base64ToBlob(job.payload.base64, job.payload.mime);
+    fd.append('file', new File([blob], job.payload.nome || 'projeto.zip', { type: job.payload.mime }));
+    body = fd;
+  } else {
+    return null;
   }
-  function estadoParaEtapa(estado){
-    // ajuste conforme os estados reais do seu backend
-    switch((estado||'').toUpperCase()){
-      case 'INICIADO': return 0;
-      case 'ANALISE_ESTATICA': return 1;
-      case 'GERANDO_TESTES': return 2;
-      case 'CALCULANDO_COBERTURA': return 3;
-      case 'FINALIZANDO': return 4;
-      default: return 0;
-    }
-  }
-  function setMsg(t){ const m=document.getElementById('msg'); if(m) m.textContent=t||''; }
 
-  // ---------- util payload ----------
-  function base64ToBlob(b64, mime) {
-    const byteChars = atob(b64);
-    const byteNums = new Array(byteChars.length);
-    for (let i=0;i<byteChars.length;i++) byteNums[i]=byteChars.charCodeAt(i);
-    return new Blob([new Uint8Array(byteNums)], { type: mime || 'application/octet-stream' });
+  setStatusBadge('Iniciando pipeline…');
+  logDiag({sendingTo:url});
+
+  let resp, data = {};
+  try {
+    resp = await fetch(url, { method:'POST', body, headers, credentials:'include' });
+  } catch (e) {
+    setStatusBadge('Falha ao iniciar', 'err'); logDiag(String(e));
+    return null;
+  } finally {
+    sessionStorage.removeItem('pendingJob');
   }
 
-  // ---------- dispara pipeline a partir do pendingJob ----------
-  async function startPipelineFromPending() {
-    const raw = sessionStorage.getItem('pendingJob');
-    if (!raw) return null;
-
-    const job = JSON.parse(raw);
-    let url = null, body = null, headers;
-
-    if (job.tipo === 'codigo') {
-      url = '/api/codigo';
-      headers = { 'Content-Type':'application/json' };
-      body = JSON.stringify({ codigo: job.payload.codigo });
-    } else if (job.tipo === 'arquivo') {
-      url = '/api/arquivo';
-      const fd = new FormData();
-      const blob = base64ToBlob(job.payload.base64, job.payload.mime);
-      fd.append('file', new File([blob], job.payload.nome || 'Codigo.java', { type: job.payload.mime }));
-      body = fd;
-    } else if (job.tipo === 'zip') {
-      url = '/api/projeto';
-      const fd = new FormData();
-      const blob = base64ToBlob(job.payload.base64, job.payload.mime);
-      fd.append('file', new File([blob], job.payload.nome || 'projeto.zip', { type: job.payload.mime }));
-      body = fd;
-    } else {
-      return null;
-    }
-
-    // Envia e limpa o pending para não reenviar em refresh
-    let resp;
-    try {
-      setMsg('Enviando dados…');
-      resp = await fetch(url, { method:'POST', body, headers, credentials:'include' });
-    } finally {
-      sessionStorage.removeItem('pendingJob');
-    }
-
+  try {
     const ct = (resp.headers.get('content-type')||'').toLowerCase();
-    let data = {};
-    if (ct.includes('application/json')) {
-      try { data = await resp.json(); } catch {}
-    }
-    const execId =
-      data.execId || data.id || data.exec || data.executionId ||
-      (data.meta && data.meta.execId) || null;
-
-    // injeta execId na URL sem recarregar (para o polling)
-    if (execId) {
-      const u = new URL(location.href);
-      u.searchParams.set('execId', execId);
-      history.replaceState(null, '', u.toString());
-    }
-    return execId;
+    if (ct.includes('application/json')) data = await resp.json(); else logDiag('Resposta não-JSON do /api/*');
+  } catch (e) {
+    logDiag('Erro lendo JSON do /api/*: '+e.message);
   }
 
-  // ---------- polling ----------
-  async function pollByExecId(execId) {
+  const execId = extractExecId(data);
+  if (execId) {
+    const u = new URL(location.href); u.searchParams.set('execId', execId); history.replaceState(null, '', u.toString());
+    execChip.textContent = 'execId: '+execId;
+  } else {
+    setStatusBadge('Aguardando id de execução…');
+  }
+  return execId;
+}
+
+async function pollByExecId(execId) {
+  let delay = 900;
+  async function loop(){
     try {
-      const r = await fetch('/api/process/status?execId=' + encodeURIComponent(execId), { credentials:'include' });
-      if (!r.ok) throw new Error('HTTP ' + r.status);
-      const s = await r.json();
-      const estado = (s.estado || s.status || '').toUpperCase();
-
-      if (estado === 'FINALIZADO' || s.done === true) {
-        for (let i=0;i<steps.length;i++) markDone(i);
-        setMsg('Concluído — redirecionando…');
-        setTimeout(()=>location.href='results.html?execId=' + encodeURIComponent(execId), 600);
-        return;
+      const url = '/api/process/status?execId=' + encodeURIComponent(execId);
+      const r = await fetch(url, { credentials:'include' });
+      if (!r.ok) {
+        setStatusBadge('Status HTTP '+r.status);
+        logDiag('GET '+url+' -> HTTP '+r.status);
+        fallbackPulse();
+        delay = Math.min(delay*2, 5000);
+        setTimeout(loop, delay); return;
       }
-      if (estado === 'ERRO' || s.error) {
-        const el = document.getElementById('step5');
-        if (el){
-          el.textContent = 'Falha no processamento';
-          el.classList.remove('text-gray-400','text-gray-600');
-          el.classList.add('text-red-600','font-semibold');
-        }
+      let s={};
+      try { s = await r.json(); } catch(e){ setStatusBadge('Status inválido', 'err'); logDiag('JSON inválido: '+e.message); }
+
+      const estado = extractEstado(s);
+      const pct    = extractPct(s);
+      const msg    = extractMsg(s);
+
+      if (pct != null) progressBar.style.width = pct + '%';
+      if (msg) logDiag({msg});
+
+      const isDone   = (estado||'').toUpperCase().includes('FINAL') || s.done === true || s.finished === true || s.success === true;
+      const isError  = (estado||'').toUpperCase().includes('ERRO') || (estado||'').toUpperCase().includes('ERROR') || s.error || s.failed;
+
+      if (isError) {
+        setStatusBadge('Erro na pipeline', 'err');
+        document.getElementById('step5').textContent = 'Falha no processamento';
+        document.getElementById('step5').className = 'text-red-600 font-semibold';
         progressBar.style.width = '100%';
-        setMsg('Ocorreu um erro na pipeline.');
+        actions.classList.remove('hidden');
         return;
       }
 
-      // avança etapas
-      const etapa = estadoParaEtapa(estado);
+      const stepIdx = mapEstadoToStep(estado);
       for (let i=0;i<steps.length;i++){
-        if (i < etapa) markDone(i);
-        else if (i === etapa) markActive(i);
+        if (i < stepIdx) markDone(i);
+        else if (i === stepIdx) markActive(i);
+      }
+      if (isDone) {
+        for (let i=0;i<steps.length;i++) markDone(i);
+        setStatusBadge('Concluído', 'ok');
+        const to = 'results.html?execId='+encodeURIComponent(execId);
+        verResultados.href = to; verResultados.classList.remove('hidden');
+        setTimeout(()=>location.href = to, 700);
+        return;
       }
 
-      if (typeof s.progresso === 'number') {
-        progressBar.style.width = Math.max(0, Math.min(100, s.progresso)) + '%';
-      }
-      setMsg(s.mensagem || s.message || '');
-    } catch(e) {
-      // silencioso: mantém loading e tenta de novo
-    } finally {
-      setTimeout(()=>pollByExecId(execId), 900);
+      setStatusBadge(estado ? ('Status: '+estado) : 'Aguardando status…');
+      delay = 900; // reset backoff em sucesso
+      setTimeout(loop, delay);
+    } catch (e) {
+      setStatusBadge('Erro de rede', 'err'); logDiag('Network: '+e.message);
+      fallbackPulse();
+      delay = Math.min(delay*2, 5000);
+      setTimeout(loop, delay);
     }
   }
+  loop();
+}
 
-  // ---------- boot ----------
-  (async function init(){
-    // 1) se já veio com execId (ex.: refresh), apenas poll
-    const qs = new URLSearchParams(location.search);
-    let execId = qs.get('execId');
+btnRetry.addEventListener('click', async ()=>{
+  actions.classList.add('hidden');
+  const id = new URLSearchParams(location.search).get('execId');
+  if (id) pollByExecId(id); else init(); // tenta tudo de novo
+});
 
-    // 2) senão, tente iniciar a pipeline a partir do pendingJob
-    if (!execId) {
-      execId = await startPipelineFromPending();
-    }
+async function init(){
+  if (DEBUG) diag.classList.remove('hidden');
 
-    // 3) se obteve execId, começa o polling
-    if (execId) {
-      pollByExecId(execId);
-    } else {
-      // opcional: você pode tentar buscar último job (“latest”) se houver endpoint
-      // const r = await fetch('/api/process/status/latest', { credentials:'include' });
-      // const j = await r.json(); if (j.execId) { history.replaceState(null,'',`?execId=${j.execId}`); pollByExecId(j.execId); }
-    }
-  })();
+  let execId = new URLSearchParams(location.search).get('execId');
+  if (execId) {
+    execChip.textContent = 'execId: '+execId;
+    setStatusBadge('Retomando…');
+    pollByExecId(execId);
+    return;
+  }
+
+  setStatusBadge('Iniciando…');
+  const got = await startPipelineFromPending();
+  if (got) {
+    setStatusBadge('Pipeline iniciada');
+    pollByExecId(got);
+    return;
+  }
+
+  setStatusBadge('Aguardando tarefa…');
+  // Fallback opcional: tente buscar o último execId se seu backend expõe algo assim.
+  // try {
+  //   const r = await fetch('/api/process/status/latest', { credentials:'include' });
+  //   const j = await r.json();
+  //   const latest = extractExecId(j);
+  //   if (latest) { const u=new URL(location.href); u.searchParams.set('execId', latest); history.replaceState(null,'',u.toString()); execChip.textContent='execId: '+latest; pollByExecId(latest); return; }
+  // } catch (e) { logDiag('latest: '+e.message); }
+
+  // Sem execId e sem pendingJob -> habilita ações
+  actions.classList.remove('hidden');
+}
+
+init();
 </script>
 </body>
 </html>

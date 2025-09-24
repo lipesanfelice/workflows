@@ -1,23 +1,22 @@
-import java.util.Random;
-import java.util.Scanner;
+import java.security.SecureRandom;
 
-public class JogoDados {
-    public static void main(String[] args) {
-        Scanner scanner = new Scanner(System.in);
-        Random random = new Random();
+public class GeradorSenha {
+    private static final String CARACTERES = 
+        "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*";
+    
+    public static String gerarSenha(int tamanho) {
+        SecureRandom random = new SecureRandom();
+        StringBuilder senha = new StringBuilder();
         
-        System.out.println("Jogo de Dados - Quantos dados quer lançar?");
-        int quantidade = scanner.nextInt();
-        
-        int total = 0;
-        System.out.println("Resultados:");
-        for (int i = 0; i < quantidade; i++) {
-            int dado = random.nextInt(6) + 1;
-            System.out.println("Dado " + (i+1) + ": " + dado);
-            total += dado;
+        for (int i = 0; i < tamanho; i++) {
+            int index = random.nextInt(CARACTERES.length());
+            senha.append(CARACTERES.charAt(index));
         }
         
-        System.out.println("Total: " + total);
-        scanner.close();
+        return senha.toString();
+    }
+    
+    public static void main(String[] args) {
+        System.out.println("Senha gerada: " + gerarSenha(12));
     }
 }
