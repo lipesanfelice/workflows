@@ -359,7 +359,7 @@
       <div class="text-center mb-8">
         <h1 class="text-3xl font-bold text-gray-800 mb-2">Analise seu código Java</h1>
         <p class="text-gray-600 max-w-2xl mx-auto">
-          Envie seu código colando, via arquivo .java ou um projeto .zip. Salvamos primeiro em <b>entrada-usuario</b> e depois processamos a pipeline.
+          Envie seu código colando, via arquivo .java ou um projeto .zip. Salvamos primeiro em <b>entrada-usuario</b> (ou <b>entrada</b>) e depois processamos a pipeline.
         </p>
       </div>
 
@@ -440,7 +440,7 @@
     <!-- Status -->
     <div id="status" class="hidden rounded-md p-3 text-sm"></div>
 
-    <!-- Resultado (somente para debug rápido) -->
+    <!-- Resultado (debug) -->
     <section class="bg-white rounded-lg shadow-md p-4">
       <h2 class="text-lg font-semibold mb-2 flex items-center text-gray-800">
         <i data-feather="activity" class="mr-2"></i>
@@ -488,7 +488,7 @@
   function mostrarStatus(msg, tipo='success') {
     statusDiv.classList.remove('hidden','bg-green-100','text-green-800','border','border-green-200','bg-red-100','text-red-800','border-red-200');
     if (tipo==='success') statusDiv.classList.add('bg-green-100','text-green-800','border','border-green-200');
-    else statusDiv.classList.add('bg-red-100','text-red-800','border','border-red-200');
+    else statusDiv.classList.add('bg-red-100','text-red-800','border-red-200');
     statusDiv.textContent = msg;
   }
   function mostrarResultado(obj) {
@@ -561,39 +561,53 @@
     window.location.href = `loading.html?startedAt=${ts}`;
   }
 
-  // ------- Helpers de salvamento em entrada-usuario -------
+  /* ---------- fallback inteligente: /entrada-usuario -> /entrada ---------- */
+  const ENTRADA_BASES = ['/entrada-usuario', '/entrada'];
+
+  async function postComFallback(subpath, makeBody, makeHeaders) {
+    let lastErr;
+    for (const base of ENTRADA_BASES) {
+      const url = base.replace(/\/+$/,'') + '/' + subpath.replace(/^\/+/,'');
+      try {
+        const body = makeBody();
+        const headers = makeHeaders?.() || undefined;
+        const resp = await fetch(url, { method: 'POST', body, headers, credentials: 'include' });
+        if (resp.ok) {
+          const text = await resp.text();
+          mostrarResultado({salvoEm:url, mensagem:text});
+          return { ok: true, msg: text, baseUsada: base };
+        }
+        if (![404,405].includes(resp.status)) {
+          const text = await resp.text().catch(()=> '');
+          return { ok: false, msg: text || (`HTTP ${resp.status}`), baseUsada: base };
+        }
+        lastErr = resp;
+      } catch (e) {
+        lastErr = e;
+      }
+    }
+    return { ok: false, msg: `Falha ao salvar (tentado: ${ENTRADA_BASES.join(', ')}). Último erro: ${lastErr?.status || lastErr?.message || lastErr}`, baseUsada: null };
+  }
+
+  /* ------- helpers de salvamento que usam o fallback ------- */
   async function salvarCodigoGithub(codigo){
-    const r = await fetch('/entrada-usuario/',{
-      method:'POST',
-      headers:{'Content-Type':'application/x-www-form-urlencoded'},
-      body:'codigo='+encodeURIComponent(codigo)
-    });
-    const t = await r.text();
-    return {ok:r.ok,msg:t};
+    return postComFallback('codigo', () => new URLSearchParams({ codigo }), () => ({ 'Content-Type':'application/x-www-form-urlencoded' }));
   }
   async function salvarArquivoGithub(file){
-    const fd = new FormData();
-    fd.append('arquivo', file);
-    const r = await fetch('/entrada-usuario/',{ method:'POST', body:fd });
-    const t = await r.text();
-    return {ok:r.ok,msg:t};
+    return postComFallback('arquivo', () => { const fd = new FormData(); fd.append('arquivo', file); return fd; });
   }
   async function salvarZipGithub(file){
-    const fd = new FormData();
-    fd.append('projetoZip', file);
-    const r = await fetch('/entrada-usuario/',{ method:'POST', body:fd });
-    const t = await r.text();
-    return {ok:r.ok,msg:t};
+    return postComFallback('projeto', () => { const fd = new FormData(); fd.append('projetoZip', file); return fd; });
   }
 </script>
 
 <script>
-  // -------- Handlers dos botões: salvam primeiro, depois redirecionam pro loading --------
+  // -------- Handlers: salvam primeiro, depois redirecionam pro loading --------
   document.getElementById('submit-code').addEventListener('click', async ()=>{
     const codigo=(document.getElementById('code-input').value||'').trim();
     if(!codigo){ mostrarStatus('Por favor, insira algum código Java.','error'); return; }
 
-    iniciarLoading('Salvando entrada…'); progresso(25,'Enviando para entrada-usuario…');
+    iniciarLoading('Salvando entrada…'); progresso(25,'Enviando para a entrada…');
     try{
       const res = await salvarCodigoGithub(codigo);
       mostrarStatus(res.msg, res.ok?'success':'error');
@@ -607,11 +621,11 @@
     }
   });
 
-  submitFileBtn.addEventListener('click', async ()=>{
+  document.getElementById('submit-file').addEventListener('click', async ()=>{
     const f=window.arquivoJavaSelecionado;
     if(!f){ mostrarStatus('Selecione um arquivo .java.','error'); return; }
 
-    iniciarLoading('Salvando entrada…'); progresso(25,'Enviando arquivo para entrada-usuario…');
+    iniciarLoading('Salvando entrada…'); progresso(25,'Enviando arquivo para a entrada…');
     try{
       const res = await salvarArquivoGithub(f);
       mostrarStatus(res.msg, res.ok?'success':'error');
@@ -626,11 +640,11 @@
     }
   });
 
-  submitZipBtn.addEventListener('click', async ()=>{
+  document.getElementById('submit-zip').addEventListener('click', async ()=>{
     const f=window.zipSelecionado;
     if(!f){ mostrarStatus('Selecione um arquivo .zip.','error'); return; }
 
-    iniciarLoading('Salvando entrada…'); progresso(25,'Enviando ZIP para entrada-usuario…');
+    iniciarLoading('Salvando entrada…'); progresso(25,'Enviando ZIP para a entrada…');
     try{
       const res = await salvarZipGithub(f);
       mostrarStatus(res.msg, res.ok?'success':'error');
