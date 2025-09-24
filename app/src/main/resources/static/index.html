@@ -563,7 +563,7 @@
 
   // ------- Helpers de salvamento em entrada-usuario -------
   async function salvarCodigoGithub(codigo){
-    const r = await fetch('/entrada-usuario/codigo',{
+    const r = await fetch('/entrada-usuario/',{
       method:'POST',
       headers:{'Content-Type':'application/x-www-form-urlencoded'},
       body:'codigo='+encodeURIComponent(codigo)
@@ -574,14 +574,14 @@
   async function salvarArquivoGithub(file){
     const fd = new FormData();
     fd.append('arquivo', file);
-    const r = await fetch('/entrada-usuario/arquivo',{ method:'POST', body:fd });
+    const r = await fetch('/entrada-usuario/',{ method:'POST', body:fd });
     const t = await r.text();
     return {ok:r.ok,msg:t};
   }
   async function salvarZipGithub(file){
     const fd = new FormData();
     fd.append('projetoZip', file);
-    const r = await fetch('/entrada-usuario/projeto',{ method:'POST', body:fd });
+    const r = await fetch('/entrada-usuario/',{ method:'POST', body:fd });
     const t = await r.text();
     return {ok:r.ok,msg:t};
   }
