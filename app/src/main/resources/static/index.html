@@ -335,6 +335,7 @@
 </head>
 <body class="bg-gray-50">
 <div id="app" class="min-h-screen flex flex-col">
+  <!-- Navbar -->
   <nav class="bg-blue-600 text-white shadow-lg">
     <div class="container mx-auto px-4 py-3 flex justify-between items-center">
       <div class="flex items-center space-x-2">
@@ -344,7 +345,7 @@
       <div class="hidden md:flex space-x-6">
         <a class="hover:text-blue-200">Home</a>
         <a class="hover:text-blue-200">Documentação</a>
-        <a class="hover:text-blue-200">Sobre</a>
+        <a class="hover:text-blue-200" href="results.html">Resultados</a>
       </div>
       <button class="md:hidden">
         <i data-feather="menu"></i>
@@ -352,16 +353,18 @@
     </div>
   </nav>
 
+  <!-- Main -->
   <main class="flex-grow container mx-auto px-4 py-8">
     <section id="upload-section" class="mb-8">
       <div class="text-center mb-8">
         <h1 class="text-3xl font-bold text-gray-800 mb-2">Analise seu código Java</h1>
         <p class="text-gray-600 max-w-2xl mx-auto">
-          Envie seu código colando, via arquivo .java ou um projeto .zip. Salvamos primeiro e depois processamos para análise.
+          Envie seu código colando, via arquivo .java ou um projeto .zip. Salvamos primeiro em <b>entrada-usuario</b> e depois processamos a pipeline.
         </p>
       </div>
 
       <div class="grid md:grid-cols-3 gap-6">
+        <!-- Colar código -->
         <div class="bg-white rounded-lg shadow-md overflow-hidden" data-aos="fade-up">
           <div class="bg-blue-50 px-4 py-3 border-b border-blue-100">
             <h3 class="font-semibold text-blue-700 flex items-center">
@@ -380,6 +383,7 @@
           </div>
         </div>
 
+        <!-- Upload .java -->
         <div class="bg-white rounded-lg shadow-md overflow-hidden" data-aos="fade-up" data-aos-delay="100">
           <div class="bg-blue-50 px-4 py-3 border-b border-blue-100">
             <h3 class="font-semibold text-blue-700 flex items-center">
@@ -405,6 +409,7 @@
           </div>
         </div>
 
+        <!-- Upload .zip -->
         <div class="bg-white rounded-lg shadow-md overflow-hidden" data-aos="fade-up" data-aos-delay="200">
           <div class="bg-blue-50 px-4 py-3 border-b border-blue-100">
             <h3 class="font-semibold text-blue-700 flex items-center">
@@ -432,17 +437,20 @@
       </div>
     </section>
 
+    <!-- Status -->
     <div id="status" class="hidden rounded-md p-3 text-sm"></div>
 
+    <!-- Resultado (somente para debug rápido) -->
     <section class="bg-white rounded-lg shadow-md p-4">
       <h2 class="text-lg font-semibold mb-2 flex items-center text-gray-800">
         <i data-feather="activity" class="mr-2"></i>
-        Resultado da análise
+        Resultado (debug)
       </h2>
       <pre id="result" class="json text-gray-800 text-sm"></pre>
     </section>
   </main>
 
+  <!-- Footer -->
   <footer class="bg-gray-800 text-white py-6">
     <div class="container mx-auto px-4 text-center">
       <p>&copy; 2023 CodeAnalyzer. Todos os direitos reservados.</p>
@@ -450,6 +458,7 @@
   </footer>
 </div>
 
+<!-- Modal de carregamento -->
 <div id="loading-modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 hidden">
   <div class="bg-white rounded-lg p-6 max-w-md w-full mx-4" data-aos="zoom-in">
     <div class="text-center">
@@ -488,7 +497,9 @@
   function iniciarLoading(txt){ loadingModal.classList.remove('hidden'); progressBar.style.width='0%'; progressText.textContent=txt||'Iniciando…'; }
   function progresso(p,t){ progressBar.style.width=`${Math.max(0,Math.min(100,p))}%`; if(t) progressText.textContent=t; }
   function pararLoading(){ loadingModal.classList.add('hidden'); }
+</script>
 
+<script>
   const fileUpload = document.getElementById('file-upload');
   const fileDropzone = document.getElementById('file-dropzone');
   const fileInfo = document.getElementById('file-info');
@@ -533,8 +544,10 @@
     btn.classList.remove('hidden');
     if(java) window.arquivoJavaSelecionado = arq; else window.zipSelecionado = arq;
   }
+</script>
 
-  function arquivoParaBase64(arquivo){
+<script>
+  async function arquivoParaBase64(arquivo){
     return new Promise((resolve,reject)=>{
       const r=new FileReader();
       r.onload=()=>resolve(r.result.split(',')[1]);
@@ -542,43 +555,95 @@
       r.readAsDataURL(arquivo);
     });
   }
-
   async function enviarParaLoading(tipo,payload){
     sessionStorage.setItem('pendingJob', JSON.stringify({ tipo, quando: Date.now(), payload }));
     const ts = Date.now();
     window.location.href = `loading.html?startedAt=${ts}`;
   }
 
+  // ------- Helpers de salvamento em entrada-usuario -------
+  async function salvarCodigoGithub(codigo){
+    const r = await fetch('/entrada-usuario/codigo',{
+      method:'POST',
+      headers:{'Content-Type':'application/x-www-form-urlencoded'},
+      body:'codigo='+encodeURIComponent(codigo)
+    });
+    const t = await r.text();
+    return {ok:r.ok,msg:t};
+  }
+  async function salvarArquivoGithub(file){
+    const fd = new FormData();
+    fd.append('arquivo', file);
+    const r = await fetch('/entrada-usuario/arquivo',{ method:'POST', body:fd });
+    const t = await r.text();
+    return {ok:r.ok,msg:t};
+  }
+  async function salvarZipGithub(file){
+    const fd = new FormData();
+    fd.append('projetoZip', file);
+    const r = await fetch('/entrada-usuario/projeto',{ method:'POST', body:fd });
+    const t = await r.text();
+    return {ok:r.ok,msg:t};
+  }
+</script>
+
+<script>
+  // -------- Handlers dos botões: salvam primeiro, depois redirecionam pro loading --------
   document.getElementById('submit-code').addEventListener('click', async ()=>{
     const codigo=(document.getElementById('code-input').value||'').trim();
     if(!codigo){ mostrarStatus('Por favor, insira algum código Java.','error'); return; }
-    iniciarLoading('Iniciando pipeline…'); progresso(15,'Preparando envio…');
+
+    iniciarLoading('Salvando entrada…'); progresso(25,'Enviando para entrada-usuario…');
     try{
+      const res = await salvarCodigoGithub(codigo);
+      mostrarStatus(res.msg, res.ok?'success':'error');
+      if(!res.ok){ progresso(0,''); return; }
+      progresso(55,'Preparando processamento…');
       await enviarParaLoading('codigo',{ codigo });
-    } finally { setTimeout(pararLoading,200); }
+    }catch(e){
+      mostrarStatus('Erro ao salvar: '+e.message,'error');
+    }finally{
+      setTimeout(pararLoading,200);
+    }
   });
 
   submitFileBtn.addEventListener('click', async ()=>{
     const f=window.arquivoJavaSelecionado;
     if(!f){ mostrarStatus('Selecione um arquivo .java.','error'); return; }
-    iniciarLoading('Iniciando pipeline…'); progresso(15,'Preparando envio…');
+
+    iniciarLoading('Salvando entrada…'); progresso(25,'Enviando arquivo para entrada-usuario…');
     try{
+      const res = await salvarArquivoGithub(f);
+      mostrarStatus(res.msg, res.ok?'success':'error');
+      if(!res.ok){ progresso(0,''); return; }
+      progresso(55,'Preparando processamento…');
       const b64=await arquivoParaBase64(f);
       await enviarParaLoading('arquivo',{ nome:f.name, mime:f.type||'text/x-java', base64:b64 });
-    } finally { setTimeout(pararLoading,200); }
+    }catch(e){
+      mostrarStatus('Erro ao salvar: '+e.message,'error');
+    }finally{
+      setTimeout(pararLoading,200);
+    }
   });
 
   submitZipBtn.addEventListener('click', async ()=>{
     const f=window.zipSelecionado;
     if(!f){ mostrarStatus('Selecione um arquivo .zip.','error'); return; }
-    iniciarLoading('Iniciando pipeline…'); progresso(15,'Preparando envio…');
+
+    iniciarLoading('Salvando entrada…'); progresso(25,'Enviando ZIP para entrada-usuario…');
     try{
+      const res = await salvarZipGithub(f);
+      mostrarStatus(res.msg, res.ok?'success':'error');
+      if(!res.ok){ progresso(0,''); return; }
+      progresso(55,'Preparando processamento…');
       const b64=await arquivoParaBase64(f);
       await enviarParaLoading('zip',{ nome:f.name, mime:f.type||'application/zip', base64:b64 });
-    } finally { setTimeout(pararLoading,200); }
+    }catch(e){
+      mostrarStatus('Erro ao salvar: '+e.message,'error');
+    }finally{
+      setTimeout(pararLoading,200);
+    }
   });
 </script>
 </body>
 </html>
-
-
