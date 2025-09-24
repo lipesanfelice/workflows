@@ -55,43 +55,105 @@
 
     <script>
         feather.replace();
-        
+
+        // Lê execId da query string
+        const qs = new URLSearchParams(location.search);
+        const execId = qs.get('execId');
+
+        // Seletores
+        const progressBar = document.getElementById('progressBar');
         const steps = [
-            { id: 'step1', text: 'Analisando estrutura do código...', duration: 1500 },
-            { id: 'step2', text: 'Executando análise estática...', duration: 2000 },
-            { id: 'step3', text: 'Gerando casos de teste...', duration: 2500 },
-            { id: 'step4', text: 'Calculando cobertura...', duration: 1800 },
-            { id: 'step5', text: 'Finalizando relatórios...', duration: 1200 }
+            { id: 'step1', label: 'Analisando estrutura do código...' },
+            { id: 'step2', label: 'Executando análise estática...' },
+            { id: 'step3', label: 'Gerando casos de teste...' },
+            { id: 'step4', label: 'Calculando cobertura...' },
+            { id: 'step5', label: 'Finalizando relatórios...' }
         ];
 
-        const progressBar = document.getElementById('progressBar');
-        
-        function updateProgress(stepIndex) {
-            if (stepIndex >= steps.length) {
+        // Helpers visuais
+        function markDone(idx) {
+            const el = document.getElementById(steps[idx].id);
+            el.textContent = steps[idx].label + ' ✔️';
+            el.classList.remove('text-gray-400','text-gray-600');
+            el.classList.add('text-green-500','font-medium');
+            const pct = Math.round(((idx + 1) / steps.length) * 100);
+            progressBar.style.width = pct + '%';
+        }
+        function markActive(idx) {
+            const el = document.getElementById(steps[idx].id);
+            el.textContent = steps[idx].label;
+            el.classList.remove('text-gray-400');
+            el.classList.add('text-gray-600');
+        }
+
+        // Mapeia estado do backend para etapa
+        function estadoParaEtapa(estado) {
+            // ajuste conforme os estados reais do seu backend:
+            // ex.: INICIADO, ANALISE_ESTATICA, GERANDO_TESTES, CALCULANDO_COBERTURA, FINALIZANDO, FINALIZADO, ERRO
+            switch ((estado || '').toUpperCase()) {
+            case 'INICIADO': return 0;
+            case 'ANALISE_ESTATICA': return 1;
+            case 'GERANDO_TESTES': return 2;
+            case 'CALCULANDO_COBERTURA': return 3;
+            case 'FINALIZANDO': return 4;
+            // FINALIZADO tratado fora (redireciona)
+            default: return 0;
+            }
+        }
+
+        async function pollStatus() {
+            if (!execId) {
+            // Sem execId → volta para home
+            window.location.href = 'index.html';
+            return;
+            }
+
+            try {
+            const resp = await fetch(`/api/process/status?execId=${encodeURIComponent(execId)}`, { credentials: 'include' });
+            if (!resp.ok) throw new Error('status HTTP ' + resp.status);
+            const st = await resp.json();
+
+            const estado = (st.estado || st.status || '').toUpperCase();
+            if (estado === 'FINALIZADO' || st.done === true) {
+                // marca tudo como concluído
+                for (let i = 0; i < steps.length; i++) markDone(i);
                 setTimeout(() => {
-                    window.location.href = 'results.html';
-                }, 1000);
+                window.location.href = `results.html?execId=${encodeURIComponent(execId)}`;
+                }, 600);
                 return;
             }
-            
-            const step = steps[stepIndex];
-            const element = document.getElementById(step.id);
-            
-            // Update current step
-            element.textContent = step.text + ' ✔️';
-            element.classList.remove('text-gray-400', 'text-gray-600');
-            element.classList.add('text-green-500', 'font-medium');
-            
-            // Update progress bar
-            const progress = ((stepIndex + 1) / steps.length) * 100;
-            progressBar.style.width = `${progress}%`;
-            
-            // Move to next step
-            setTimeout(() => updateProgress(stepIndex + 1), step.duration);
+            if (estado === 'ERRO' || st.error) {
+                const el = document.getElementById('step5');
+                el.textContent = 'Falha no processamento';
+                el.classList.remove('text-gray-400','text-gray-600');
+                el.classList.add('text-red-600','font-semibold');
+                progressBar.style.width = '100%';
+                return;
+            }
+
+            // Atualiza a etapa corrente
+            const etapa = estadoParaEtapa(estado);
+            for (let i = 0; i < steps.length; i++) {
+                if (i < etapa) markDone(i);
+                else if (i === etapa) markActive(i);
+            }
+
+            // (Opcional) tenta usar progresso numérico do backend
+            if (typeof st.progresso === 'number') {
+                progressBar.style.width = Math.max(0, Math.min(100, st.progresso)) + '%';
+            }
+
+            } catch(e) {
+            // Tenta novamente silenciosamente
+            // (poderia exibir uma mensagem amigável aqui)
+            } finally {
+            setTimeout(pollStatus, 900); // polling ~1s
+            }
         }
-        
-        // Start the progress
-        setTimeout(() => updateProgress(0), 500);
+
+        // Inicia
+        setTimeout(pollStatus, 400);
     </script>
+
 </body>
 </html>

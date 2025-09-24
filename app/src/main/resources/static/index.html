@@ -460,6 +460,16 @@
   const progressBar = document.getElementById('progress-bar');
   const progressText = document.getElementById('progress-text');
 
+  function redirectToLoadingIfExec(data) {
+    const execId = data?.execId || data?.id || data?.exec || data?.executionId || data?.meta?.execId;
+    if (execId) {
+      window.location.href = `loading.html?execId=${encodeURIComponent(execId)}`;
+      return true;
+    }
+    return false;
+  }
+
+
   function showStatus(msg, type='success') {
     statusDiv.classList.remove('hidden', 'bg-green-100','text-green-800','border','border-green-200','bg-red-100','text-red-800','border-red-200');
     if (type === 'success') {
@@ -567,7 +577,12 @@
     });
     const data = await procResp.json();
     showResultJson(data);
+
+    // 👉 Redireciona para loading se houver execId
+    if (redirectToLoadingIfExec(data)) return true;
+
     return procResp.ok;
+
   }
 
   async function submitArquivo(file) {
