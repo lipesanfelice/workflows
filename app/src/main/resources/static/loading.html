@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Processando...</title>
+<link rel="stylesheet" href="estilo.css">
+</head>
+<body>
+<header class="topo">
+  <h1>Processando</h1>
+</header>
+<main class="conteudo">
+  <section class="cartao alinhado-centro">
+    <div class="spinner"></div>
+    <h2 id="etapa">Inicializando</h2>
+    <p id="detalhes">Preparando ambiente</p>
+    <div class="barra">
+      <div class="progresso" id="progresso" style="width:0%"></div>
+    </div>
+    <p id="porcentagem">0%</p>
+    <button id="ver-log" class="botao secundario">Ver log</button>
+    <pre id="log" class="log oculto"></pre>
+  </section>
+</main>
+<script src="script.js"></script>
+<script>
+const p = new URLSearchParams(location.search)
+const execId = p.get('execId')
+iniciarAcompanhamento(execId)
+document.getElementById('ver-log').onclick = function(){
+  document.getElementById('log').classList.toggle('oculto')
+}
+</script>
+</body>
+</html>

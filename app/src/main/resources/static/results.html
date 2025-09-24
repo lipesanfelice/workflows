@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Resultados</title>
+<link rel="stylesheet" href="estilo.css">
+</head>
+<body>
+<header class="topo">
+  <h1>Resultados</h1>
+</header>
+<main class="conteudo resultados">
+  <section class="coluna">
+    <div class="cartao">
+      <h2>Testes Gerados</h2>
+      <ul id="lista-testes" class="lista"></ul>
+    </div>
+    <div class="cartao">
+      <h2>Explicações</h2>
+      <div id="explicacoes" class="explicacoes"></div>
+    </div>
+  </section>
+  <section class="coluna">
+    <div class="cartao">
+      <h2>Dashboards</h2>
+      <div id="dashboards" class="grade-dash"></div>
+    </div>
+  </section>
+</main>
+<script src="script.js"></script>
+<script>
+const p = new URLSearchParams(location.search)
+const execId = p.get('execId')
+carregarResultados(execId)
+</script>
+</body>
+</html>
