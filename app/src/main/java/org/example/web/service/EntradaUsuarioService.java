@@ -1,6 +1,7 @@
 package org.example.web.service;
 
 import org.example.web.git.GitServico;
+import org.example.web.Exec.ExecRegistry;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
@@ -13,6 +14,12 @@ import java.util.Comparator;
 @Service
 public class EntradaUsuarioService {
 
+    private final ExecRegistry execRegistry;
+
+    public EntradaUsuarioService(ExecRegistry execRegistry) {
+        this.execRegistry = execRegistry;
+    }
+
     @Value("${app.entrada.diretorio:entrada-usuario}")
     private String diretorioEntrada;
 
@@ -21,6 +28,7 @@ public class EntradaUsuarioService {
 
     @Value("${app.entrada.mensagem-commit:Atualizar entrada do usuário}")
     private String mensagemCommit;
+
 
     // ===== APIs usadas pelo controller =====
 
@@ -115,6 +123,44 @@ public class EntradaUsuarioService {
         }
     }
 
+    // private void enviarParaRepositorio(Path pastaEntrada) {
+    //     if (pastaEntrada == null) throw new IllegalArgumentException("pastaEntrada nula");
+
+    //     File clone = Paths.get(System.getProperty("java.io.tmpdir"), "repo-workflows").toFile();
+    //     GitServico git = new GitServico(clone, repositorioGit);
+    //     git.garantirClone();
+    //     git.sincronizarMain();
+
+    //     try {
+    //         Path destino = clone.toPath().resolve("app").resolve("entrada-usuario");
+    //         Files.createDirectories(destino);
+
+    //         // limpa tudo no clone
+    //         limparConteudo(destino);
+
+    //         // copia SOMENTE .java, achatando; se repetir nome, o último sobrescreve
+    //         try (var walk = Files.walk(pastaEntrada)) {
+    //             walk.filter(Files::isRegularFile)
+    //                 .filter(p -> p.toString().endsWith(".java"))
+    //                 .forEach(p -> {
+    //                     try {
+    //                         String nome = p.getFileName().toString();
+    //                         Path alvo = destino.resolve(nome).normalize();
+    //                         Files.createDirectories(alvo.getParent());
+    //                         Files.copy(p, alvo, StandardCopyOption.REPLACE_EXISTING); // último vence
+    //                     } catch (Exception ex) {
+    //                         throw new RuntimeException(ex);
+    //                     }
+    //                 });
+    //         }
+    //     } catch (Exception e) {
+    //         throw new RuntimeException(e);
+    //     }
+
+    //     git.configurarIdentidade("github-actions[bot]", "github-actions[bot]@users.noreply.github.com");
+    //     git.adicionarCommitarEmpurrar("app/entrada-usuario", mensagemCommit);
+    // }
+    
     private void enviarParaRepositorio(Path pastaEntrada) {
         if (pastaEntrada == null) throw new IllegalArgumentException("pastaEntrada nula");
 
@@ -149,8 +195,15 @@ public class EntradaUsuarioService {
             throw new RuntimeException(e);
         }
 
+        // identidade do commit (ok deixar assim)
         git.configurarIdentidade("github-actions[bot]", "github-actions[bot]@users.noreply.github.com");
-        git.adicionarCommitarEmpurrar("app/entrada-usuario", mensagemCommit);
+
+        // ⚠️ AQUI É A TROCA: pegar o SHA do commit e registrar como "último push"
+        // (requer que GitServico#adicionarCommitarEmpurrar retorne String com o SHA)
+        String sha = git.adicionarCommitarEmpurrar("app/entrada-usuario", mensagemCommit);
+
+        // guarda para ser associado ao próximo execId quando /api/* for chamado
+        execRegistry.setLatestPushedSha(sha);
     }
 
     private static void limparConteudo(Path dir) {

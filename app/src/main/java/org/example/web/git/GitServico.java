@@ -39,11 +39,13 @@ public class GitServico {
         execSilencioso(pastaRepo, "git", "restore", "--source=origin/main", "--", "app/src/main/resources/static/index.html");
     }
 
-    public void adicionarCommitarEmpurrar(String caminhoRelativo, String mensagem) {
+    public String adicionarCommitarEmpurrar(String caminhoRelativo, String mensagem) {
         aplicarPoliticaRemotoArquivosSensiveis();
         exec(pastaRepo, "git", "add", "-A", caminhoRelativo);
-        if (exec(pastaRepo, "git", "diff", "--cached", "--quiet") == 0) return;
-        exec(pastaRepo, "git", "commit", "-m", mensagem);
+        boolean semMudancas = (exec(pastaRepo, "git", "diff", "--cached", "--quiet") == 0);
+        if (!semMudancas) {
+            exec(pastaRepo, "git", "commit", "-m", mensagem);
+        }
         if (exec(pastaRepo, "git", "push", "origin", "HEAD:main") != 0) {
             exec(pastaRepo, "git", "fetch", "origin", "--prune");
             exec(pastaRepo, "git", "rebase", "origin/main");
@@ -52,7 +54,27 @@ public class GitServico {
             if (exec(pastaRepo, "git", "diff", "--cached", "--quiet") != 0) exec(pastaRepo, "git", "commit", "-m", mensagem);
             if (exec(pastaRepo, "git", "push", "origin", "HEAD:main") != 0) exec(pastaRepo, "git", "push", "--force-with-lease", "origin", "HEAD:main");
         }
+
+        String sha = runAndCapture("git", "rev-parse", "HEAD");
+        return sha != null ? sha.trim() : null;
     }
+
+    private String runAndCapture(String... cmd) {
+        try {
+            ProcessBuilder pb = new ProcessBuilder(cmd);
+            pb.directory(pastaRepo);
+            pb.redirectErrorStream(true);
+            Process p = pb.start();
+            try (var is = p.getInputStream()) {
+                String out = new String(is.readAllBytes());
+                p.waitFor();
+                return out;
+            }
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
 
     private int exec(File dir, String... cmd) {
         try {

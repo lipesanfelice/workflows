@@ -1,94 +1,328 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-<meta charset="utf-8"/>
-<meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>Resultados • Gerador de Testes</title>
-<script src="https://cdn.tailwindcss.com"></script>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
-<style>
-:root{--bg:#0b0b10;--card:#12121a;--muted:#9aa0a6;--txt:#e8e8f2;--cta:#2563eb;--ok:#16a34a;--warn:#f59e0b;--err:#ef4444}
-*{box-sizing:border-box}
-html,body{height:100%}
-body{margin:0;background:#0b0b10;color:var(--txt);font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif}
-a{color:#93c5fd}
-.card{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:16px}
-.btn{appearance:none;border:0;border-radius:12px;padding:10px 14px;background:rgba(255,255,255,.06);color:var(--txt);font-weight:600;cursor:pointer}
-.btn:hover{filter:brightness(1.08)}
-.btn-cta{background:linear-gradient(135deg,#2563eb,#3b82f6);color:#fff}
-.lista{display:flex;flex-direction:column;gap:10px;max-height:440px;overflow:auto}
-.item{display:flex;align-items:center;justify-content:space-between;gap:12px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.08);padding:12px;border-radius:12px}
-.item span{font-weight:600;word-break:break-all}
-.etiqueta{background:rgba(255,255,255,.06);padding:6px 10px;border-radius:999px;font-size:12px}
-.ponto{width:10px;height:10px;border-radius:999px}
-.embed{width:100%;min-height:280px;background:rgba(255,255,255,.02);border:1px dashed rgba(255,255,255,.12);border-radius:12px;display:grid;place-items:center;overflow:hidden}
-.ifr{width:100%;height:420px;border:0}
-</style>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Resultados • CodeAnalyzer</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://unpkg.com/aos@2.3.1/dist/aos.css" rel="stylesheet">
+  <script src="https://unpkg.com/aos@2.3.1/dist/aos.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/feather-icons/dist/feather.min.js"></script>
+  <style>
+    .badge{border-radius:999px;padding:.25rem .6rem;font-size:.75rem;font-weight:600}
+    .card{background:#fff;border:1px solid #e5e7eb;border-radius:.75rem}
+    .soft{background:rgba(59,130,246,.08);border:1px dashed rgba(59,130,246,.35)}
+    .scroll-y{max-height:22rem;overflow:auto}
+  </style>
 </head>
-<body>
-<div class="max-w-6xl mx-auto px-4 py-6">
-  <div class="flex items-center justify-between mb-4">
-    <div class="flex items-center gap-3">
-      <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-blue-500 to-blue-300 grid place-items-center font-extrabold">GT</div>
-      <div class="text-lg font-extrabold">Resultados do Processamento</div>
-    </div>
-    <div class="flex gap-2">
-      <button id="botaoRecarregar" class="btn">Recarregar</button>
-      <a href="index.html" class="btn">Nova análise</a>
-      <a id="atalhoLoading" href="loading.html" class="btn btn-cta">Ver loading</a>
-    </div>
-  </div>
-
-  <div class="grid grid-cols-1 gap-4 md:grid-cols-3">
-    <div class="card p-4 md:col-span-2">
-      <div class="flex items-center justify-between flex-wrap gap-3 mb-3">
-        <div class="flex items-center gap-2">
-          <div id="bolinha" class="ponto" style="background:var(--warn);box-shadow:0 0 10px var(--warn)"></div>
-          <div id="textoStatus" class="text-sm text-gray-300">Atualizando…</div>
+<body class="bg-gray-50">
+  <div id="app" class="min-h-screen flex flex-col">
+    <nav class="bg-blue-600 text-white shadow-lg">
+      <div class="container mx-auto px-4 py-3 flex justify-between items-center">
+        <div class="flex items-center space-x-2">
+          <i data-feather="code"></i>
+          <span class="font-bold text-xl">CodeAnalyzer</span>
         </div>
-        <div class="flex gap-2 flex-wrap">
-          <div id="etqExec" class="etiqueta">execId: —</div>
-          <div id="etqTempo" class="etiqueta">—</div>
+        <div class="hidden md:flex space-x-6">
+          <a class="hover:text-blue-200" href="index.html">Home</a>
+          <a class="hover:text-blue-200" href="results.html">Resultados</a>
+          <a class="hover:text-blue-200">Documentação</a>
+        </div>
+        <button class="md:hidden">
+          <i data-feather="menu"></i>
+        </button>
+      </div>
+    </nav>
+
+    <main class="flex-grow container mx-auto px-4 py-8">
+      <div class="flex items-start justify-between gap-4 flex-wrap mb-6">
+        <div>
+          <h1 class="text-3xl font-bold text-gray-800">Resultados da análise</h1>
+          <p class="text-gray-600">Visualize os testes gerados a partir da pasta <b>entrada-usuário</b>, explicações e dashboards do Codecov.</p>
+        </div>
+        <div class="flex gap-2 items-center">
+          <span id="chipExec" class="badge bg-blue-50 text-blue-700 border border-blue-200">execId: —</span>
+          <span id="chipTempo" class="badge bg-gray-100 text-gray-700 border border-gray-200">—</span>
+          <span id="chipStatus" class="badge bg-yellow-50 text-yellow-700 border border-yellow-200">status: —</span>
         </div>
       </div>
-      <div class="flex gap-2 flex-wrap mb-4">
-        <div class="etiqueta"><span class="opacity-75 mr-1">Testes</span><b id="kpiTestes">0</b></div>
-        <div class="etiqueta"><span class="opacity-75 mr-1">Arquivos</span><b id="kpiArquivos">0</b></div>
-        <div class="etiqueta"><span class="opacity-75 mr-1">Cobertura</span><b id="kpiCobertura">—</b></div>
-      </div>
-      <h2 class="font-bold mb-2">Arquivos de Teste (entrada-usuário)</h2>
-      <div id="listaArquivos" class="lista text-gray-300"></div>
-    </div>
 
-    <div class="card p-4">
-      <h2 class="font-bold mb-3">Dashboards Codecov</h2>
-      <div id="areaCodecov" class="lista">
-        <div class="embed text-gray-400">Aguardando dados do Codecov</div>
+      <div class="grid md:grid-cols-3 gap-6 mb-6">
+        <div class="card p-4 md:col-span-2" data-aos="fade-up">
+          <div class="flex items-center justify-between mb-3">
+            <h2 class="text-lg font-semibold text-gray-800 flex items-center">
+              <i data-feather="file-text" class="mr-2"></i> Arquivos de Teste (entrada-usuário)
+            </h2>
+            <div class="flex gap-2">
+              <button id="btnReload" class="px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-md text-sm">Recarregar</button>
+              <a id="btnLoading" href="loading.html" class="px-3 py-2 bg-white border border-gray-300 hover:bg-gray-50 rounded-md text-sm text-gray-700">Ver loading</a>
+              <a href="index.html" class="px-3 py-2 bg-white border border-gray-300 hover:bg-gray-50 rounded-md text-sm text-gray-700">Nova análise</a>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-3 gap-3 mb-4">
+            <div class="soft rounded-md p-3">
+              <div class="text-xs text-blue-700/80">Testes</div>
+              <div id="kpiTestes" class="text-2xl font-bold text-blue-700">0</div>
+            </div>
+            <div class="soft rounded-md p-3">
+              <div class="text-xs text-blue-700/80">Arquivos</div>
+              <div id="kpiArquivos" class="text-2xl font-bold text-blue-700">0</div>
+            </div>
+            <div class="soft rounded-md p-3">
+              <div class="text-xs text-blue-700/80">Cobertura</div>
+              <div id="kpiCobertura" class="text-2xl font-bold text-blue-700">—</div>
+            </div>
+          </div>
+
+          <div id="listaArquivos" class="scroll-y space-y-2">
+            <div class="p-4 border border-dashed border-gray-300 rounded-md bg-gray-50 text-gray-500">
+              Carregando arquivos…
+            </div>
+          </div>
+        </div>
+
+        <div class="card p-4" data-aos="fade-up" data-aos-delay="100">
+          <h2 class="text-lg font-semibold text-gray-800 mb-3 flex items-center">
+            <i data-feather="pie-chart" class="mr-2"></i> Dashboards Codecov
+          </h2>
+          <div id="areaCodecov" class="space-y-3">
+            <div class="p-4 border border-dashed border-gray-300 rounded-md bg-gray-50 text-gray-500">Carregando Codecov…</div>
+          </div>
+          <p class="text-xs text-gray-500 mt-3">Para repositórios privados, você pode precisar estar autenticado no Codecov.</p>
+        </div>
       </div>
-      <div class="text-xs text-gray-400 mt-3">Para repositórios privados, os embeds podem exigir autenticação no Codecov.</div>
-    </div>
+
+      <div class="card p-4" data-aos="fade-up">
+        <h2 class="text-lg font-semibold text-gray-800 mb-3 flex items-center">
+          <i data-feather="info" class="mr-2"></i> Explicações
+        </h2>
+        <div id="listaExplicacoes" class="grid gap-3">
+          <div class="p-4 border border-dashed border-gray-300 rounded-md bg-gray-50 text-gray-500">Carregando explicações…</div>
+        </div>
+      </div>
+
+      <div id="statusBox" class="hidden mt-6 p-3 rounded-md text-sm"></div>
+    </main>
+
+    <footer class="bg-gray-800 text-white py-6">
+      <div class="container mx-auto px-4 text-center">
+        <p>&copy; 2023 CodeAnalyzer. Todos os direitos reservados.</p>
+      </div>
+    </footer>
   </div>
 
-  <div class="card p-4 mt-4">
-    <h2 class="font-bold mb-2">Explicações</h2>
-    <div id="listaExplicacoes" class="lista text-gray-200"></div>
-  </div>
-</div>
+  <script>
+    AOS.init();
+    feather.replace();
 
-<script>
-function pegar(id){return document.getElementById(id)}
-function parametro(nome){return new URLSearchParams(location.search).get(nome)||""}
-function escrever(id,valor){pegar(id).textContent=valor}
-function tempoFmt(ms){if(!ms||ms<1)return"—";let s=Math.floor(ms/1000);let m=Math.floor(s/60);s=s%60;let h=Math.floor(m/60);m=m%60;let r=[];if(h)r.push(h+"h");if(m)r.push(m+"m");if(s)r.push(s+"s");return r.join(" ")||ms+" ms"}
-function urlStatus(exec){return "/api/process/status"+(exec?"?execId="+encodeURIComponent(exec):"")}
-function urlResultados(exec){return "/api/resultados"+(exec?"?execId="+encodeURIComponent(exec):"")}
-function limpar(el){while(el.firstChild)el.removeChild(el.firstChild)}
-function criarItemArquivo(a){let d=document.createElement("div");d.className="item";let n=document.createElement("span");n.textContent=String(a.nome||a.arquivo||"arquivo.java");let ac=document.createElement("div");ac.className="flex gap-2";let b1=document.createElement("a");b1.className="btn";b1.textContent="Baixar";b1.href=a.link||a.download||"#";b1.target="_blank";let b2=document.createElement("a");b2.className="btn";b2.textContent="Abrir";b2.href=a.preview||a.link||"#";b2.target="_blank";ac.appendChild(b1);ac.appendChild(b2);d.appendChild(n);d.appendChild(ac);return d}
-function criarExplicacao(e){let d=document.createElement("div");d.className="p-3 rounded-lg border border-white/10 bg-white/5";let h=document.createElement("div");h.className="font-semibold mb-1";h.textContent=String(e.titulo||e.arquivo||"Explicação");let p=document.createElement("div");p.className="text-sm opacity-90";p.innerText=String(e.texto||e.descricao||"");d.appendChild(h);d.appendChild(p);return d}
-async function carregarResultados(){let exec=parametro("execId");escrever("etqExec","execId: "+(exec||"—"));pegar("bolinha").style.background="var(--warn)";pegar("bolinha").style.boxShadow="0 0 10px var(--warn)";escrever("textoStatus","Buscando resultados");try{let r=await fetch(urlResultados(exec),{credentials:"include"});if(!r.ok)throw new Error("falha");let j=await r.json();let ar=j.arquivos||j.tests||j.testes||[];let ex=j.explicacoes||j.explanacoes||[];let cc=j.codecov||{};escrever("kpiArquivos",ar.length);escrever("kpiTestes",j.totalTestes||j.testsCount||ar.length);escrever("kpiCobertura",j.cobertura||cc.cobertura||"—");let la=pegar("listaArquivos");limpar(la);if(ar.length){ar.forEach(a=>la.appendChild(criarItemArquivo(a)))}else{la.appendChild(Object.assign(document.createElement("div"),{className:"text-gray-400",textContent:"Nenhum arquivo localizado em entrada-usuário"}))}let le=pegar("listaExplicacoes");limpar(le);if(ex.length){ex.forEach(e=>le.appendChild(criarExplicacao(e)))}else{le.appendChild(Object.assign(document.createElement("div"),{className:"text-gray-400",textContent:"Sem explicações disponíveis"}))}let ac=pegar("areaCodecov");limpar(ac);let em=[];if(cc.badge)em.push({t:"img",u:cc.badge});if(cc.imagens)cc.imagens.forEach(u=>em.push({t:"img",u:u}));if(cc.iframes)cc.iframes.forEach(u=>em.push({t:"ifr",u:u}));if(cc.coverageSvg)em.push({t:"img",u:cc.coverageSvg});if(cc.sunburst)em.push({t:"ifr",u:cc.sunburst});if(!em.length){ac.appendChild(Object.assign(document.createElement("div"),{className:"embed text-gray-400",textContent:"Sem dados do Codecov"}))}else{em.forEach(e=>{if(e.t==="img"){let w=document.createElement("div");w.className="embed";let i=document.createElement("img");i.src=e.u;i.alt="Codecov";i.style.maxWidth="100%";i.style.height="auto";w.appendChild(i);ac.appendChild(w)}else{let f=document.createElement("iframe");f.className="ifr";f.loading="lazy";f.src=e.u;ac.appendChild(f)}})}pegar("bolinha").style.background="var(--ok)";pegar("bolinha").style.boxShadow="0 0 10px var(--ok)";escrever("textoStatus","Finalizado")}catch(e){escrever("textoStatus","Erro ao carregar resultados");pegar("bolinha").style.background="var(--err)";pegar("bolinha").style.boxShadow="0 0 10px var(--err)"}}
-async function verificarStatus(){let exec=parametro("execId");try{let r=await fetch(urlStatus(exec),{credentials:"include"});if(!r.ok)throw new Error("falha");let j=await r.json();escrever("etqTempo",tempoFmt(j.duracaoMs||j.tempo||0));if((j.estado||"").toUpperCase()==="FINALIZADO"||j.done){await carregarResultados()}else{escrever("textoStatus","Processando");pegar("bolinha").style.background="var(--warn)";pegar("bolinha").style.boxShadow="0 0 10px var(--warn)"}}catch(e){}}
-pegar("botaoRecarregar").addEventListener("click",carregarResultados)
-document.addEventListener("DOMContentLoaded",async()=>{let exec=parametro("execId");let atalho=pegar("atalhoLoading");if(exec)atalho.href="loading.html?execId="+encodeURIComponent(exec);await verificarStatus();await carregarResultados()})
-</script>
+    const qs = new URLSearchParams(location.search);
+    const execId = qs.get('execId') || '';
+    const chipExec = document.getElementById('chipExec');
+    const chipTempo = document.getElementById('chipTempo');
+    const chipStatus = document.getElementById('chipStatus');
+    const listaArquivos = document.getElementById('listaArquivos');
+    const listaExplicacoes = document.getElementById('listaExplicacoes');
+    const areaCodecov = document.getElementById('areaCodecov');
+    const kpiTestes = document.getElementById('kpiTestes');
+    const kpiArquivos = document.getElementById('kpiArquivos');
+    const kpiCobertura = document.getElementById('kpiCobertura');
+    const statusBox = document.getElementById('statusBox');
+    const btnReload = document.getElementById('btnReload');
+    const btnLoading = document.getElementById('btnLoading');
+
+    if (execId) {
+      chipExec.textContent = 'execId: ' + execId;
+      btnLoading.href = 'loading.html?execId=' + encodeURIComponent(execId);
+    }
+
+    function tempoFmt(ms){
+      if(!ms || ms < 1) return '—';
+      let s = Math.floor(ms/1000);
+      let m = Math.floor(s/60); s = s%60;
+      let h = Math.floor(m/60); m = m%60;
+      const parts = [];
+      if (h) parts.push(h+'h'); if (m) parts.push(m+'m'); if (s) parts.push(s+'s');
+      return parts.join(' ') || (ms+' ms');
+    }
+
+    function escreveStatus(msg, tipo='info'){
+      statusBox.classList.remove('hidden','bg-green-100','text-green-800','border-green-200','bg-red-100','text-red-800','border-red-200','bg-blue-50','text-blue-800','border-blue-200');
+      statusBox.classList.add('border','bg-blue-50','text-blue-800','border-blue-200');
+      if (tipo==='ok'){ statusBox.classList.remove('bg-blue-50','text-blue-800','border-blue-200'); statusBox.classList.add('bg-green-100','text-green-800','border-green-200'); }
+      if (tipo==='err'){ statusBox.classList.remove('bg-blue-50','text-blue-800','border-blue-200'); statusBox.classList.add('bg-red-100','text-red-800','border-red-200'); }
+      statusBox.textContent = msg;
+    }
+
+    function limpar(el){ while(el.firstChild) el.removeChild(el.firstChild); }
+
+    function itemArquivo(a){
+      const nome = a.nome || a.arquivo || a.path || 'arquivo';
+      const link = a.link || a.download || a.url || '#';
+      const preview = a.preview || a.view || link;
+      const el = document.createElement('div');
+      el.className = 'p-3 border rounded-md flex items-center justify-between gap-3';
+      const left = document.createElement('div');
+      left.className = 'flex items-center gap-2';
+      const ic = document.createElement('i');
+      ic.setAttribute('data-feather','file');
+      ic.className = 'text-gray-400';
+      const span = document.createElement('span');
+      span.className = 'font-medium text-gray-800 break-all';
+      span.textContent = nome;
+      left.appendChild(ic); left.appendChild(span);
+      const right = document.createElement('div');
+      right.className = 'flex gap-2';
+      const a1 = document.createElement('a'); a1.href=link; a1.target='_blank'; a1.className='px-3 py-1 rounded-md border text-sm text-gray-700 bg-white hover:bg-gray-50'; a1.textContent='Baixar';
+      const a2 = document.createElement('a'); a2.href=preview; a2.target='_blank'; a2.className='px-3 py-1 rounded-md border text-sm text-gray-700 bg-white hover:bg-gray-50'; a2.textContent='Abrir';
+      right.appendChild(a1); right.appendChild(a2);
+      el.appendChild(left); el.appendChild(right);
+      return el;
+    }
+
+    function itemExplicacao(e){
+      const el = document.createElement('div');
+      el.className = 'p-4 border rounded-md bg-white';
+      const h = document.createElement('div');
+      h.className = 'font-semibold text-gray-800 mb-1';
+      h.textContent = e.titulo || e.title || e.arquivo || 'Explicação';
+      const p = document.createElement('div');
+      p.className = 'text-gray-700 text-sm whitespace-pre-wrap';
+      p.textContent = e.texto || e.text || e.descricao || e.description || '';
+      el.appendChild(h); el.appendChild(p);
+      return el;
+    }
+
+    function renderCodecov(cc){
+      limpar(areaCodecov);
+      const blocks = [];
+      if (!cc || typeof cc !== 'object') {
+        const d = document.createElement('div');
+        d.className = 'p-4 border border-dashed border-gray-300 rounded-md bg-gray-50 text-gray-500';
+        d.textContent = 'Sem dados do Codecov';
+        areaCodecov.appendChild(d);
+        return;
+      }
+      if (cc.badge) blocks.push({t:'img',u:cc.badge});
+      if (Array.isArray(cc.imagens)) cc.imagens.forEach(u=>blocks.push({t:'img',u}));
+      if (Array.isArray(cc.images)) cc.images.forEach(u=>blocks.push({t:'img',u}));
+      if (cc.coverageSvg) blocks.push({t:'img',u:cc.coverageSvg});
+      if (Array.isArray(cc.iframes)) cc.iframes.forEach(u=>blocks.push({t:'ifr',u}));
+      if (cc.sunburst) blocks.push({t:'ifr',u:cc.sunburst});
+
+      if (!blocks.length) {
+        const d = document.createElement('div');
+        d.className = 'p-4 border border-dashed border-gray-300 rounded-md bg-gray-50 text-gray-500';
+        d.textContent = 'Sem dados do Codecov';
+        areaCodecov.appendChild(d);
+        return;
+      }
+
+      blocks.forEach(b=>{
+        if (b.t==='img'){
+          const w = document.createElement('div');
+          w.className = 'p-2 border rounded-md bg-white';
+          const img = document.createElement('img');
+          img.src = b.u; img.alt='Codecov'; img.className='w-full h-auto';
+          w.appendChild(img);
+          areaCodecov.appendChild(w);
+        } else {
+          const f = document.createElement('iframe');
+          f.src = b.u; f.className='w-full h-64 border rounded-md bg-white'; f.loading='lazy';
+          areaCodecov.appendChild(f);
+        }
+      });
+    }
+
+    async function getJSON(url){
+      const r = await fetch(url, { credentials:'include' });
+      if (!r.ok) throw new Error('HTTP '+r.status+' em '+url);
+      const ct = (r.headers.get('content-type')||'').toLowerCase();
+      if (!ct.includes('application/json')) throw new Error('Resposta não-JSON em '+url);
+      return r.json();
+    }
+
+    function pick(arr){ return Array.isArray(arr) && arr.length ? arr : []; }
+
+    async function carregarStatus(){
+      if (!execId) return;
+      try{
+        const s = await getJSON('/api/process/status?execId='+encodeURIComponent(execId));
+        const estado = s.estado ?? s.status ?? s.phase ?? s.stage ?? '—';
+        chipStatus.textContent = 'status: '+estado;
+        const dur = s.duracaoMs ?? s.tempo ?? s.durationMs;
+        if (dur!=null) chipTempo.textContent = tempoFmt(dur);
+        chipStatus.className = 'badge bg-yellow-50 text-yellow-700 border border-yellow-200';
+        const up = (estado+'').toUpperCase();
+        if (up.includes('FINAL')||s.done||s.finished||s.success||s.completed) {
+          chipStatus.className = 'badge bg-green-100 text-green-700 border border-green-200';
+        }
+        if (up.includes('ERRO')||up.includes('ERROR')||s.error||s.failed) {
+          chipStatus.className = 'badge bg-red-100 text-red-700 border border-red-200';
+        }
+      }catch(e){
+        escreveStatus('Não foi possível obter status: '+e.message,'err');
+      }
+    }
+
+    async function carregarResultados(){
+      try{
+        const url = '/api/resultados' + (execId?('?execId='+encodeURIComponent(execId)):'');
+        const j = await getJSON(url);
+
+        const arquivos = j.arquivos || j.tests || j.testes || [];
+        const explics  = j.explicacoes || j.explanacoes || j.explanations || [];
+        const cc       = j.codecov || {};
+        const totalT   = j.totalTestes || j.testsCount || arquivos.length;
+        const cobertura= j.cobertura ?? cc.cobertura ?? '—';
+
+        kpiTestes.textContent   = totalT;
+        kpiArquivos.textContent = Array.isArray(arquivos) ? arquivos.length : 0;
+        kpiCobertura.textContent= typeof cobertura === 'number' ? (cobertura.toFixed(2)+'%') : String(cobertura);
+
+        limpar(listaArquivos);
+        const list = pick(arquivos);
+        if (!list.length){
+          const d = document.createElement('div');
+          d.className = 'p-4 border border-dashed border-gray-300 rounded-md bg-gray-50 text-gray-500';
+          d.textContent = 'Nenhum arquivo localizado em entrada-usuário';
+          listaArquivos.appendChild(d);
+        } else {
+          list.forEach(a=>{
+            const el = itemArquivo(a);
+            listaArquivos.appendChild(el);
+          });
+          feather.replace(); // re-render icons após inserir elementos
+        }
+
+        limpar(listaExplicacoes);
+        const ex = pick(explics);
+        if (!ex.length){
+          const d = document.createElement('div');
+          d.className = 'p-4 border border-dashed border-gray-300 rounded-md bg-gray-50 text-gray-500';
+          d.textContent = 'Sem explicações disponíveis';
+          listaExplicacoes.appendChild(d);
+        } else {
+          ex.forEach(e=>listaExplicacoes.appendChild(itemExplicacao(e)));
+        }
+
+        renderCodecov(cc);
+        escreveStatus('Resultados atualizados', 'ok');
+      }catch(e){
+        escreveStatus('Erro ao carregar resultados: '+e.message,'err');
+      }
+    }
+
+    btnReload.addEventListener('click', async ()=>{
+      escreveStatus('Atualizando…');
+      await carregarStatus();
+      await carregarResultados();
+    });
+
+    document.addEventListener('DOMContentLoaded', async ()=>{
+      await carregarStatus();
+      await carregarResultados();
+    });
+  </script>
 </body>
 </html>
