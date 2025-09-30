@@ -1,25 +1,22 @@
-import java.util.Arrays;
-import java.util.Random;
+import java.security.SecureRandom;
 
-public class ArrayAleatorio {
-    public static void main(String[] args) {
-        int[] numeros = new int[10];
-        Random random = new Random();
+public class GeradorSenha {
+    private static final String CARACTERES = 
+        "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*";
+    
+    public static String gerarSenha(int tamanho) {
+        SecureRandom random = new SecureRandom();
+        StringBuilder senha = new StringBuilder();
         
-        // Preenche array com valores aleatórios
-        for (int i = 0; i < numeros.length; i++) {
-            numeros[i] = random.nextInt(1000);
+        for (int i = 0; i < tamanho; i++) {
+            int index = random.nextInt(CARACTERES.length());
+            senha.append(CARACTERES.charAt(index));
         }
         
-        System.out.println("Array original: " + Arrays.toString(numeros));
-        
-        // Ordena o array
-        Arrays.sort(numeros);
-        System.out.println("Array ordenado: " + Arrays.toString(numeros));
-        
-        // Encontra maior e menor valor
-        int maior = numeros[numeros.length - 1];
-        int menor = numeros[0];
-        System.out.println("Maior: " + maior + ", Menor: " + menor);
+        return senha.toString();
+    }
+    
+    public static void main(String[] args) {
+        System.out.println("Senha gerada: " + gerarSenha(12));
     }
 }

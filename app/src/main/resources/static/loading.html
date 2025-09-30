@@ -70,12 +70,14 @@ const actions     = document.getElementById('actions');
 const btnRetry    = document.getElementById('btnRetry');
 const verResultados = document.getElementById('verResultados');
 
-const STATUS_ENDPOINTS = ['/api/process/status','/api/status','/status','/pipeline/status'];
+// Endpoints esperados do backend (adapter do GitHub Actions)
+const STATUS_ENDPOINTS  = ['/api/process/status','/api/status','/status','/pipeline/status'];
 const RESULTS_ENDPOINTS = ['/api/resultados','/api/results','/results'];
 
+// Labels extras para cobrir variações de provedores (inclui in_progress do GitHub)
 const steps = [
-  { id: 'step1', labels: ['INICIADO','QUEUED','PREPARANDO','STARTING','PREPARING'] },
-  { id: 'step2', labels: ['ANALISE_ESTATICA','STATIC','ANALYZE','ANALYSIS'] },
+  { id: 'step1', labels: ['INICIADO','QUEUED','PREPARANDO','STARTING','PREPARING','PENDING'] },
+  { id: 'step2', labels: ['ANALISE_ESTATICA','STATIC','ANALYZE','ANALYSIS','IN_PROGRESS','RUNNING'] },
   { id: 'step3', labels: ['GERANDO_TESTES','TEST','GENERATE','RUNNING_TESTS'] },
   { id: 'step4', labels: ['CALCULANDO_COBERTURA','COVERAGE'] },
   { id: 'step5', labels: ['FINALIZANDO','FINALIZING','POST','REPORT'] },
@@ -249,13 +251,65 @@ async function startPipelineFromPending() {
   return execId;
 }
 
-/* ===================== Polling ===================== */
+/* ===================== SSE (tempo real) com fallback para polling) ===================== */
 let chosenStatusEndpoint = null;
 let chosenResultsEndpoint = null;
 
+async function trySSE(execId){
+  try{
+    const es = new EventSource('/api/process/stream?execId=' + encodeURIComponent(execId), { withCredentials:true });
+    let saw = false;
+
+    es.addEventListener('status', (e) => {
+      saw = true;
+      const j = JSON.parse(e.data);
+      const estado = j.status || j.estado || '';
+      const pct = Number(j.progress ?? j.percentage ?? j.percent ?? 0);
+      if (Number.isFinite(pct)) {
+        progressBar.style.width = Math.max(0, Math.min(100, pct)) + '%';
+      }
+
+      const idx = mapEstadoToStep(estado);
+      for (let i=0;i<steps.length;i++){
+        if (i < idx) markDone(i);
+        else if (i === idx) markActive(i);
+      }
+
+      if (j.error === true || /ERRO|ERROR|FAIL/i.test(String(estado))) {
+        setStatusBadge('Erro na pipeline', 'err');
+        document.getElementById('step5').textContent = 'Falha no processamento';
+        document.getElementById('step5').className = 'text-red-600 font-semibold';
+        progressBar.style.width = '100%';
+        es.close();
+        return;
+      }
+
+      if (j.done === true || /FINAL|DONE|COMPLETE|SUCCESS/i.test(String(estado))) {
+        for (let i=0;i<steps.length;i++) markDone(i);
+        setStatusBadge('Concluído', 'ok');
+        es.close();
+        const to = 'results.html?execId=' + encodeURIComponent(execId);
+        verResultados.href = to; verResultados.classList.remove('hidden');
+        setTimeout(()=>location.href = to, 600);
+        return;
+      }
+
+      setStatusBadge(estado ? ('Status: ' + estado) : 'Aguardando status…');
+    });
+
+    es.onerror = () => {
+      es.close();
+      if (!saw) pollByExecId(execId); // fallback
+    };
+  }catch{
+    pollByExecId(execId); // fallback
+  }
+}
+
+/* ===================== Polling (fallback) ===================== */
 async function pollByExecId(execId) {
   let delay = 900;
-  let stagnation = 0; // contagem de loops sem avanço, para acionar verificação por resultados
+  let stagnation = 0;
   let lastPct = 0;
 
   async function getStatus(){
@@ -263,7 +317,7 @@ async function pollByExecId(execId) {
       const res = await tryFetchJSON(chosenStatusEndpoint + '?execId=' + encodeURIComponent(execId));
       if (res.ok) return res;
       logDiag({retryStatusFrom:chosenStatusEndpoint, err:res.status || res.error});
-      chosenStatusEndpoint = null; // força fallback
+      chosenStatusEndpoint = null;
     }
     const probe = await fetchFirst(STATUS_ENDPOINTS.map(b=>b+'?execId='+encodeURIComponent(execId)), tryFetchJSON);
     if (probe.ok) { chosenStatusEndpoint = probe.chosen.replace(/\?.*$/,''); logDiag({usingStatus:chosenStatusEndpoint}); }
@@ -288,8 +342,7 @@ async function pollByExecId(execId) {
         setStatusBadge('Sem status ('+(st.last?.status || st.last?.error || 'erro')+')');
         logDiag({statusFail:st.last});
         fallbackPulse();
-        // plano B: tentar resultados mesmo sem status
-        const rr = await getResults();
+        const rr = await getResults(); // tenta concluir pelos resultados
         if (rr.ok && resultadosSugeremPronto(rr.json)) {
           return concluir(execId);
         }
@@ -330,10 +383,9 @@ async function pollByExecId(execId) {
       if (done) return concluir(execId);
 
       setStatusBadge(estado ? ('Status: '+estado) : 'Aguardando status…');
-      delay = 900; // reset backoff em sucesso
+      delay = 900;
 
-      // se está “parado” por tempo demais, tente verificar resultados
-      if (stagnation >= 4) { // ~ 4 ciclos sem mudança
+      if (stagnation >= 4) {
         const rr = await getResults();
         if (rr.ok && resultadosSugeremPronto(rr.json)) {
           return concluir(execId);
@@ -374,7 +426,7 @@ async function pollByExecId(execId) {
 btnRetry.addEventListener('click', async ()=>{
   actions.classList.add('hidden');
   const id = getExecFromURL();
-  if (id) pollByExecId(id); else init();
+  if (id) { trySSE(id); } else { init(); }
 });
 
 async function init(){
@@ -384,15 +436,16 @@ async function init(){
   if (execId) {
     execChip.textContent = 'execId: '+execId;
     setStatusBadge('Retomando…');
-    pollByExecId(execId);
+    trySSE(execId); // tenta SSE primeiro; se falhar, cai pro polling
     return;
   }
 
   setStatusBadge('Iniciando…');
   const got = await startPipelineFromPending();
   if (got) {
+    execChip.textContent = 'execId: '+got;
     setStatusBadge('Pipeline iniciada');
-    pollByExecId(got);
+    trySSE(got); // tenta SSE primeiro
     return;
   }
 
