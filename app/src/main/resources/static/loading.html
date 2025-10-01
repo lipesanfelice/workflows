@@ -25,81 +25,129 @@
   </div>
 
 <script>
-  feather.replace();
+feather.replace();
 
-  /**
-  * Fica consultando o arquivo raw do GitHub:
-  *   https://raw.githubusercontent.com/<owner>/<repo>/<branch>/app/entrada-usuario/done.json
-  *
-  * Redireciona para results.html **somente** quando:
-  *   - done === true
-  *   - ts do done.json é posterior ao momento em que o loading foi aberto (anti-stale)
-  */
+/** ======== CONFIG ======== */
+let OWNER         = 'lipesanfelice';
+let REPO          = 'workflows';
+let BRANCH        = 'main';
+let WORKFLOW_FILE = '.github/workflows/ci.yml'; // <- caminho do workflow no repo
 
-  let OWNER  = 'lipesanfelice';
-  let REPO   = 'workflows';
-  let BRANCH = 'main';
+// Permite override via query string (útil p/ testes)
+const qs = new URLSearchParams(location.search);
+OWNER         = qs.get('owner')  || OWNER;
+REPO          = qs.get('repo')   || REPO;
+BRANCH        = qs.get('branch') || BRANCH;
+WORKFLOW_FILE = qs.get('wf')     || WORKFLOW_FILE;
 
-  const qs = new URLSearchParams(location.search);
-  OWNER  = qs.get('owner')  || OWNER;
-  REPO   = qs.get('repo')   || REPO;
-  BRANCH = qs.get('branch') || BRANCH;
+// Endpoints
+const GH_RUNS_URL = `https://api.github.com/repos/${OWNER}/${REPO}/actions/workflows/${encodeURIComponent(WORKFLOW_FILE)}/runs?branch=${encodeURIComponent(BRANCH)}&per_page=1&event=push`;
+const DONE_URL    = `https://raw.githubusercontent.com/${OWNER}/${REPO}/${BRANCH}/app/entrada-usuario/done.json`;
 
-  const DONE_URL = `https://raw.githubusercontent.com/${OWNER}/${REPO}/${BRANCH}/app/entrada-usuario/done.json`;
+const POLL_MS         = 1200;     // intervalo primário (rápido)
+const FALLBACK_POLL_MS= 2000;     // intervalo quando em fallback
+const HARD_TIMEOUT_MS = 18*60*1000; // fail-safe geral (~18min)
 
-  const msgEl  = document.getElementById('msg');
-  const errBox = document.getElementById('errBox');
+const msgEl  = document.getElementById('msg');
+const errBox = document.getElementById('errBox');
 
-  const POLL_INTERVAL_MS = 1500;
-  const HARD_TIMEOUT_MS  = 20 * 60 * 1000; // 20min fail-safe
-  const PAGE_OPENED_AT   = Date.now();
-  const FRESH_TOLERANCE  = 2000; // 2s de tolerância de relógio
+function showErr(s){
+  errBox.classList.remove('hidden');
+  errBox.textContent = s;
+}
+function toResults(status, runId){
+  const t = runId ? String(runId) : String(Date.now());
+  const url = new URL('results.html', location.href);
+  if (status) url.searchParams.set('status', status);
+  url.searchParams.set('t', t);  // marca para cache-busting na results.html
+  location.href = url.toString();
+}
 
-  function safeJson(s){ try { return JSON.parse(s); } catch { return null; } }
-
-  async function checkDone(){
-    const url = DONE_URL + `?t=${Date.now()}`; // cache-busting
-    try {
-      const r = await fetch(url, { cache: 'no-store' });
-      if (r.status === 404) { setTimeout(checkDone, POLL_INTERVAL_MS); return; }
-      if (!r.ok) {
-        errBox.classList.remove('hidden');
-        errBox.textContent = `Falha ao consultar marcador: HTTP ${r.status}`;
-        setTimeout(checkDone, POLL_INTERVAL_MS + 1000);
-        return;
+/** ============== 1) Poll pela API do GitHub Actions (rápida) ============== */
+async function pollGithubActions(){
+  try{
+    // cache bust + no-store
+    const url = `${GH_RUNS_URL}&t=${Date.now()}`;
+    const r = await fetch(url, {
+      cache:'no-store',
+      headers:{
+        'Accept':'application/vnd.github+json',
+        'Cache-Control':'no-store, no-cache, must-revalidate, max-age=0',
+        'Pragma':'no-cache',
+        'Expires':'0'
       }
-      const txt = await r.text();
-      const j = safeJson(txt);
-
-      // Anti-stale: exige done=true **e** ts >= PAGE_OPENED_AT - tolerância
-      if (j && j.done === true) {
-        const ts = Date.parse(j.ts || '');
-        const isFresh = Number.isFinite(ts) && ts >= (PAGE_OPENED_AT - FRESH_TOLERANCE);
-        if (isFresh) {
-          const status = (j.status || '').toLowerCase();
-          // dica: se quiser forçar reload total da results (anti-cache), acrescente ?ts=<now>
-          location.href = `results.html?status=${encodeURIComponent(status)}&t=${Date.now()}`;
-          return;
-        }
-      }
-
-      // segue aguardando
-      setTimeout(checkDone, POLL_INTERVAL_MS);
-    } catch (e) {
-      errBox.classList.remove('hidden');
-      errBox.textContent = 'Erro de rede ao consultar marcador: ' + e.message;
-      setTimeout(checkDone, POLL_INTERVAL_MS + 1000);
+    });
+    if (!r.ok){
+      // 403/404/5xx → tenta fallback
+      showErr(`GitHub Actions API: HTTP ${r.status}; usando fallback…`);
+      return pollDoneJsonFallback();
     }
+    const j = await r.json();
+    const run = j && Array.isArray(j.workflow_runs) ? j.workflow_runs[0] : null;
+
+    // Se ainda não há run recente, segue tentando
+    if (!run){
+      msgEl.textContent = 'Aguardando início da pipeline…';
+      return setTimeout(pollGithubActions, POLL_MS);
+    }
+
+    // status: queued | in_progress | completed
+    // conclusion (só quando completed): success | failure | cancelled | skipped | timed_out | action_required
+    if (run.status === 'completed'){
+      const status = (run.conclusion || '').toLowerCase();
+      msgEl.textContent = `Pipeline concluída (${status || 'desconhecido'})`;
+      return toResults(status || 'success', run.id);
+    } else {
+      msgEl.textContent = 'Pipeline em execução…';
+      return setTimeout(pollGithubActions, POLL_MS);
+    }
+  }catch(e){
+    // Qualquer erro de rede → fallback
+    showErr('Falha na API do GitHub Actions; usando fallback. Detalhe: ' + e.message);
+    return pollDoneJsonFallback();
   }
+}
 
-  msgEl.textContent = 'Aguarde enquanto a pipeline executa…';
+/** ============== 2) Fallback: done.json no repositório (pode demorar) ============== */
+function safeJson(s){ try { return JSON.parse(s); } catch { return null; } }
 
-  // Fail-safe: se demorar demais, vá para results com status=timeout (e t=… para bust de cache)
-  setTimeout(() => { location.href = 'results.html?status=timeout&t=' + Date.now(); }, HARD_TIMEOUT_MS);
+async function pollDoneJsonFallback(){
+  try{
+    const url = `${DONE_URL}?t=${Date.now()}`; // cache-busting
+    const r = await fetch(url, { cache:'no-store' });
+    if (r.status === 404){
+      // ainda não existe → tenta novamente
+      msgEl.textContent = 'Aguardando marcação de conclusão…';
+      return setTimeout(pollDoneJsonFallback, FALLBACK_POLL_MS);
+    }
+    if (!r.ok){
+      showErr(`Falha ao consultar marcador: HTTP ${r.status}`);
+      return setTimeout(pollDoneJsonFallback, FALLBACK_POLL_MS + 800);
+    }
+    const txt = await r.text();
+    const j = safeJson(txt);
+    if (j && j.done === true){
+      const status = (j.status || '').toLowerCase();
+      return toResults(status || 'success', j.ts || Date.now());
+    }
+    // existe, mas done ainda não é true
+    return setTimeout(pollDoneJsonFallback, FALLBACK_POLL_MS);
+  }catch(e){
+    showErr('Erro ao consultar marcador: ' + e.message);
+    return setTimeout(pollDoneJsonFallback, FALLBACK_POLL_MS + 800);
+  }
+}
 
-  // inicia o polling
-  checkDone();
+/** ============== Bootstrap + Fail-safe ============== */
+msgEl.textContent = 'Verificando status da pipeline…';
+
+// fail-safe: se nada responder, leva para results (timeout)
+setTimeout(() => toResults('timeout', Date.now()), HARD_TIMEOUT_MS);
+
+// start pela API (rápida); se cair, o próprio código chama o fallback
+pollGithubActions();
 </script>
+
 
 </body>
 </html>
