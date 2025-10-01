@@ -1,25 +1,20 @@
-public class ProcessadorTexto {
+public class ConversorTemperatura {
     
-    public static int contarPalavras(String texto) {
-        if (texto == null || texto.trim().isEmpty()) {
-            return 0;
-        }
-        return texto.trim().split("\\s+").length;
+    public static double celsiusParaFahrenheit(double celsius) {
+        return (celsius * 9/5) + 32;
     }
     
-    public static String inverterString(String texto) {
-        return new StringBuilder(texto).reverse().toString();
+    public static double fahrenheitParaCelsius(double fahrenheit) {
+        return (fahrenheit - 32) * 5/9;
     }
     
-    public static boolean ehPalindromo(String texto) {
-        String limpo = texto.replaceAll("[^a-zA-Z]", "").toLowerCase();
-        return limpo.equals(inverterString(limpo));
+    public static double celsiusParaKelvin(double celsius) {
+        return celsius + 273.15;
     }
     
     public static void main(String[] args) {
-        String texto = "Java é uma linguagem de programação";
-        System.out.println("Palavras: " + contarPalavras(texto));
-        System.out.println("Invertido: " + inverterString("Java"));
-        System.out.println("É palíndromo? " + ehPalindromo("radar"));
+        System.out.println("25°C para Fahrenheit: " + celsiusParaFahrenheit(25));
+        System.out.println("77°F para Celsius: " + fahrenheitParaCelsius(77));
+        System.out.println("0°C para Kelvin: " + celsiusParaKelvin(0));
     }
 }

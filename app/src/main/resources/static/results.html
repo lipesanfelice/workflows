@@ -147,7 +147,7 @@
   </div>
 </div>
 
-<script>
+<!-- <script>
 AOS.init();
 feather.replace();
 hljs.registerLanguage('java', window.hljsDefineJava);
@@ -483,6 +483,290 @@ document.addEventListener('DOMContentLoaded', async ()=>{
   await Promise.all([carregarArquivos(), carregarExplicacoes(), carregarJacoco()]);
   escreveStatus('Resultados carregados', 'ok');
 });
+</script> -->
+
+<script>
+  AOS.init();
+  feather.replace();
+
+  // ===== Marca única desta execução (passada pelo loading: results.html?status=...&t=12345) =====
+  const qs = new URLSearchParams(location.search);
+  const RUN_T = qs.get('t') || String(Date.now());   // usado para cache-busting consistente
+  const STATUS = (qs.get('status') || '').toLowerCase(); // success | failure | cancelled | timeout | ''
+
+  // ===== Refs de UI =====
+  const chipExec = document.getElementById('chipExec');   // pode não existir se você removeu execId; ignore
+  const chipTempo = document.getElementById('chipTempo');
+  const chipStatus = document.getElementById('chipStatus');
+  const listaArquivos = document.getElementById('listaArquivos');
+  const listaExplicacoes = document.getElementById('listaExplicacoes');
+  const areaCodecov = document.getElementById('areaCodecov');
+  const kpiTestes = document.getElementById('kpiTestes');
+  const kpiArquivos = document.getElementById('kpiArquivos');
+  const kpiCobertura = document.getElementById('kpiCobertura');
+  const statusBox = document.getElementById('statusBox');
+  const btnReload = document.getElementById('btnReload');
+  const btnLoading = document.getElementById('btnLoading');
+
+  // ===== Helpers =====
+  function tempoFmt(ms){
+    if(!ms || ms < 1) return '—';
+    let s = Math.floor(ms/1000);
+    let m = Math.floor(s/60); s = s%60;
+    let h = Math.floor(m/60); m = m%60;
+    const parts = [];
+    if (h) parts.push(h+'h'); if (m) parts.push(m+'m'); if (s) parts.push(s+'s');
+    return parts.join(' ') || (ms+' ms');
+  }
+  function escreveStatus(msg, tipo='info'){
+    statusBox.className = 'mt-6 p-3 rounded-md text-sm border ' +
+      (tipo==='ok'  ? 'bg-green-100 text-green-800 border-green-200'
+      : tipo==='err'? 'bg-red-100 text-red-800 border-red-200'
+      :               'bg-blue-50 text-blue-800 border-blue-200');
+    statusBox.textContent = msg;
+  }
+  function limpar(el){ while(el && el.firstChild) el.removeChild(el.firstChild); }
+  function pick(arr){ return Array.isArray(arr) ? arr : []; }
+
+  // cache-busting consistente em TODOS os fetches
+  async function getJSONNoCache(url){
+    const sep = url.includes('?') ? '&' : '?';
+    const full = `${url}${sep}t=${encodeURIComponent(RUN_T)}&nocache=${Math.random()}`;
+    const r = await fetch(full, {
+      credentials:'include',
+      cache:'no-store',
+      headers: {
+        'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0',
+        'Pragma': 'no-cache',
+        'Expires': '0'
+      }
+    });
+    if (!r.ok) throw new Error(`HTTP ${r.status} em ${url}`);
+    const ct = (r.headers.get('content-type')||'').toLowerCase();
+    if (!ct.includes('application/json')) throw new Error(`Resposta não-JSON em ${url}`);
+    return r.json();
+  }
+
+  // ===== Widgets =====
+  function itemArquivo(a){
+    const nome = a.nome || a.arquivo || a.path || 'arquivo';
+    const link = a.link || a.download || a.url || '#';
+    const preview = a.preview || a.view || link;
+    const el = document.createElement('div');
+    el.className = 'p-3 border rounded-md flex items-center justify-between gap-3';
+
+    const left = document.createElement('div');
+    left.className = 'flex items-center gap-2';
+    const ic = document.createElement('i');
+    ic.setAttribute('data-feather','file');
+    ic.className = 'text-gray-400';
+    const span = document.createElement('span');
+    span.className = 'font-medium text-gray-800 break-all';
+    span.textContent = nome;
+    left.appendChild(ic); left.appendChild(span);
+
+    const right = document.createElement('div');
+    right.className = 'flex gap-2';
+    const a1 = document.createElement('a'); a1.href=link; a1.target='_blank'; a1.rel='noopener'; a1.className='px-3 py-1 rounded-md border text-sm text-gray-700 bg-white hover:bg-gray-50'; a1.textContent='Baixar';
+    const a2 = document.createElement('a'); a2.href=preview; a2.target='_blank'; a2.rel='noopener'; a2.className='px-3 py-1 rounded-md border text-sm text-gray-700 bg-white hover:bg-gray-50'; a2.textContent='Abrir';
+    right.appendChild(a1); right.appendChild(a2);
+
+    el.appendChild(left); el.appendChild(right);
+    return el;
+  }
+
+  function itemExplicacao(e){
+    const el = document.createElement('div');
+    el.className = 'p-4 border rounded-md bg-white';
+    const h = document.createElement('div');
+    h.className = 'font-semibold text-gray-800 mb-1';
+    h.textContent = e.titulo || e.title || e.arquivo || 'Explicação';
+    const p = document.createElement('div');
+    p.className = 'text-gray-700 text-sm whitespace-pre-wrap';
+    p.textContent = e.texto || e.text || e.descricao || e.description || '';
+    el.appendChild(h); el.appendChild(p);
+    return el;
+  }
+
+  function renderCodecov(cc){
+    limpar(areaCodecov);
+    const blocks = [];
+    if (cc && typeof cc === 'object') {
+      if (cc.badge) blocks.push({t:'img',u:cc.badge});
+      if (Array.isArray(cc.imagens)) cc.imagens.forEach(u=>blocks.push({t:'img',u}));
+      if (Array.isArray(cc.images))  cc.images.forEach(u=>blocks.push({t:'img',u}));
+      if (cc.coverageSvg) blocks.push({t:'img',u:cc.coverageSvg});
+      if (Array.isArray(cc.iframes)) cc.iframes.forEach(u=>blocks.push({t:'ifr',u}));
+      if (cc.sunburst) blocks.push({t:'ifr',u:cc.sunburst});
+    }
+    if (!blocks.length) {
+      const d = document.createElement('div');
+      d.className = 'p-4 border border-dashed border-gray-300 rounded-md bg-gray-50 text-gray-500';
+      d.textContent = 'Sem dados do Codecov';
+      areaCodecov.appendChild(d);
+      return;
+    }
+    blocks.forEach(b=>{
+      if (b.t==='img'){
+        const w = document.createElement('div');
+        w.className = 'p-2 border rounded-md bg-white';
+        const img = document.createElement('img');
+        // também bust no src
+        const sep = b.u.includes('?') ? '&' : '?';
+        img.src = `${b.u}${sep}t=${encodeURIComponent(RUN_T)}`;
+        img.alt='Codecov'; img.className='w-full h-auto';
+        w.appendChild(img);
+        areaCodecov.appendChild(w);
+      } else {
+        const f = document.createElement('iframe');
+        const sep = b.u.includes('?') ? '&' : '?';
+        f.src = `${b.u}${sep}t=${encodeURIComponent(RUN_T)}`;
+        f.className='w-full h-64 border rounded-md bg-white'; f.loading='lazy';
+        areaCodecov.appendChild(f);
+      }
+    });
+  }
+
+  // ===== RESET TOTAL DA TELA =====
+  function resetView(){
+    // KPIs
+    if (kpiTestes)   kpiTestes.textContent   = '0';
+    if (kpiArquivos) kpiArquivos.textContent = '0';
+    if (kpiCobertura)kpiCobertura.textContent= '—';
+
+    // Badges
+    if (chipTempo)  chipTempo.textContent  = '—';
+    if (chipStatus) {
+      chipStatus.textContent = 'status: —';
+      chipStatus.className = 'badge bg-yellow-50 text-yellow-700 border border-yellow-200';
+    }
+
+    // Listas
+    if (listaArquivos){
+      limpar(listaArquivos);
+      const d = document.createElement('div');
+      d.className = 'p-4 border border-dashed border-gray-300 rounded-md bg-gray-50 text-gray-500';
+      d.textContent = 'Carregando arquivos…';
+      listaArquivos.appendChild(d);
+    }
+    if (listaExplicacoes){
+      limpar(listaExplicacoes);
+      const d = document.createElement('div');
+      d.className = 'p-4 border border-dashed border-gray-300 rounded-md bg-gray-50 text-gray-500';
+      d.textContent = 'Carregando explicações…';
+      listaExplicacoes.appendChild(d);
+    }
+    if (areaCodecov){
+      limpar(areaCodecov);
+      const d = document.createElement('div');
+      d.className = 'p-4 border border-dashed border-gray-300 rounded-md bg-gray-50 text-gray-500';
+      d.textContent = 'Carregando Codecov…';
+      areaCodecov.appendChild(d);
+    }
+
+    // Status box
+    if (statusBox){
+      statusBox.className = 'hidden mt-6 p-3 rounded-md text-sm';
+      statusBox.textContent = '';
+    }
+
+    // Atualiza o link “Ver loading” com a nova marca
+    if (btnLoading) {
+      const href = new URL(btnLoading.getAttribute('href') || 'loading.html', location.href);
+      href.searchParams.set('t', RUN_T);
+      btnLoading.href = href.toString();
+    }
+  }
+
+  // ===== Carregamentos =====
+  async function carregarStatus(){
+    // Se você tiver endpoint de status, chame aqui.
+    // Mesmo sem endpoint, pintamos o badge com base na query ?status=...
+    if (chipStatus) {
+      let cls = 'badge bg-yellow-50 text-yellow-700 border border-yellow-200';
+      let txt = 'status: —';
+      if (STATUS) {
+        const up = STATUS.toUpperCase();
+        txt = 'status: ' + STATUS;
+        if (up.includes('SUCCESS')) cls = 'badge bg-green-100 text-green-700 border border-green-200';
+        if (up.includes('FAIL') || up.includes('CANCEL') || up.includes('TIMEOUT')) cls = 'badge bg-red-100 text-red-700 border border-red-200';
+      }
+      chipStatus.textContent = txt;
+      chipStatus.className = cls;
+    }
+  }
+
+  async function carregarResultados(){
+    try{
+      // ❗ Ajuste os endpoints conforme seu backend:
+      // Sem execId: apenas /api/resultados com cache-busting
+      const j = await getJSONNoCache('/api/resultados');
+
+      const arquivos = j.arquivos || j.tests || j.testes || [];
+      const explics  = j.explicacoes || j.explanacoes || j.explanations || [];
+      const cc       = j.codecov || {};
+      const totalT   = j.totalTestes || j.testsCount || arquivos.length;
+      const cobertura= j.cobertura ?? cc.cobertura ?? '—';
+      const dur      = j.duracaoMs ?? j.tempo ?? j.durationMs;
+
+      if (kpiTestes)   kpiTestes.textContent   = String(totalT);
+      if (kpiArquivos) kpiArquivos.textContent = String(Array.isArray(arquivos) ? arquivos.length : 0);
+      if (kpiCobertura)kpiCobertura.textContent= (typeof cobertura === 'number') ? (cobertura.toFixed(2)+'%') : String(cobertura);
+      if (chipTempo && dur!=null) chipTempo.textContent = tempoFmt(dur);
+
+      // Arquivos
+      if (listaArquivos){
+        limpar(listaArquivos);
+        const list = pick(arquivos);
+        if (!list.length){
+          const d = document.createElement('div');
+          d.className = 'p-4 border border-dashed border-gray-300 rounded-md bg-gray-50 text-gray-500';
+          d.textContent = 'Nenhum arquivo de teste localizado';
+          listaArquivos.appendChild(d);
+        } else {
+          list.forEach(a=> listaArquivos.appendChild(itemArquivo(a)));
+          feather.replace(); // re-render icons
+        }
+      }
+
+      // Explicações
+      if (listaExplicacoes){
+        limpar(listaExplicacoes);
+        const ex = pick(explics);
+        if (!ex.length){
+          const d = document.createElement('div');
+          d.className = 'p-4 border border-dashed border-gray-300 rounded-md bg-gray-50 text-gray-500';
+          d.textContent = 'Sem explicações disponíveis';
+          listaExplicacoes.appendChild(d);
+        } else {
+          ex.forEach(e=> listaExplicacoes.appendChild(itemExplicacao(e)));
+        }
+      }
+
+      // Codecov
+      renderCodecov(cc);
+      escreveStatus('Resultados atualizados', 'ok');
+    }catch(e){
+      escreveStatus('Erro ao carregar resultados: '+e.message,'err');
+    }
+  }
+
+  // ===== Eventos =====
+  if (btnReload) {
+    btnReload.addEventListener('click', async ()=>{
+      resetView();
+      escreveStatus('Atualizando…');
+      await carregarStatus();
+      await carregarResultados();
+    });
+  }
+
+  document.addEventListener('DOMContentLoaded', async ()=>{
+    resetView();
+    await carregarStatus();
+    await carregarResultados();
+  });
 </script>
+
 </body>
 </html>
