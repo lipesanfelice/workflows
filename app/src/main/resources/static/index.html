@@ -557,6 +557,7 @@
   async function enviarParaLoading(tipo,payload){
     sessionStorage.setItem('pendingJob', JSON.stringify({ tipo, quando: Date.now(), payload }));
     const ts = Date.now();
+    await fetch('/api/process/reset', { method:'POST', credentials:'include' }).catch(()=>{});
     window.location.href = `loading.html?startedAt=${ts}`;
   }
 

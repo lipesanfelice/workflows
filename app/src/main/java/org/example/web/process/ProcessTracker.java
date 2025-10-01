@@ -1,48 +1,39 @@
 package org.example.web.process;
 
-import org.springframework.stereotype.Service;
+import org.springframework.stereotype.Component;
 
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicLong;
-
-/**
- * Flag global bem simples para o loading.html:
- * - markStarted(): pipeline começou
- * - markSuccess()/markError(): pipeline terminou (com sucesso/erro)
- * - isRunning(): usado pelo front; quando false, redireciona para results.html
- */
-@Service
+@Component
 public class ProcessTracker {
-    private final AtomicBoolean running = new AtomicBoolean(false);
-    private final AtomicBoolean lastOk  = new AtomicBoolean(false);
-    private final AtomicLong lastChange = new AtomicLong(0L);
+    private volatile boolean started = false;
+    private volatile boolean done = false;
+    private volatile boolean error = false;
+    private volatile String  status = "Aguardando…";
 
-    public void markStarted() {
-        running.set(true);
-        lastChange.set(System.currentTimeMillis());
-        System.out.println("[ProcessTracker] markStarted()");
+    public synchronized void markStarted() {
+        this.started = true;
+        this.done = false;
+        this.error = false;
+        this.status = "Pipeline em execução…";
+    }
+    public synchronized void markSuccess() {
+        this.done = true;
+        this.error = false;
+        this.status = "Concluído";
+    }
+    public synchronized void markError() {
+        this.done = true;
+        this.error = true;
+        this.status = "Falhou";
+    }
+    public synchronized void reset() {
+        this.started = false;
+        this.done = false;
+        this.error = false;
+        this.status = "Aguardando…";
     }
 
-    public void markSuccess() {
-        lastOk.set(true);
-        running.set(false);
-        lastChange.set(System.currentTimeMillis());
-        System.out.println("[ProcessTracker] markSuccess()");
-    }
-
-    public void markError() {
-        lastOk.set(false);
-        running.set(false);
-        lastChange.set(System.currentTimeMillis());
-        System.out.println("[ProcessTracker] markError()");
-    }
-
-    /** Front usa este! */
-    public boolean isRunning() { return running.get(); }
-
-    /** Opcional para debug/telemetria */
-    public boolean wasLastOk() { return lastOk.get(); }
-
-    /** Opcional para debug/telemetria */
-    public long lastChangeAt() { return lastChange.get(); }
+    public boolean isStarted() { return started; }
+    public boolean isDone()     { return done; }
+    public boolean hasError()   { return error; }
+    public String  getStatus()  { return status; }
 }

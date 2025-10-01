@@ -27,26 +27,20 @@
 <script>
 feather.replace();
 
-/**
- * Este loading NÃO usa execId. Ele fica consultando o backend em
- * GET /api/process/state.
- * Quando o backend responder {done:true}, redireciona para results.html.
- * Se {error:true}, também vai para results.html (você exibe o erro lá).
- */
-
-const STATE_URL = '/api/process/state'; // ajuste se seu endpoint for outro
+const STATE_URL = '/api/process/state'; // seu endpoint de status
 
 const msgEl   = document.getElementById('msg');
 const errBox  = document.getElementById('errBox');
 
 let intervalMs = 1500;
-let stagnation = 0; // se ficar muito tempo sem variar resposta, a gente só continua esperando
+let stagnation = 0;
 
 async function getState(){
   try {
-    const r = await fetch(STATE_URL, { credentials:'include' });
+    // cache-busting + no-store
+    const url = STATE_URL + (STATE_URL.includes('?') ? '&' : '?') + 't=' + Date.now();
+    const r = await fetch(url, { credentials:'include', cache:'no-store' });
     if (!r.ok) {
-      // Mostra erro de status, mas continua tentando
       errBox.classList.remove('hidden');
       errBox.textContent = 'Falha ao consultar estado: HTTP ' + r.status;
       return null;
@@ -72,24 +66,20 @@ async function loop(){
     const error   = toBool(st.error);
     const statusTxt = st.status || '';
 
-    if (statusTxt) msgEl.textContent = statusTxt;
-    else msgEl.textContent = started ? 'Pipeline em execução…' : 'Aguardando início da pipeline…';
+    msgEl.textContent = statusTxt || (started ? 'Pipeline em execução…' : 'Aguardando início da pipeline…');
 
     if (done || error) {
-      // terminou com sucesso ou erro → results.html
       window.location.href = 'results.html';
       return;
     }
   }
 
-  // backoff leve se ficar falhando
   stagnation++;
   if (stagnation > 10) intervalMs = Math.min(intervalMs + 500, 5000);
 
   setTimeout(loop, intervalMs);
 }
 
-// inicia
 loop();
 </script>
 </body>
