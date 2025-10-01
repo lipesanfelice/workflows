@@ -1,27 +1,25 @@
-import java.util.Random;
-
-public class SimuladorDados {
-    private static final Random random = new Random();
+public class ProcessadorTexto {
     
-    public static int lancarDado(int faces) {
-        return random.nextInt(faces) + 1;
+    public static int contarPalavras(String texto) {
+        if (texto == null || texto.trim().isEmpty()) {
+            return 0;
+        }
+        return texto.trim().split("\\s+").length;
     }
     
-    public static int[] lancarVariosDados(int quantidade, int faces) {
-        int[] resultados = new int[quantidade];
-        for (int i = 0; i < quantidade; i++) {
-            resultados[i] = lancarDado(faces);
-        }
-        return resultados;
+    public static String inverterString(String texto) {
+        return new StringBuilder(texto).reverse().toString();
+    }
+    
+    public static boolean ehPalindromo(String texto) {
+        String limpo = texto.replaceAll("[^a-zA-Z]", "").toLowerCase();
+        return limpo.equals(inverterString(limpo));
     }
     
     public static void main(String[] args) {
-        System.out.println("Dado de 6 faces: " + lancarDado(6));
-        
-        int[] dados = lancarVariosDados(4, 20);
-        System.out.print("4 dados de 20 faces: ");
-        for (int resultado : dados) {
-            System.out.print(resultado + " ");
-        }
+        String texto = "Java é uma linguagem de programação";
+        System.out.println("Palavras: " + contarPalavras(texto));
+        System.out.println("Invertido: " + inverterString("Java"));
+        System.out.println("É palíndromo? " + ehPalindromo("radar"));
     }
 }

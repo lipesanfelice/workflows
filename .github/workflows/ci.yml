@@ -301,32 +301,43 @@ jobs:
       env:
         CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
-    - name: Prepare BACKEND_URL
-      shell: bash
-      env:
-        BACKEND_URL: ${{ secrets.BACKEND_URL }}
-      run: |
-        if [ -z "${BACKEND_URL:-}" ]; then
-          echo "BACKEND_URL secret não definido"; exit 1
-        fi
-        # remove CR/LF e barras finais
-        CLEAN_URL="$(printf %s "$BACKEND_URL" | tr -d '\r' | sed -E 's|/*$||')"
-
-        # valida esquema
-        if ! echo "$CLEAN_URL" | grep -Eq '^https?://'; then
-          echo "BACKEND_URL deve começar com http:// ou https:// (valor recebido está inválido)"; exit 1
-        fi
-
-        # opcional: acrescenta /api/health para checar formato sem vazar o segredo
-        echo "URL do backend preparada."
-        echo "CLEAN_URL=$CLEAN_URL" >> "$GITHUB_ENV"
-
-    - name: Notify backend (finish)
+    - name: Marcar conclusão da pipeline (done.json)
       if: ${{ always() }}
+      env:
+        BRANCH: main
+        STATUS: ${{ job.status }}   # success | failure | cancelled
       run: |
-        curl -sS --retry 5 --retry-delay 3 --max-time 20 \
-          -H 'Content-Type: application/json' \
-          -X POST "$CLEAN_URL/api/process/notify" \
-          -d "{\"status\":\"${{ job.status }}\"}" || true
+        set -euo pipefail
+
+        git config user.name  "github-actions[bot]"
+        git config user.email "github-actions[bot]@users.noreply.github.com"
+        git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+        # Garante que estamos no branch alvo
+        git fetch origin "$BRANCH" --prune
+        if git rev-parse --verify "$BRANCH" >/dev/null 2>&1; then
+          git checkout "$BRANCH"
+        else
+          git checkout -b "$BRANCH"
+        fi
+        git reset --hard "origin/$BRANCH"
+
+        # Cria/atualiza o marcador
+        mkdir -p app/entrada-usuario
+        printf '{"done":true,"status":"%s","ts":"%s"}\n' "$STATUS" "$(date -u +%FT%TZ)" \
+          > app/entrada-usuario/done.json
+
+        git add app/entrada-usuario/done.json
+        if git diff --cached --quiet; then
+          echo "Sem alterações para commit do done.json."
+        else
+          git commit -m "ci: marcar conclusão da pipeline (done.json) [skip ci]"
+          # Push tolerante a corrida
+          if ! git push origin HEAD:"$BRANCH"; then
+            git pull --rebase --autostash origin "$BRANCH" || true
+            git push --force-with-lease origin HEAD:"$BRANCH"
+          fi
+        fi
+
 
 

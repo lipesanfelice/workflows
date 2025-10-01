@@ -27,60 +27,82 @@
 <script>
 feather.replace();
 
-const STATE_URL = '/api/process/state'; // seu endpoint de status
+/**
+ * ✅ Sem backend / sem execId
+ * A página verifica periodicamente um arquivo "marcador" commitado pelo GitHub Actions:
+ *   app/entrada-usuario/done.json  (conteúdo: { "done": true, "status": "success|failure|cancelled" })
+ * Assim que o arquivo existir e tiver done=true → redireciona para results.html?status=...
+ *
+ * Você pode sobrescrever por query string:
+ *   loading.html?owner=SEU_USER&repo=SEU_REPO&branch=BRANCH
+ */
 
-const msgEl   = document.getElementById('msg');
-const errBox  = document.getElementById('errBox');
+// === Ajuste padrão (pode sobrescrever via query) ===
+let OWNER  = 'lipesanfelice';
+let REPO   = 'workflows';
+let BRANCH = 'main';
 
-let intervalMs = 1500;
-let stagnation = 0;
+// Permite override por query string
+const qs = new URLSearchParams(location.search);
+OWNER  = qs.get('owner')  || OWNER;
+REPO   = qs.get('repo')   || REPO;
+BRANCH = qs.get('branch') || BRANCH;
 
-async function getState(){
+// URL raw do arquivo marcador
+const DONE_URL = `https://raw.githubusercontent.com/${OWNER}/${REPO}/${BRANCH}/app/entrada-usuario/done.json`;
+
+const POLL_INTERVAL_MS = 1500;
+const MAX_WAIT_MIN     = 20;  // fail-safe
+const HARD_TIMEOUT_MS  = MAX_WAIT_MIN * 60 * 1000;
+
+const msgEl  = document.getElementById('msg');
+const errBox = document.getElementById('errBox');
+
+function safeJson(s){ try { return JSON.parse(s); } catch { return null; } }
+
+async function checkDone(){
+  // cache-busting + no-store para evitar cache do navegador/CDN
+  const url = DONE_URL + `?t=${Date.now()}`;
   try {
-    // cache-busting + no-store
-    const url = STATE_URL + (STATE_URL.includes('?') ? '&' : '?') + 't=' + Date.now();
-    const r = await fetch(url, { credentials:'include', cache:'no-store' });
-    if (!r.ok) {
-      errBox.classList.remove('hidden');
-      errBox.textContent = 'Falha ao consultar estado: HTTP ' + r.status;
-      return null;
-    }
-    const ct = (r.headers.get('content-type')||'').toLowerCase();
-    if (!ct.includes('application/json')) return null;
-    return await r.json();
-  } catch (e) {
-    errBox.classList.remove('hidden');
-    errBox.textContent = 'Erro de rede ao consultar estado: ' + e.message;
-    return null;
-  }
-}
-
-function toBool(v){ return v === true || String(v).toLowerCase() === 'true'; }
-
-async function loop(){
-  const st = await getState();
-
-  if (st) {
-    const started = toBool(st.started);
-    const done    = toBool(st.done);
-    const error   = toBool(st.error);
-    const statusTxt = st.status || '';
-
-    msgEl.textContent = statusTxt || (started ? 'Pipeline em execução…' : 'Aguardando início da pipeline…');
-
-    if (done || error) {
-      window.location.href = 'results.html';
+    const r = await fetch(url, { cache: 'no-store' });
+    if (r.status === 404) {
+      // ainda não existe; segue aguardando
+      setTimeout(checkDone, POLL_INTERVAL_MS);
       return;
     }
+    if (!r.ok) {
+      // erro temporário (ex.: 403 rate limit); mostra e continua tentando
+      errBox.classList.remove('hidden');
+      errBox.textContent = `Falha ao consultar marcador: HTTP ${r.status}`;
+      setTimeout(checkDone, POLL_INTERVAL_MS + 1000);
+      return;
+    }
+    const txt = await r.text();
+    const j = safeJson(txt);
+    if (j && j.done === true) {
+      const status = (j.status || '').toLowerCase();
+      location.href = `results.html?status=${encodeURIComponent(status)}`;
+      return;
+    }
+    // arquivo existe mas ainda não marcou done=true
+    setTimeout(checkDone, POLL_INTERVAL_MS);
+  } catch (e) {
+    errBox.classList.remove('hidden');
+    errBox.textContent = 'Erro de rede ao consultar marcador: ' + e.message;
+    setTimeout(checkDone, POLL_INTERVAL_MS + 1000);
   }
-
-  stagnation++;
-  if (stagnation > 10) intervalMs = Math.min(intervalMs + 500, 5000);
-
-  setTimeout(loop, intervalMs);
 }
 
-loop();
+// Mensagem padrão
+msgEl.textContent = 'Aguarde enquanto a pipeline executa…';
+
+// Fail-safe: se demorar "demais", segue para results com status=timeout
+setTimeout(() => {
+  location.href = 'results.html?status=timeout';
+}, HARD_TIMEOUT_MS);
+
+// inicia o polling
+checkDone();
 </script>
 </body>
 </html>
