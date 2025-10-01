@@ -1,22 +1,27 @@
-public class GeradorTabuada {
+import java.util.Random;
+
+public class SimuladorDados {
+    private static final Random random = new Random();
     
-    public static void gerarTabuada(int numero) {
-        System.out.println("Tabuada do " + numero + ":");
-        for (int i = 1; i <= 10; i++) {
-            System.out.printf("%d x %d = %d\n", numero, i, numero * i);
-        }
+    public static int lancarDado(int faces) {
+        return random.nextInt(faces) + 1;
     }
     
-    public static void gerarTodasTabuadas() {
-        for (int i = 1; i <= 10; i++) {
-            gerarTabuada(i);
-            System.out.println();
+    public static int[] lancarVariosDados(int quantidade, int faces) {
+        int[] resultados = new int[quantidade];
+        for (int i = 0; i < quantidade; i++) {
+            resultados[i] = lancarDado(faces);
         }
+        return resultados;
     }
     
     public static void main(String[] args) {
-        gerarTabuada(7);
-        System.out.println("\n--- TODAS AS TABUADAS ---");
-        gerarTodasTabuadas();
+        System.out.println("Dado de 6 faces: " + lancarDado(6));
+        
+        int[] dados = lancarVariosDados(4, 20);
+        System.out.print("4 dados de 20 faces: ");
+        for (int resultado : dados) {
+            System.out.print(resultado + " ");
+        }
     }
 }

@@ -301,13 +301,32 @@ jobs:
       env:
         CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
-    - name: Notify backend (finish)
-      if: always()
+    - name: Prepare BACKEND_URL
+      shell: bash
       env:
         BACKEND_URL: ${{ secrets.BACKEND_URL }}
       run: |
-        echo "Notificando backend em $BACKEND_URL ..."
+        if [ -z "${BACKEND_URL:-}" ]; then
+          echo "BACKEND_URL secret não definido"; exit 1
+        fi
+        # remove CR/LF e barras finais
+        CLEAN_URL="$(printf %s "$BACKEND_URL" | tr -d '\r' | sed -E 's|/*$||')"
+
+        # valida esquema
+        if ! echo "$CLEAN_URL" | grep -Eq '^https?://'; then
+          echo "BACKEND_URL deve começar com http:// ou https:// (valor recebido está inválido)"; exit 1
+        fi
+
+        # opcional: acrescenta /api/health para checar formato sem vazar o segredo
+        echo "URL do backend preparada."
+        echo "CLEAN_URL=$CLEAN_URL" >> "$GITHUB_ENV"
+
+    - name: Notify backend (finish)
+      if: ${{ always() }}
+      run: |
         curl -sS --retry 5 --retry-delay 3 --max-time 20 \
           -H 'Content-Type: application/json' \
-          -X POST "$BACKEND_URL/api/process/notify" \
+          -X POST "$CLEAN_URL/api/process/notify" \
           -d "{\"status\":\"${{ job.status }}\"}" || true
+
+
