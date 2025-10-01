@@ -6,10 +6,6 @@
   <title>Processando…</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.jsdelivr.net/npm/feather-icons/dist/feather.min.js"></script>
-  <style>
-    .muted{opacity:.8}
-    .tiny{font-size:.72rem}
-  </style>
 </head>
 <body class="min-h-screen bg-gray-50 flex items-center justify-center">
   <div class="w-full max-w-md mx-4">
@@ -20,171 +16,93 @@
       <h1 class="text-xl font-semibold text-gray-800 mb-2">Estamos processando seu código…</h1>
       <p id="msg" class="text-gray-500">Aguarde enquanto a pipeline executa.</p>
 
+      <div id="errBox" class="hidden mt-4 text-sm text-red-700 bg-red-50 border border-red-200 rounded p-3 text-left"></div>
+
       <div class="mt-6">
         <a href="index.html" class="text-sm text-gray-500 hover:underline">Voltar</a>
       </div>
     </div>
-
-    <pre id="dbg" class="mt-3 text-center text-gray-400 tiny whitespace-pre-wrap"></pre>
   </div>
 
 <script>
 feather.replace();
 
 /**
- * Estratégia:
- *  1) Poll rápido no backend: GET /api/process/state  (preferido)
- *  2) Se falhar/404, fallback para RAW do GitHub app/entrada-usuario/done.json
- *  3) Assim que detectar done=true → results.html?status=...&t=...
+ * ✅ Sem backend / sem execId
+ * A página verifica periodicamente um arquivo "marcador" commitado pelo GitHub Actions:
+ *   app/entrada-usuario/done.json  (conteúdo: { "done": true, "status": "success|failure|cancelled" })
+ * Assim que o arquivo existir e tiver done=true → redireciona para results.html?status=...
  *
- * Dicas:
- *  - Habilite debug: loading.html?debug=1
- *  - Ajuste OWNER/REPO/BRANCH abaixo (ou sobrescreva via query).
+ * Você pode sobrescrever por query string:
+ *   loading.html?owner=SEU_USER&repo=SEU_REPO&branch=BRANCH
  */
 
-/* ===== CONFIG ===== */
-const qs = new URLSearchParams(location.search);
-const DEBUG = qs.get('debug') === '1';
-
-const STATE_URL = '/api/process/state'; // seu endpoint de backend (opção B)
-
+// === Ajuste padrão (pode sobrescrever via query) ===
 let OWNER  = 'lipesanfelice';
 let REPO   = 'workflows';
 let BRANCH = 'main';
 
-// Permite override por query (?owner=&repo=&branch=)
+// Permite override por query string
+const qs = new URLSearchParams(location.search);
 OWNER  = qs.get('owner')  || OWNER;
 REPO   = qs.get('repo')   || REPO;
 BRANCH = qs.get('branch') || BRANCH;
 
-const DONE_PATH = 'app/entrada-usuario/done.json';
-const RAW_DONE  = `https://raw.githubusercontent.com/${OWNER}/${REPO}/${BRANCH}/${DONE_PATH}`;
+// URL raw do arquivo marcador
+const DONE_URL = `https://raw.githubusercontent.com/${OWNER}/${REPO}/${BRANCH}/app/entrada-usuario/done.json`;
 
-const RUN_T = qs.get('t') || String(Date.now()); // marca desta rodada
+const POLL_INTERVAL_MS = 1500;
+const MAX_WAIT_MIN     = 20;  // fail-safe
+const HARD_TIMEOUT_MS  = MAX_WAIT_MIN * 60 * 1000;
 
-/* ===== TUNING ===== */
-let INTERVAL_MS = 800;
-const MAX_INTERVAL = 2000;
-const HARD_TIMEOUT_MS = 10 * 60 * 1000; // fail-safe 10 min
+const msgEl  = document.getElementById('msg');
+const errBox = document.getElementById('errBox');
 
-/* ===== UI ===== */
-const msgEl = document.getElementById('msg');
-const dbgEl = document.getElementById('dbg');
-
-function show(s){ msgEl.textContent = s; }
-function logDbg(obj){
-  if (!DEBUG) return;
-  const line = typeof obj === 'string' ? obj : JSON.stringify(obj, null, 2);
-  dbgEl.textContent = (dbgEl.textContent + '\n' + line).trim();
-}
-
-/* ===== HELPERS ===== */
-function nc(url){
-  const sep = url.includes('?') ? '&' : '?';
-  // RUN_T = token consistente entre páginas; Math.random() quebra cache agressivo
-  return `${url}${sep}t=${encodeURIComponent(RUN_T)}&r=${Math.random().toString(36).slice(2)}`;
-}
 function safeJson(s){ try { return JSON.parse(s); } catch { return null; } }
-function toStatusStr(v){ return (v||'').toString().toLowerCase(); }
-function redirect(status){
-  const url = new URL('results.html', location.href);
-  url.searchParams.set('status', status || '');
-  url.searchParams.set('t', RUN_T);
-  location.replace(url.toString());
-}
 
-/* ===== FONTES ===== */
-// 1) Backend
-async function fetchBackendState(){
-  const url = nc(STATE_URL);
-  const r = await fetch(url, {
-    cache: 'no-store',
-    credentials: 'include',
-    headers: {
-      'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0',
-      'Pragma': 'no-cache',
-      'Expires': '0'
-    }
-  });
-  if (r.status === 404) return { ok:false, notFound:true, src:'backend', status:r.status };
-  if (!r.ok) return { ok:false, code:r.status, src:'backend' };
-  const ct = (r.headers.get('content-type')||'').toLowerCase();
-  if (!ct.includes('application/json')) return { ok:false, badJson:true, src:'backend' };
-  const j = await r.json();
-  return { ok:true, data:j, src:'backend' };
-}
-
-// 2) GitHub RAW
-async function fetchRawDone(){
-  const url = nc(RAW_DONE);
-  const r = await fetch(url, {
-    cache: 'no-store',
-    headers: {
-      'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0',
-      'Pragma': 'no-cache'
-    }
-  });
-  if (r.status === 404) return { ok:false, notFound:true, src:'raw', status:r.status };
-  if (!r.ok) return { ok:false, code:r.status, src:'raw' };
-  const txt = await r.text();
-  const j = safeJson(txt);
-  if (!j) return { ok:false, badJson:true, src:'raw' };
-  return { ok:true, data:j, src:'raw' };
-}
-
-/* ===== POLLING ===== */
-let attempts = 0;
-
-async function loop(){
-  attempts++;
-  // preferimos backend
-  try{
-    const be = await fetchBackendState();
-    logDbg({try:attempts, step:'backend', res: be.ok ? 'ok' : (be.notFound?'404':be.code || 'err')});
-    if (be.ok) {
-      const d = be.data || {};
-      // esperamos chaves: started, done, error, status
-      if (d.done === true || d.error === true) {
-        show('Finalizando…');
-        return redirect(toStatusStr(d.status || (d.error ? 'failure' : 'success')));
-      }
-      // se não terminou, segue polling; sem fallback pq backend existe
-      setTimeout(loop, INTERVAL_MS);
+async function checkDone(){
+  // cache-busting + no-store para evitar cache do navegador/CDN
+  const url = DONE_URL + `?t=${Date.now()}`;
+  try {
+    const r = await fetch(url, { cache: 'no-store' });
+    if (r.status === 404) {
+      // ainda não existe; segue aguardando
+      setTimeout(checkDone, POLL_INTERVAL_MS);
       return;
     }
-    // backend 404 → pode não existir; tenta RAW como fallback
-    if (be.notFound || be.code) {
-      const raw = await fetchRawDone();
-      logDbg({try:attempts, step:'raw', res: raw.ok ? 'ok' : (raw.notFound?'404':raw.code || 'err')});
-      if (raw.ok) {
-        const j = raw.data;
-        if (j && j.done === true) {
-          show('Finalizando…');
-          return redirect(toStatusStr(j.status));
-        }
-      }
+    if (!r.ok) {
+      // erro temporário (ex.: 403 rate limit); mostra e continua tentando
+      errBox.classList.remove('hidden');
+      errBox.textContent = `Falha ao consultar marcador: HTTP ${r.status}`;
+      setTimeout(checkDone, POLL_INTERVAL_MS + 1000);
+      return;
     }
-  } catch(e){
-    logDbg({err: String(e && e.message || e)});
+    const txt = await r.text();
+    const j = safeJson(txt);
+    if (j && j.done === true) {
+      const status = (j.status || '').toLowerCase();
+      location.href = `results.html?status=${encodeURIComponent(status)}`;
+      return;
+    }
+    // arquivo existe mas ainda não marcou done=true
+    setTimeout(checkDone, POLL_INTERVAL_MS);
+  } catch (e) {
+    errBox.classList.remove('hidden');
+    errBox.textContent = 'Erro de rede ao consultar marcador: ' + e.message;
+    setTimeout(checkDone, POLL_INTERVAL_MS + 1000);
   }
-
-  // ainda não acabou → pequeno backoff
-  if (attempts % 8 === 0) INTERVAL_MS = Math.min(INTERVAL_MS + 200, MAX_INTERVAL);
-  setTimeout(loop, INTERVAL_MS);
 }
 
-/* ===== FAIL-SAFE ===== */
-setTimeout(()=>{
-  // evita ficar eternamente se algo quebrou
-  redirect('timeout');
+// Mensagem padrão
+msgEl.textContent = 'Aguarde enquanto a pipeline executa…';
+
+// Fail-safe: se demorar "demais", segue para results com status=timeout
+setTimeout(() => {
+  location.href = 'results.html?status=timeout';
 }, HARD_TIMEOUT_MS);
 
-/* ===== START ===== */
-show('Aguarde enquanto a pipeline executa…');
-if (DEBUG) {
-  logDbg({owner:OWNER, repo:REPO, branch:BRANCH, stateUrl:STATE_URL, rawDone:RAW_DONE, run:RUN_T});
-}
-loop();
+// inicia o polling
+checkDone();
 </script>
 </body>
 </html>
