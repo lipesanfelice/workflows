@@ -37,11 +37,11 @@
       <div class="flex items-start justify-between gap-4 flex-wrap mb-6">
         <div>
           <h1 class="text-3xl font-bold text-gray-800">Resultados da análise</h1>
-          <p class="text-gray-600">Visualize os testes gerados a partir da pasta <b>entrada-usuário</b>, explicações e dashboards do Codecov.</p>
+          <p class="text-gray-600">Testes e explicações gerados a partir de <b>app/entrada-usuario</b> no seu repositório.</p>
         </div>
         <div class="flex gap-2 items-center">
-          <span id="chipExec" class="badge bg-blue-50 text-blue-700 border border-blue-200">execId: —</span>
-          <span id="chipTempo" class="badge bg-gray-100 text-gray-700 border border-gray-200">—</span>
+          <span id="chipRepo" class="badge bg-blue-50 text-blue-700 border border-blue-200">repo: —</span>
+          <span id="chipBranch" class="badge bg-gray-100 text-gray-700 border border-gray-200">branch: —</span>
           <span id="chipStatus" class="badge bg-yellow-50 text-yellow-700 border border-yellow-200">status: —</span>
         </div>
       </div>
@@ -50,7 +50,7 @@
         <div class="card p-4 md:col-span-2" data-aos="fade-up">
           <div class="flex items-center justify-between mb-3">
             <h2 class="text-lg font-semibold text-gray-800 flex items-center">
-              <i data-feather="file-text" class="mr-2"></i> Arquivos de Teste (entrada-usuário)
+              <i data-feather="file-text" class="mr-2"></i> Arquivos de Teste Gerados
             </h2>
             <div class="flex gap-2">
               <button id="btnReload" class="px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-md text-sm">Recarregar</button>
@@ -65,7 +65,7 @@
               <div id="kpiTestes" class="text-2xl font-bold text-blue-700">0</div>
             </div>
             <div class="soft rounded-md p-3">
-              <div class="text-xs text-blue-700/80">Arquivos</div>
+              <div class="text-xs text-blue-700/80">Arquivos listados</div>
               <div id="kpiArquivos" class="text-2xl font-bold text-blue-700">0</div>
             </div>
             <div class="soft rounded-md p-3">
@@ -76,19 +76,19 @@
 
           <div id="listaArquivos" class="scroll-y space-y-2">
             <div class="p-4 border border-dashed border-gray-300 rounded-md bg-gray-50 text-gray-500">
-              Carregando arquivos…
+              Carregando arquivos de teste…
             </div>
           </div>
         </div>
 
         <div class="card p-4" data-aos="fade-up" data-aos-delay="100">
           <h2 class="text-lg font-semibold text-gray-800 mb-3 flex items-center">
-            <i data-feather="pie-chart" class="mr-2"></i> Dashboards Codecov
+            <i data-feather="pie-chart" class="mr-2"></i> Codecov
           </h2>
           <div id="areaCodecov" class="space-y-3">
             <div class="p-4 border border-dashed border-gray-300 rounded-md bg-gray-50 text-gray-500">Carregando Codecov…</div>
           </div>
-          <p class="text-xs text-gray-500 mt-3">Para repositórios privados, você pode precisar estar autenticado no Codecov.</p>
+          <p class="text-xs text-gray-500 mt-3">Se o repositório for privado, faça login no Codecov em outra aba.</p>
         </div>
       </div>
 
@@ -111,217 +111,249 @@
     </footer>
   </div>
 
-  <script>
-    AOS.init();
-    feather.replace();
+<script>
+AOS.init();
+feather.replace();
 
-    const qs = new URLSearchParams(location.search);
-    const execId = qs.get('execId') || '';
-    const chipExec = document.getElementById('chipExec');
-    const chipTempo = document.getElementById('chipTempo');
-    const chipStatus = document.getElementById('chipStatus');
-    const listaArquivos = document.getElementById('listaArquivos');
-    const listaExplicacoes = document.getElementById('listaExplicacoes');
-    const areaCodecov = document.getElementById('areaCodecov');
-    const kpiTestes = document.getElementById('kpiTestes');
-    const kpiArquivos = document.getElementById('kpiArquivos');
-    const kpiCobertura = document.getElementById('kpiCobertura');
-    const statusBox = document.getElementById('statusBox');
-    const btnReload = document.getElementById('btnReload');
-    const btnLoading = document.getElementById('btnLoading');
+/** ====== CONFIG (mude os defaults ou passe por query) ====== */
+let OWNER  = 'lipesanfelice';   // <--- seu user/org
+let REPO   = 'workflows';       // <--- seu repo
+let BRANCH = 'main';            // <--- branch padrão
 
-    if (execId) {
-      chipExec.textContent = 'execId: ' + execId;
-      btnLoading.href = 'loading.html?execId=' + encodeURIComponent(execId);
-    }
+const qs = new URLSearchParams(location.search);
+OWNER  = qs.get('owner')  || OWNER;
+REPO   = qs.get('repo')   || REPO;
+BRANCH = qs.get('branch') || BRANCH;
 
-    function tempoFmt(ms){
-      if(!ms || ms < 1) return '—';
-      let s = Math.floor(ms/1000);
-      let m = Math.floor(s/60); s = s%60;
-      let h = Math.floor(m/60); m = m%60;
-      const parts = [];
-      if (h) parts.push(h+'h'); if (m) parts.push(m+'m'); if (s) parts.push(s+'s');
-      return parts.join(' ') || (ms+' ms');
-    }
+const STATUS_PARAM = (qs.get('status') || '').toLowerCase(); // success|failure|cancelled|timeout (vindo do loading)
+document.getElementById('chipRepo').textContent   = `repo: ${OWNER}/${REPO}`;
+document.getElementById('chipBranch').textContent = `branch: ${BRANCH}`;
 
-    function escreveStatus(msg, tipo='info'){
-      statusBox.classList.remove('hidden','bg-green-100','text-green-800','border-green-200','bg-red-100','text-red-800','border-red-200','bg-blue-50','text-blue-800','border-blue-200');
-      statusBox.classList.add('border','bg-blue-50','text-blue-800','border-blue-200');
-      if (tipo==='ok'){ statusBox.classList.remove('bg-blue-50','text-blue-800','border-blue-200'); statusBox.classList.add('bg-green-100','text-green-800','border-green-200'); }
-      if (tipo==='err'){ statusBox.classList.remove('bg-blue-50','text-blue-800','border-blue-200'); statusBox.classList.add('bg-red-100','text-red-800','border-red-200'); }
-      statusBox.textContent = msg;
-    }
+const chipStatus = document.getElementById('chipStatus');
+if (STATUS_PARAM) {
+  chipStatus.textContent = 'status: ' + STATUS_PARAM;
+  chipStatus.className = 'badge bg-yellow-50 text-yellow-700 border border-yellow-200';
+  if (STATUS_PARAM === 'success') chipStatus.className = 'badge bg-green-100 text-green-700 border border-green-200';
+  if (STATUS_PARAM === 'failure' || STATUS_PARAM === 'cancelled' || STATUS_PARAM === 'timeout')
+    chipStatus.className = 'badge bg-red-100 text-red-700 border border-red-200';
+}
 
-    function limpar(el){ while(el.firstChild) el.removeChild(el.firstChild); }
+const btnLoading = document.getElementById('btnLoading');
+btnLoading.href = `loading.html?owner=${encodeURIComponent(OWNER)}&repo=${encodeURIComponent(REPO)}&branch=${encodeURIComponent(BRANCH)}`;
 
-    function itemArquivo(a){
-      const nome = a.nome || a.arquivo || a.path || 'arquivo';
-      const link = a.link || a.download || a.url || '#';
-      const preview = a.preview || a.view || link;
-      const el = document.createElement('div');
-      el.className = 'p-3 border rounded-md flex items-center justify-between gap-3';
-      const left = document.createElement('div');
-      left.className = 'flex items-center gap-2';
-      const ic = document.createElement('i');
-      ic.setAttribute('data-feather','file');
-      ic.className = 'text-gray-400';
-      const span = document.createElement('span');
-      span.className = 'font-medium text-gray-800 break-all';
-      span.textContent = nome;
-      left.appendChild(ic); left.appendChild(span);
-      const right = document.createElement('div');
-      right.className = 'flex gap-2';
-      const a1 = document.createElement('a'); a1.href=link; a1.target='_blank'; a1.className='px-3 py-1 rounded-md border text-sm text-gray-700 bg-white hover:bg-gray-50'; a1.textContent='Baixar';
-      const a2 = document.createElement('a'); a2.href=preview; a2.target='_blank'; a2.className='px-3 py-1 rounded-md border text-sm text-gray-700 bg-white hover:bg-gray-50'; a2.textContent='Abrir';
-      right.appendChild(a1); right.appendChild(a2);
-      el.appendChild(left); el.appendChild(right);
-      return el;
-    }
+const GITHUB_API = 'https://api.github.com';
+const TESTS_DIR  = 'app/entrada-usuario/testes_explicações/tests';
+const EXPL_DIR   = 'app/entrada-usuario/testes_explicações/explicacoes';
+const SONAR_JSON = 'app/entrada-usuario/relatorio-sonar.json';
 
-    function itemExplicacao(e){
-      const el = document.createElement('div');
-      el.className = 'p-4 border rounded-md bg-white';
-      const h = document.createElement('div');
-      h.className = 'font-semibold text-gray-800 mb-1';
-      h.textContent = e.titulo || e.title || e.arquivo || 'Explicação';
-      const p = document.createElement('div');
-      p.className = 'text-gray-700 text-sm whitespace-pre-wrap';
-      p.textContent = e.texto || e.text || e.descricao || e.description || '';
-      el.appendChild(h); el.appendChild(p);
-      return el;
-    }
+/** ====== HELPERS ====== */
+function escreveStatus(msg, tipo='info'){
+  const box = document.getElementById('statusBox');
+  box.classList.remove('hidden','bg-green-100','text-green-800','border-green-200','bg-red-100','text-red-800','border-red-200','bg-blue-50','text-blue-800','border-blue-200');
+  box.classList.add('border','bg-blue-50','text-blue-800','border-blue-200');
+  if (tipo==='ok'){ box.classList.remove('bg-blue-50','text-blue-800','border-blue-200'); box.classList.add('bg-green-100','text-green-800','border-green-200'); }
+  if (tipo==='err'){ box.classList.remove('bg-blue-50','text-blue-800','border-blue-200'); box.classList.add('bg-red-100','text-red-800','border-red-200'); }
+  box.textContent = msg;
+}
+function limpar(el){ while(el.firstChild) el.removeChild(el.firstChild); }
+function pick(arr){ return Array.isArray(arr) ? arr : []; }
+function tempoFmt(ms){
+  if(!ms || ms < 1) return '—';
+  let s = Math.floor(ms/1000);
+  let m = Math.floor(s/60); s = s%60;
+  let h = Math.floor(m/60); m = m%60;
+  const parts = []; if (h) parts.push(h+'h'); if (m) parts.push(m+'m'); if (s) parts.push(s+'s');
+  return parts.join(' ') || (ms+' ms');
+}
 
-    function renderCodecov(cc){
-      limpar(areaCodecov);
-      const blocks = [];
-      if (!cc || typeof cc !== 'object') {
-        const d = document.createElement('div');
-        d.className = 'p-4 border border-dashed border-gray-300 rounded-md bg-gray-50 text-gray-500';
-        d.textContent = 'Sem dados do Codecov';
-        areaCodecov.appendChild(d);
-        return;
-      }
-      if (cc.badge) blocks.push({t:'img',u:cc.badge});
-      if (Array.isArray(cc.imagens)) cc.imagens.forEach(u=>blocks.push({t:'img',u}));
-      if (Array.isArray(cc.images)) cc.images.forEach(u=>blocks.push({t:'img',u}));
-      if (cc.coverageSvg) blocks.push({t:'img',u:cc.coverageSvg});
-      if (Array.isArray(cc.iframes)) cc.iframes.forEach(u=>blocks.push({t:'ifr',u}));
-      if (cc.sunburst) blocks.push({t:'ifr',u:cc.sunburst});
-
-      if (!blocks.length) {
-        const d = document.createElement('div');
-        d.className = 'p-4 border border-dashed border-gray-300 rounded-md bg-gray-50 text-gray-500';
-        d.textContent = 'Sem dados do Codecov';
-        areaCodecov.appendChild(d);
-        return;
-      }
-
-      blocks.forEach(b=>{
-        if (b.t==='img'){
-          const w = document.createElement('div');
-          w.className = 'p-2 border rounded-md bg-white';
-          const img = document.createElement('img');
-          img.src = b.u; img.alt='Codecov'; img.className='w-full h-auto';
-          w.appendChild(img);
-          areaCodecov.appendChild(w);
-        } else {
-          const f = document.createElement('iframe');
-          f.src = b.u; f.className='w-full h-64 border rounded-md bg-white'; f.loading='lazy';
-          areaCodecov.appendChild(f);
-        }
-      });
-    }
-
-    async function getJSON(url){
-      const r = await fetch(url, { credentials:'include' });
-      if (!r.ok) throw new Error('HTTP '+r.status+' em '+url);
-      const ct = (r.headers.get('content-type')||'').toLowerCase();
-      if (!ct.includes('application/json')) throw new Error('Resposta não-JSON em '+url);
-      return r.json();
-    }
-
-    function pick(arr){ return Array.isArray(arr) && arr.length ? arr : []; }
-
-    async function carregarStatus(){
-      if (!execId) return;
-      try{
-        const s = await getJSON('/api/process/status?execId='+encodeURIComponent(execId));
-        const estado = s.estado ?? s.status ?? s.phase ?? s.stage ?? '—';
-        chipStatus.textContent = 'status: '+estado;
-        const dur = s.duracaoMs ?? s.tempo ?? s.durationMs;
-        if (dur!=null) chipTempo.textContent = tempoFmt(dur);
-        chipStatus.className = 'badge bg-yellow-50 text-yellow-700 border border-yellow-200';
-        const up = (estado+'').toUpperCase();
-        if (up.includes('FINAL')||s.done||s.finished||s.success||s.completed) {
-          chipStatus.className = 'badge bg-green-100 text-green-700 border border-green-200';
-        }
-        if (up.includes('ERRO')||up.includes('ERROR')||s.error||s.failed) {
-          chipStatus.className = 'badge bg-red-100 text-red-700 border border-red-200';
-        }
-      }catch(e){
-        escreveStatus('Não foi possível obter status: '+e.message,'err');
+/** GitHub: lista recursivamente via Contents API */
+async function listGithubPath(path){
+  const url = `${GITHUB_API}/repos/${OWNER}/${REPO}/contents/${encodeURIComponent(path)}?ref=${encodeURIComponent(BRANCH)}`;
+  const r = await fetch(url, { cache:'no-store' });
+  if (r.status === 404) return []; // pasta não existe ainda
+  if (!r.ok) throw new Error('HTTP '+r.status+' ao listar '+path);
+  const j = await r.json();
+  // Pode vir um único arquivo (objeto) ou um array (pasta)
+  if (Array.isArray(j)) {
+    // expande subpastas
+    const files = [];
+    for (const item of j) {
+      if (item.type === 'file') files.push(item);
+      if (item.type === 'dir') {
+        const deeper = await listGithubPath(item.path);
+        files.push(...deeper);
       }
     }
+    return files;
+  } else if (j && j.type === 'file') {
+    return [j];
+  }
+  return [];
+}
 
-    async function carregarResultados(){
-      try{
-        const url = '/api/resultados' + (execId?('?execId='+encodeURIComponent(execId)):'');
-        const j = await getJSON(url);
+/** GitHub: baixa JSON bruto (ex.: relatorio-sonar.json) */
+async function fetchRawJson(path){
+  const url = `https://raw.githubusercontent.com/${OWNER}/${REPO}/${BRANCH}/${path}`;
+  const r = await fetch(url, { cache:'no-store' });
+  if (!r.ok) throw new Error('HTTP '+r.status+' em '+path);
+  const txt = await r.text();
+  try { return JSON.parse(txt); } catch { return null; }
+}
 
-        const arquivos = j.arquivos || j.tests || j.testes || [];
-        const explics  = j.explicacoes || j.explanacoes || j.explanations || [];
-        const cc       = j.codecov || {};
-        const totalT   = j.totalTestes || j.testsCount || arquivos.length;
-        const cobertura= j.cobertura ?? cc.cobertura ?? '—';
+function fileCard(item){
+  const name = item.name || item.path.split('/').pop();
+  const htmlUrl = item.html_url || `https://github.com/${OWNER}/${REPO}/blob/${BRANCH}/${item.path}`;
+  const rawUrl  = item.download_url || `https://raw.githubusercontent.com/${OWNER}/${REPO}/${BRANCH}/${item.path}`;
 
-        kpiTestes.textContent   = totalT;
-        kpiArquivos.textContent = Array.isArray(arquivos) ? arquivos.length : 0;
-        kpiCobertura.textContent= typeof cobertura === 'number' ? (cobertura.toFixed(2)+'%') : String(cobertura);
+  const el = document.createElement('div');
+  el.className = 'p-3 border rounded-md bg-white flex items-center justify-between gap-3';
+  const left = document.createElement('div');
+  left.className = 'flex items-center gap-2';
+  const ic = document.createElement('i');
+  ic.setAttribute('data-feather','file');
+  ic.className = 'text-gray-400';
+  const span = document.createElement('span');
+  span.className = 'font-medium text-gray-800 break-all';
+  span.textContent = name;
+  left.appendChild(ic); left.appendChild(span);
+  const right = document.createElement('div');
+  right.className = 'flex gap-2';
+  const a1 = document.createElement('a'); a1.href=rawUrl; a1.target='_blank'; a1.className='px-3 py-1 rounded-md border text-sm text-gray-700 bg-white hover:bg-gray-50'; a1.textContent='Baixar';
+  const a2 = document.createElement('a'); a2.href=htmlUrl; a2.target='_blank'; a2.className='px-3 py-1 rounded-md border text-sm text-gray-700 bg-white hover:bg-gray-50'; a2.textContent='Abrir no GitHub';
+  right.appendChild(a1); right.appendChild(a2);
+  el.appendChild(left); el.appendChild(right);
+  return el;
+}
 
-        limpar(listaArquivos);
-        const list = pick(arquivos);
-        if (!list.length){
-          const d = document.createElement('div');
-          d.className = 'p-4 border border-dashed border-gray-300 rounded-md bg-gray-50 text-gray-500';
-          d.textContent = 'Nenhum arquivo localizado em entrada-usuário';
-          listaArquivos.appendChild(d);
-        } else {
-          list.forEach(a=>{
-            const el = itemArquivo(a);
-            listaArquivos.appendChild(el);
-          });
-          feather.replace(); // re-render icons após inserir elementos
+function expCard(name, text){
+  const el = document.createElement('div');
+  el.className = 'p-4 border rounded-md bg-white';
+  const h = document.createElement('div');
+  h.className = 'font-semibold text-gray-800 mb-1';
+  h.textContent = name || 'Explicação';
+  const p = document.createElement('div');
+  p.className = 'text-gray-700 text-sm whitespace-pre-wrap break-words';
+  p.textContent = text || '';
+  el.appendChild(h); el.appendChild(p);
+  return el;
+}
+
+/** Codecov */
+function renderCodecov(){
+  const area = document.getElementById('areaCodecov');
+  limpar(area);
+
+  // Badge (público): https://codecov.io/gh/OWNER/REPO/branch/BRANCH/graph/badge.svg
+  const badge = document.createElement('img');
+  badge.alt = 'Codecov badge';
+  badge.className = 'w-full h-auto border rounded-md bg-white p-2';
+  badge.src = `https://codecov.io/gh/${OWNER}/${REPO}/branch/${BRANCH}/graph/badge.svg`;
+
+  const links = document.createElement('div');
+  links.className = 'grid gap-2';
+  const aProject = document.createElement('a');
+  aProject.href = `https://app.codecov.io/gh/${OWNER}/${REPO}/tree/${BRANCH}`;
+  aProject.target = '_blank';
+  aProject.className = 'px-3 py-2 bg-white border border-gray-300 hover:bg-gray-50 rounded-md text-sm text-gray-700';
+  aProject.textContent = 'Abrir projeto no Codecov';
+
+  const aCommits = document.createElement('a');
+  aCommits.href = `https://app.codecov.io/gh/${OWNER}/${REPO}/commits`;
+  aCommits.target = '_blank';
+  aCommits.className = 'px-3 py-2 bg-white border border-gray-300 hover:bg-gray-50 rounded-md text-sm text-gray-700';
+  aCommits.textContent = 'Histórico de commits no Codecov';
+
+  links.appendChild(aProject);
+  links.appendChild(aCommits);
+
+  area.appendChild(badge);
+  area.appendChild(links);
+
+  // Tenta deduzir % a partir do alt do SVG (nem sempre rola) – fallback fica "—"
+  badge.addEventListener('load', async () => {
+    // não temos acesso ao conteúdo do SVG remoto para parsear aqui (CORS),
+    // então manteremos o KPI como "—" e deixamos o badge visual como referência.
+  });
+}
+
+/** Carrega resultados */
+const listaArquivos = document.getElementById('listaArquivos');
+const listaExplicacoes = document.getElementById('listaExplicacoes');
+const kpiTestes = document.getElementById('kpiTestes');
+const kpiArquivos = document.getElementById('kpiArquivos');
+const kpiCobertura = document.getElementById('kpiCobertura');
+
+async function carregarResultados(){
+  try {
+    // TESTES
+    const tests = await listGithubPath(TESTS_DIR);
+    limpar(listaArquivos);
+    if (!tests.length) {
+      const d = document.createElement('div');
+      d.className = 'p-4 border border-dashed border-gray-300 rounded-md bg-gray-50 text-gray-500';
+      d.textContent = 'Nenhum arquivo de teste encontrado (pasta vazia ou pipeline não gerou).';
+      listaArquivos.appendChild(d);
+    } else {
+      tests
+        .filter(f => (f.name||'').toLowerCase().endsWith('.java'))
+        .forEach(item => listaArquivos.appendChild(fileCard(item)));
+      feather.replace();
+    }
+    const totalTestFiles = tests.filter(f => (f.name||'').toLowerCase().endsWith('.java')).length;
+    kpiTestes.textContent   = totalTestFiles;
+    kpiArquivos.textContent = tests.length;
+
+    // EXPLICAÇÕES
+    const expls = await listGithubPath(EXPL_DIR);
+    limpar(listaExplicacoes);
+    if (!expls.length) {
+      const d = document.createElement('div');
+      d.className = 'p-4 border border-dashed border-gray-300 rounded-md bg-gray-50 text-gray-500';
+      d.textContent = 'Sem explicações disponíveis.';
+      listaExplicacoes.appendChild(d);
+    } else {
+      // Baixa e mostra texto de .md/.txt/.json (json vira texto)
+      for (const e of expls) {
+        const raw = e.download_url || `https://raw.githubusercontent.com/${OWNER}/${REPO}/${BRANCH}/${e.path}`;
+        try {
+          const r = await fetch(raw, { cache:'no-store' });
+          const ct = (r.headers.get('content-type')||'').toLowerCase();
+          let texto = '';
+          if (ct.includes('application/json')) {
+            texto = JSON.stringify(await r.json(), null, 2);
+          } else {
+            texto = await r.text();
+          }
+          listaExplicacoes.appendChild(expCard(e.name, texto));
+        } catch {
+          listaExplicacoes.appendChild(expCard(e.name, '(falha ao carregar)'));
         }
-
-        limpar(listaExplicacoes);
-        const ex = pick(explics);
-        if (!ex.length){
-          const d = document.createElement('div');
-          d.className = 'p-4 border border-dashed border-gray-300 rounded-md bg-gray-50 text-gray-500';
-          d.textContent = 'Sem explicações disponíveis';
-          listaExplicacoes.appendChild(d);
-        } else {
-          ex.forEach(e=>listaExplicacoes.appendChild(itemExplicacao(e)));
-        }
-
-        renderCodecov(cc);
-        escreveStatus('Resultados atualizados', 'ok');
-      }catch(e){
-        escreveStatus('Erro ao carregar resultados: '+e.message,'err');
       }
     }
 
-    btnReload.addEventListener('click', async ()=>{
-      escreveStatus('Atualizando…');
-      await carregarStatus();
-      await carregarResultados();
-    });
+    // RELATÓRIO SONAR (se existir, podemos exibir um número simbólico)
+    try {
+      const sonar = await fetchRawJson(SONAR_JSON);
+      if (sonar && (sonar.coverage || sonar.cobertura || sonar.total_coverage)) {
+        const cov = sonar.coverage || sonar.cobertura || sonar.total_coverage;
+        kpiCobertura.textContent = (typeof cov === 'number') ? (cov.toFixed(2)+'%') : String(cov);
+      }
+    } catch {
+      // se não existir, badge do Codecov já cobre visualmente
+    }
 
-    document.addEventListener('DOMContentLoaded', async ()=>{
-      await carregarStatus();
-      await carregarResultados();
-    });
-  </script>
+    escreveStatus('Resultados atualizados', 'ok');
+  } catch (e) {
+    escreveStatus('Erro ao carregar resultados: ' + e.message, 'err');
+  }
+}
+
+document.getElementById('btnReload').addEventListener('click', carregarResultados);
+
+document.addEventListener('DOMContentLoaded', async ()=>{
+  renderCodecov();
+  await carregarResultados();
+});
+</script>
 </body>
 </html>
