@@ -36,42 +36,26 @@ public class UploadController {
 
     @PostMapping(value = "/codigo", consumes = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<ResultadoProcessamento> codigo(@Valid @RequestBody ProcessamentoRequest body) throws Exception {
-        tracker.markStarted();
-        try {
-            ResultadoProcessamento r = service.processarTrechoCodigo(body.getCodigo());
-            tracker.markSuccess();
-            return ResponseEntity.ok(r);
-        } catch (Exception e) {
-            tracker.markError();
-            throw e;
-        }
+        tracker.markStarted();                 // liga o “estamos rodando”
+        ResultadoProcessamento r = service.processarTrechoCodigo(body.getCodigo());
+        // NÃO desliga aqui! (pipeline real segue no GitHub Actions)
+        return ResponseEntity.ok(r);
     }
 
     @PostMapping(value = "/arquivo", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<ResultadoProcessamento> arquivo(@RequestPart("file") MultipartFile file) throws Exception {
         tracker.markStarted();
-        try {
-            ResultadoProcessamento r = service.processarArquivo(file);
-            tracker.markSuccess();
-            return ResponseEntity.ok(r);
-        } catch (Exception e) {
-            tracker.markError();
-            throw e;
-        }
+        ResultadoProcessamento r = service.processarArquivo(file);
+        return ResponseEntity.ok(r);
     }
 
     @PostMapping(value = "/projeto", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<ResultadoProcessamento> projeto(@RequestPart("file") MultipartFile zip) throws Exception {
         tracker.markStarted();
-        try {
-            ResultadoProcessamento r = service.processarProjetoZip(zip);
-            tracker.markSuccess();
-            return ResponseEntity.ok(r);
-        } catch (Exception e) {
-            tracker.markError();
-            throw e;
-        }
+        ResultadoProcessamento r = service.processarProjetoZip(zip);
+        return ResponseEntity.ok(r);
     }
+
 
     @GetMapping("/health")
     public String health() { return "ok"; }

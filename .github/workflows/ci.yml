@@ -301,50 +301,20 @@ jobs:
       env:
         CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
-    - name: Verificar status no Codecov (API)
-      env:
-        OWNER_REPO: ${{ github.repository }}   # ex: lipesanfelice/workflows
-        COMMIT_SHA: ${{ env.COV_SHA }}         # SHA que você usou no -C
-        CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+    - name: Notify backend on success
+      if: success()
       run: |
-        set -euo pipefail
-        owner="${OWNER_REPO%/*}"
-        repo="${OWNER_REPO#*/}"
-        url="https://codecov.io/api/gh/${owner}/${repo}/commit/${COMMIT_SHA}"
+          curl -sS -X POST "$BACKEND_URL/api/process/notify" \
+            -H "Content-Type: application/json" \
+            -d '{"status":"success"}'
 
-        # pega JSON e extrai alguns campos-chave
-        json="$(curl -sfL "$url")" || { echo "Falha ao consultar Codecov"; exit 2; }
-
-        # Totais de cobertura (linhas cobertas/existentes)
-        covered="$(echo "$json" | python3 - <<'PY'
-        import sys, json
-        j=json.load(sys.stdin)
-        print(j.get("commit",{}).get("totals",{}).get("c", ""))
-        PY
-        )"
-            files_count="$(echo "$json" | python3 - <<'PY'
-        import sys, json
-        j=json.load(sys.stdin)
-        print(j.get("commit",{}).get("files_count", ""))
-        PY
-        )"
-
-            echo "covered%: ${covered}, files_count: ${files_count}"
-
-            # Heurísticas de sucesso:
-            # - há algum arquivo mapeado
-            # - (opcional) há porcentagem numérica
-            if [ -n "$files_count" ] && [ "$files_count" != "0" ]; then
-              echo "OK: Codecov processou e mapeou arquivos."
-              exit 0
-            fi
-
-            echo "::error::Codecov não mapeou arquivos (files_count=${files_count})."
-            # Mostra mensagens de erro do Codecov (se houver)
-            echo "$json" | python3 - <<'PY'
-        import sys, json
-        j=json.load(sys.stdin)
-        msgs = j.get("messages") or j.get("commit",{}).get("message")
-        print("Mensagens do Codecov:", msgs)
-        PY
-            exit 3
+    - name: Notify backend on failure
+      if: failure()
+      run: |
+          curl -sS -X POST "$BACKEND_URL/api/process/notify" \
+            -H "Content-Type: application/json" \
+            -d '{"status":"error"}'
+        # Opcional: sempre logar resultado da notificação
+      continue-on-error: true
+    env:
+      BACKEND_URL: ${{ secrets.BACKEND_URL }}   # ex.: https://minha-api.exemplo.com
