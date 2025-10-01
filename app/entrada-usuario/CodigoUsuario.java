@@ -1,22 +1,20 @@
-public class GeradorTabuada {
+public class ConversorTemperatura {
     
-    public static void gerarTabuada(int numero) {
-        System.out.println("Tabuada do " + numero + ":");
-        for (int i = 1; i <= 10; i++) {
-            System.out.printf("%d x %d = %d\n", numero, i, numero * i);
-        }
+    public static double celsiusParaFahrenheit(double celsius) {
+        return (celsius * 9/5) + 32;
     }
     
-    public static void gerarTodasTabuadas() {
-        for (int i = 1; i <= 10; i++) {
-            gerarTabuada(i);
-            System.out.println();
-        }
+    public static double fahrenheitParaCelsius(double fahrenheit) {
+        return (fahrenheit - 32) * 5/9;
+    }
+    
+    public static double celsiusParaKelvin(double celsius) {
+        return celsius + 273.15;
     }
     
     public static void main(String[] args) {
-        gerarTabuada(7);
-        System.out.println("\n--- TODAS AS TABUADAS ---");
-        gerarTodasTabuadas();
+        System.out.println("25°C para Fahrenheit: " + celsiusParaFahrenheit(25));
+        System.out.println("77°F para Celsius: " + fahrenheitParaCelsius(77));
+        System.out.println("0°C para Kelvin: " + celsiusParaKelvin(0));
     }
 }
