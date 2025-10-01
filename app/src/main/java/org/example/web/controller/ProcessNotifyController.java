@@ -16,7 +16,7 @@ public class ProcessNotifyController {
         this.tracker = tracker;
     }
 
-    /** Endpoint que o loading.html consulta periodicamente */
+    /** Loading consulta isso periodicamente */
     @GetMapping("/state")
     public Map<String, Object> state() {
         return Map.of(
@@ -27,22 +27,19 @@ public class ProcessNotifyController {
         );
     }
 
-    /** Útil chamar antes de cada submissão no index.html */
+    /** Chame antes de cada submissão (no index.html) para limpar estado anterior */
     @PostMapping("/reset")
     public ResponseEntity<Void> reset() {
         tracker.reset();
         return ResponseEntity.ok().build();
     }
 
-    /** Use isso para notificar o fim: Body: {"status":"success"} ou {"status":"error"} */
+    /** Chame quando a pipeline terminar: body {"status":"success"} ou {"status":"error"} */
     @PostMapping("/notify")
     public ResponseEntity<Void> notifyDone(@RequestBody Map<String, String> body) {
         String status = (body.getOrDefault("status", "") + "").toLowerCase();
-        if ("success".equals(status)) {
-            tracker.markSuccess();
-        } else {
-            tracker.markError();
-        }
+        if ("success".equals(status)) tracker.markSuccess();
+        else                          tracker.markError();
         return ResponseEntity.ok().build();
     }
 }
