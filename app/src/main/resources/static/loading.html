@@ -14,57 +14,55 @@
       <h1 class="text-xl font-semibold text-gray-800 mb-2">Estamos processando seu código…</h1>
       <p class="text-gray-500">Isso pode levar alguns instantes. Não feche esta página.</p>
     </div>
-    <p id="hint" class="text-center text-xs text-gray-400 mt-3"></p>
   </div>
 
-  <script>
-    feather.replace();
+<script>
+feather.replace();
 
-    const HINT = document.getElementById('hint');
-    const STATUS_URLS = ['/api/process/status']; // ajuste se seu prefixo for diferente
-    const POLL_MS = 1000;
+const STATUS_URLS = ['/api/process/status','/process/status']; // tenta nesta ordem
 
-    async function tryFetch(url) {
-      try {
-        const r = await fetch(url, { credentials: 'include' });
-        if (!r.ok) return { ok:false, status:r.status };
-        const ct = (r.headers.get('content-type')||'').toLowerCase();
-        if (!ct.includes('application/json')) return { ok:false, status:r.status, note:'non-json' };
-        const j = await r.json();
-        return { ok:true, json:j };
-      } catch (e) {
-        return { ok:false, error:e.message };
+async function getStatus(url){
+  try{
+    const r = await fetch(url, { cache:'no-store', credentials:'include' });
+    if(!r.ok) return null;
+    const ct = (r.headers.get('content-type')||'').toLowerCase();
+    if(!ct.includes('application/json')) return null;
+    return await r.json(); // esperado: { running:boolean, done:boolean, error:boolean }
+  }catch(_){ return null; }
+}
+
+async function poll(){
+  let chosen = null;
+  let backoff = 1000;
+
+  async function loop(){
+    try{
+      if(!chosen){
+        // escolhe o primeiro endpoint que responder
+        for(const u of STATUS_URLS){
+          const j = await getStatus(u);
+          if(j){ chosen = u; break; }
+        }
+        if(!chosen){ setTimeout(loop, backoff); return; }
       }
-    }
+      const j = await getStatus(chosen);
+      if(!j){ setTimeout(loop, backoff = Math.min(backoff*1.5, 5000)); return; }
 
-    async function poll() {
-      // tenta o primeiro endpoint válido
-      let res = null, chosen = null;
-      for (const u of STATUS_URLS) {
-        res = await tryFetch(u);
-        if (res.ok) { chosen = u; break; }
-      }
-      if (!chosen) {
-        HINT.textContent = 'Não foi possível consultar o status da execução.';
-        setTimeout(poll, POLL_MS);
+      if(j.done){
+        const target = j.error ? 'results.html?error=1' : 'results.html';
+        location.href = target;
         return;
       }
-
-      const st = res.json || {};
-      // Esperado do backend (opção B):
-      // { running: boolean, done: boolean, error: boolean, status: "in_progress"|"done"|"error" }
-      if (st.done === true) {
-        const to = 'results.html' + (st.error ? '?error=1' : '');
-        window.location.href = to;
-        return;
-      }
-
-      // caso ainda esteja rodando ou sem sinal claro, segue polling
-      HINT.textContent = st.status ? `status: ${st.status}` : '';
-      setTimeout(poll, POLL_MS);
+      // segue rodando
+      setTimeout(loop, 1000);
+    }catch(_){
+      setTimeout(loop, backoff = Math.min(backoff*1.5, 5000));
     }
+  }
+  loop();
+}
 
-    poll();
-  </script>
+poll();
+</script>
 </body>
 </html>
