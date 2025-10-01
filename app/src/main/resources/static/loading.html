@@ -6,7 +6,6 @@
   <title>Processando…</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.jsdelivr.net/npm/feather-icons/dist/feather.min.js"></script>
-  <style>.tiny{font-size:.72rem;opacity:.8}</style>
 </head>
 <body class="min-h-screen bg-gray-50 flex items-center justify-center">
   <div class="w-full max-w-md mx-4">
@@ -23,137 +22,87 @@
         <a href="index.html" class="text-sm text-gray-500 hover:underline">Voltar</a>
       </div>
     </div>
-
-    <pre id="dbg" class="tiny text-center mt-3 whitespace-pre-wrap"></pre>
   </div>
 
 <script>
 feather.replace();
 
 /**
- * Poll com prioridade para RAW (evita 403).
- *   1) RAW (sem auth, com cache-busting)
- *   2) API (fallback; usa token se houver em sessionStorage.GH_TOKEN)
- * Redireciona ao encontrar {"done":true}.
+ * ✅ Sem backend / sem execId
+ * A página verifica periodicamente um arquivo "marcador" commitado pelo GitHub Actions:
+ *   app/entrada-usuario/done.json  (conteúdo: { "done": true, "status": "success|failure|cancelled" })
+ * Assim que o arquivo existir e tiver done=true → redireciona para results.html?status=...
  *
- * Overrides por query:
- *   ?owner=...&repo=...&branch=...&debug=1
+ * Você pode sobrescrever por query string:
+ *   loading.html?owner=SEU_USER&repo=SEU_REPO&branch=BRANCH
  */
 
-// ===== config =====
+// === Ajuste padrão (pode sobrescrever via query) ===
+let OWNER  = 'lipesanfelice';
+let REPO   = 'workflows';
+let BRANCH = 'main';
+
+// Permite override por query string
 const qs = new URLSearchParams(location.search);
-let OWNER  = qs.get('owner')  || 'lipesanfelice';
-let REPO   = qs.get('repo')   || 'workflows';
-let BRANCH = qs.get('branch') || 'main';
+OWNER  = qs.get('owner')  || OWNER;
+REPO   = qs.get('repo')   || REPO;
+BRANCH = qs.get('branch') || BRANCH;
 
-const DONE_PATH = 'app/entrada-usuario/done.json';
-const RUN_T     = qs.get('t') || String(Date.now()); // marca desta rodada
-const DEBUG     = qs.get('debug') === '1';
+// URL raw do arquivo marcador
+const DONE_URL = `https://raw.githubusercontent.com/${OWNER}/${REPO}/${BRANCH}/app/entrada-usuario/done.json`;
 
-const MSG    = document.getElementById('msg');
-const ERR    = document.getElementById('errBox');
-const DBG    = document.getElementById('dbg');
+const POLL_INTERVAL_MS = 1500;
+const MAX_WAIT_MIN     = 20;  // fail-safe
+const HARD_TIMEOUT_MS  = MAX_WAIT_MIN * 60 * 1000;
 
-let intervalMs = 800;             // mais rápido para reagir logo após concluir
-const MAX_INTERVAL = 1800;        // backoff suave
-const TIMEOUT_MS = 8*60*1000;     // fail-safe
+const msgEl  = document.getElementById('msg');
+const errBox = document.getElementById('errBox');
 
-// URLs
-const RAW_URL = `https://raw.githubusercontent.com/${OWNER}/${REPO}/${BRANCH}/${DONE_PATH}`;
-const API_URL = `https://api.github.com/repos/${OWNER}/${REPO}/contents/${encodeURIComponent(DONE_PATH)}?ref=${encodeURIComponent(BRANCH)}`;
+function safeJson(s){ try { return JSON.parse(s); } catch { return null; } }
 
-function getToken(){ try { return sessionStorage.getItem('GH_TOKEN') || ''; } catch { return ''; } }
-
-// helpers
-function logDbg(x){ if(!DEBUG) return; DBG.textContent = (DBG.textContent+'\n'+(typeof x==='string'?x:JSON.stringify(x,null,2))).trim(); }
-function showErr(t){ ERR.classList.remove('hidden'); ERR.textContent = t; }
-function nc(u){ const s = u.includes('?')?'&':'?'; return `${u}${s}t=${encodeURIComponent(RUN_T)}&r=${Math.random().toString(36).slice(2)}`; }
-function safeJson(s){ try{ return JSON.parse(s); }catch{return null;} }
-function b64toStr(b){ try{ return atob(b); }catch{return ''; } }
-function go(status){
-  const url = new URL('results.html', location.href);
-  if (status) url.searchParams.set('status', String(status).toLowerCase());
-  url.searchParams.set('t', RUN_T);
-  location.replace(url.toString());
-}
-
-// fontes
-async function getByRAW(){
-  const r = await fetch(nc(RAW_URL), {
-    cache:'no-store',
-    headers:{
-      'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0',
-      'Pragma': 'no-cache',
-      'Expires': '0'
-    }
-  });
-  if (r.status===404) return {ok:false, notFound:true, src:'raw'};
-  if (!r.ok)          return {ok:false, code:r.status, src:'raw'};
-  const txt  = await r.text();
-  const data = safeJson(txt);
-  return data ? {ok:true, data, src:'raw'} : {ok:false, badJson:true, src:'raw'};
-}
-
-async function getByAPI(){
-  const headers = { 'Accept': 'application/vnd.github+json' };
-  const tok = getToken();
-  if (tok) headers['Authorization'] = `Bearer ${tok}`;
-  const r = await fetch(nc(API_URL), { cache:'no-store', headers });
-  if (r.status===404) return {ok:false, notFound:true, src:'api'};
-  if (r.status===403) return {ok:false, forbidden:true, src:'api'}; // não exibir erro; apenas registrar
-  if (!r.ok)          return {ok:false, code:r.status, src:'api'};
-  const j = await r.json();
-  if (j && j.type === 'file' && j.encoding === 'base64' && j.content){
-    const txt  = b64toStr(j.content.replace(/\n/g,''));
-    const data = safeJson(txt);
-    return data ? {ok:true, data, src:'api'} : {ok:false, badJson:true, src:'api'};
-  }
-  return {ok:false, notFile:true, src:'api'};
-}
-
-let tries = 0;
-async function loop(){
-  tries++;
+async function checkDone(){
+  // cache-busting + no-store para evitar cache do navegador/CDN
+  const url = DONE_URL + `?t=${Date.now()}`;
   try {
-    // 1) RAW primeiro (evita 403 e tende a propagar mais rápido com cache-busting)
-    const raw = await getByRAW();
-    logDbg({try:tries, from:'raw', status: raw.ok ? 'ok' : (raw.notFound?'404':raw.code||Object.keys(raw)[1])});
-    if (raw.ok && raw.data && raw.data.done === true){
-      MSG.textContent = 'Finalizando…';
-      return go(raw.data.status || 'success');
+    const r = await fetch(url, { cache: 'no-store' });
+    if (r.status === 404) {
+      // ainda não existe; segue aguardando
+      setTimeout(checkDone, POLL_INTERVAL_MS);
+      return;
     }
-
-    // 2) API como fallback (usará token se houver). Não grita 403 para o usuário.
-    const api = await getByAPI();
-    logDbg({try:tries, from:'api', status: api.ok ? 'ok' : (api.notFound?'404':api.forbidden?'403':api.code||Object.keys(api)[1])});
-    if (api.ok && api.data && api.data.done === true){
-      MSG.textContent = 'Finalizando…';
-      return go(api.data.status || 'success');
+    if (!r.ok) {
+      // erro temporário (ex.: 403 rate limit); mostra e continua tentando
+      errBox.classList.remove('hidden');
+      errBox.textContent = `Falha ao consultar marcador: HTTP ${r.status}`;
+      setTimeout(checkDone, POLL_INTERVAL_MS + 1000);
+      return;
     }
-
-    // Mostra erro leve apenas em falhas de rede/códigos anormais (evita “poluir” com 403 esperado)
-    if (!raw.ok && !raw.notFound && raw.code >= 400) {
-      showErr(`Falha RAW: HTTP ${raw.code}`);
-    } else if (!api.ok && api.code && api.code >= 400 && api.code !== 403) {
-      showErr(`Falha API: HTTP ${api.code}`);
+    const txt = await r.text();
+    const j = safeJson(txt);
+    if (j && j.done === true) {
+      const status = (j.status || '').toLowerCase();
+      location.href = `results.html?status=${encodeURIComponent(status)}`;
+      return;
     }
-  } catch(e){
-    logDbg({error:String(e && e.message || e)});
-    showErr('Erro de rede ao consultar marcador.');
+    // arquivo existe mas ainda não marcou done=true
+    setTimeout(checkDone, POLL_INTERVAL_MS);
+  } catch (e) {
+    errBox.classList.remove('hidden');
+    errBox.textContent = 'Erro de rede ao consultar marcador: ' + e.message;
+    setTimeout(checkDone, POLL_INTERVAL_MS + 1000);
   }
-
-  // backoff suave
-  if (tries % 10 === 0) intervalMs = Math.min(intervalMs+200, MAX_INTERVAL);
-  setTimeout(loop, intervalMs);
 }
 
-// fail-safe
-setTimeout(()=> go('timeout'), TIMEOUT_MS);
+// Mensagem padrão
+msgEl.textContent = 'Aguarde enquanto a pipeline executa…';
 
-// init
-MSG.textContent = 'Aguarde enquanto a pipeline executa…';
-if (DEBUG) logDbg({api:API_URL, raw:RAW_URL, owner:OWNER, repo:REPO, branch:BRANCH, run:RUN_T});
-loop();
+// Fail-safe: se demorar "demais", segue para results com status=timeout
+setTimeout(() => {
+  location.href = 'results.html?status=timeout';
+}, HARD_TIMEOUT_MS);
+
+// inicia o polling
+checkDone();
 </script>
 </body>
 </html>
