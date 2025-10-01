@@ -1,30 +1,22 @@
-public class ValidadorCPF {
+public class GeradorTabuada {
     
-    public static boolean validarCPF(String cpf) {
-        cpf = cpf.replaceAll("[^0-9]", "");
-        
-        if (cpf.length() != 11 || cpf.matches("(\\d)\\1{10}")) {
-            return false;
+    public static void gerarTabuada(int numero) {
+        System.out.println("Tabuada do " + numero + ":");
+        for (int i = 1; i <= 10; i++) {
+            System.out.printf("%d x %d = %d\n", numero, i, numero * i);
         }
-        
-        int[] digitos = cpf.chars().map(Character::getNumericValue).toArray();
-        
-        int digito1 = calcularDigito(digitos, 9);
-        int digito2 = calcularDigito(digitos, 10);
-        
-        return digitos[9] == digito1 && digitos[10] == digito2;
     }
     
-    private static int calcularDigito(int[] digitos, int posicao) {
-        int soma = 0;
-        for (int i = 0; i < posicao; i++) {
-            soma += digitos[i] * (posicao + 1 - i);
+    public static void gerarTodasTabuadas() {
+        for (int i = 1; i <= 10; i++) {
+            gerarTabuada(i);
+            System.out.println();
         }
-        int resto = soma % 11;
-        return resto < 2 ? 0 : 11 - resto;
     }
     
     public static void main(String[] args) {
-        System.out.println("CPF válido: " + validarCPF("123.456.789-09"));
+        gerarTabuada(7);
+        System.out.println("\n--- TODAS AS TABUADAS ---");
+        gerarTodasTabuadas();
     }
 }

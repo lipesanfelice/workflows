@@ -301,20 +301,13 @@ jobs:
       env:
         CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
-    - name: Notify backend on success
-      if: success()
+    - name: Notify backend (finish)
+      if: always()
+      env:
+        BACKEND_URL: ${{ secrets.BACKEND_URL }}
       run: |
-          curl -sS -X POST "$BACKEND_URL/api/process/notify" \
-            -H "Content-Type: application/json" \
-            -d '{"status":"success"}'
-
-    - name: Notify backend on failure
-      if: failure()
-      run: |
-          curl -sS -X POST "$BACKEND_URL/api/process/notify" \
-            -H "Content-Type: application/json" \
-            -d '{"status":"error"}'
-        # Opcional: sempre logar resultado da notificação
-      continue-on-error: true
-    env:
-      BACKEND_URL: ${{ secrets.BACKEND_URL }}   # ex.: https://minha-api.exemplo.com
+        echo "Notificando backend em $BACKEND_URL ..."
+        curl -sS --retry 5 --retry-delay 3 --max-time 20 \
+          -H 'Content-Type: application/json' \
+          -X POST "$BACKEND_URL/api/process/notify" \
+          -d "{\"status\":\"${{ job.status }}\"}" || true
