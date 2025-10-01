@@ -31,10 +31,10 @@
 feather.replace();
 
 /**
- * Poll duplo:
- *  - GitHub API (contents)   → evita cache da CDN do RAW
- *  - RAW (fallback)
- * Redireciona assim que encontrar {"done":true}.
+ * Poll com prioridade para RAW (evita 403).
+ *   1) RAW (sem auth, com cache-busting)
+ *   2) API (fallback; usa token se houver em sessionStorage.GH_TOKEN)
+ * Redireciona ao encontrar {"done":true}.
  *
  * Overrides por query:
  *   ?owner=...&repo=...&branch=...&debug=1
@@ -54,13 +54,15 @@ const MSG    = document.getElementById('msg');
 const ERR    = document.getElementById('errBox');
 const DBG    = document.getElementById('dbg');
 
-let intervalMs = 900;
-const MAX_INTERVAL = 3000;
-const TIMEOUT_MS = 10*60*1000;
+let intervalMs = 800;             // mais rápido para reagir logo após concluir
+const MAX_INTERVAL = 1800;        // backoff suave
+const TIMEOUT_MS = 8*60*1000;     // fail-safe
 
 // URLs
 const RAW_URL = `https://raw.githubusercontent.com/${OWNER}/${REPO}/${BRANCH}/${DONE_PATH}`;
 const API_URL = `https://api.github.com/repos/${OWNER}/${REPO}/contents/${encodeURIComponent(DONE_PATH)}?ref=${encodeURIComponent(BRANCH)}`;
+
+function getToken(){ try { return sessionStorage.getItem('GH_TOKEN') || ''; } catch { return ''; } }
 
 // helpers
 function logDbg(x){ if(!DEBUG) return; DBG.textContent = (DBG.textContent+'\n'+(typeof x==='string'?x:JSON.stringify(x,null,2))).trim(); }
@@ -76,60 +78,72 @@ function go(status){
 }
 
 // fontes
+async function getByRAW(){
+  const r = await fetch(nc(RAW_URL), {
+    cache:'no-store',
+    headers:{
+      'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0',
+      'Pragma': 'no-cache',
+      'Expires': '0'
+    }
+  });
+  if (r.status===404) return {ok:false, notFound:true, src:'raw'};
+  if (!r.ok)          return {ok:false, code:r.status, src:'raw'};
+  const txt  = await r.text();
+  const data = safeJson(txt);
+  return data ? {ok:true, data, src:'raw'} : {ok:false, badJson:true, src:'raw'};
+}
+
 async function getByAPI(){
-  const r = await fetch(nc(API_URL), { cache:'no-store' });
+  const headers = { 'Accept': 'application/vnd.github+json' };
+  const tok = getToken();
+  if (tok) headers['Authorization'] = `Bearer ${tok}`;
+  const r = await fetch(nc(API_URL), { cache:'no-store', headers });
   if (r.status===404) return {ok:false, notFound:true, src:'api'};
-  if (!r.ok) return {ok:false, code:r.status, src:'api'};
+  if (r.status===403) return {ok:false, forbidden:true, src:'api'}; // não exibir erro; apenas registrar
+  if (!r.ok)          return {ok:false, code:r.status, src:'api'};
   const j = await r.json();
-  // Conteúdo via API vem base64 quando é arquivo
   if (j && j.type === 'file' && j.encoding === 'base64' && j.content){
-    const txt = b64toStr(j.content.replace(/\n/g,''));
+    const txt  = b64toStr(j.content.replace(/\n/g,''));
     const data = safeJson(txt);
     return data ? {ok:true, data, src:'api'} : {ok:false, badJson:true, src:'api'};
   }
-  // Se a API retornou diretório/objeto diferente, considere não encontrado
   return {ok:false, notFile:true, src:'api'};
-}
-async function getByRAW(){
-  const r = await fetch(nc(RAW_URL), { cache:'no-store' });
-  if (r.status===404) return {ok:false, notFound:true, src:'raw'};
-  if (!r.ok) return {ok:false, code:r.status, src:'raw'};
-  const txt = await r.text();
-  const data = safeJson(txt);
-  return data ? {ok:true, data, src:'raw'} : {ok:false, badJson:true, src:'raw'};
 }
 
 let tries = 0;
 async function loop(){
   tries++;
   try {
-    // tenta API primeiro
-    const a = await getByAPI();
-    logDbg({try:tries, from:'api', status:a.ok? 'ok' : (a.notFound?'404':a.code||Object.keys(a)[1])});
-    if (a.ok && a.data && a.data.done === true){
+    // 1) RAW primeiro (evita 403 e tende a propagar mais rápido com cache-busting)
+    const raw = await getByRAW();
+    logDbg({try:tries, from:'raw', status: raw.ok ? 'ok' : (raw.notFound?'404':raw.code||Object.keys(raw)[1])});
+    if (raw.ok && raw.data && raw.data.done === true){
       MSG.textContent = 'Finalizando…';
-      return go(a.data.status || 'success');
+      return go(raw.data.status || 'success');
     }
 
-    // se API não deu ok, tenta RAW como fallback
-    if (!a.ok || (a.data && a.data.done !== true)) {
-      const b = await getByRAW();
-      logDbg({try:tries, from:'raw', status:b.ok? 'ok' : (b.notFound?'404':b.code||Object.keys(b)[1])});
-      if (b.ok && b.data && b.data.done === true){
-        MSG.textContent = 'Finalizando…';
-        return go(b.data.status || 'success');
-      }
+    // 2) API como fallback (usará token se houver). Não grita 403 para o usuário.
+    const api = await getByAPI();
+    logDbg({try:tries, from:'api', status: api.ok ? 'ok' : (api.notFound?'404':api.forbidden?'403':api.code||Object.keys(api)[1])});
+    if (api.ok && api.data && api.data.done === true){
+      MSG.textContent = 'Finalizando…';
+      return go(api.data.status || 'success');
     }
 
-    // feedback leve em erro
-    if ((!a.ok && !a.notFound) || (!a.ok && a.code>=400)) showErr(`API GitHub: ${a.code||'falha'}`);
+    // Mostra erro leve apenas em falhas de rede/códigos anormais (evita “poluir” com 403 esperado)
+    if (!raw.ok && !raw.notFound && raw.code >= 400) {
+      showErr(`Falha RAW: HTTP ${raw.code}`);
+    } else if (!api.ok && api.code && api.code >= 400 && api.code !== 403) {
+      showErr(`Falha API: HTTP ${api.code}`);
+    }
   } catch(e){
     logDbg({error:String(e && e.message || e)});
     showErr('Erro de rede ao consultar marcador.');
   }
 
-  // não finalizou → backoff leve
-  if (tries % 10 === 0) intervalMs = Math.min(intervalMs+300, MAX_INTERVAL);
+  // backoff suave
+  if (tries % 10 === 0) intervalMs = Math.min(intervalMs+200, MAX_INTERVAL);
   setTimeout(loop, intervalMs);
 }
 
