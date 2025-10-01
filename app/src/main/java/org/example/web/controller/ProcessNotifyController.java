@@ -6,11 +6,6 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.Map;
 
-/**
- * Webhook simples para o GitHub Actions avisar término da pipeline.
- * Chame com: POST /api/process/notify { "status": "success" | "error" }
- * (Opcional: adicione um token simples via header para segurança)
- */
 @RestController
 @RequestMapping("/api/process")
 public class ProcessNotifyController {
@@ -21,36 +16,33 @@ public class ProcessNotifyController {
         this.tracker = tracker;
     }
 
-    public static class NotifyBody {
-        public String status;
+    /** Endpoint que o loading.html consulta periodicamente */
+    @GetMapping("/state")
+    public Map<String, Object> state() {
+        return Map.of(
+                "started", tracker.isStarted(),
+                "done",    tracker.isDone(),
+                "error",   tracker.hasError(),
+                "status",  tracker.getStatus()
+        );
     }
 
+    /** Útil chamar antes de cada submissão no index.html */
+    @PostMapping("/reset")
+    public ResponseEntity<Void> reset() {
+        tracker.reset();
+        return ResponseEntity.ok().build();
+    }
+
+    /** Use isso para notificar o fim: Body: {"status":"success"} ou {"status":"error"} */
     @PostMapping("/notify")
-    public ResponseEntity<Map<String, Object>> notifyFinish(@RequestBody NotifyBody body) {
-        String status = body != null ? String.valueOf(body.status).toLowerCase() : "";
-        switch (status) {
-            case "success":
-            case "ok":
-            case "completed":
-                tracker.markSuccess();
-                break;
-            case "error":
-            case "failure":
-            case "failed":
-                tracker.markError();
-                break;
-            default:
-                // se vier vazio, não mudo nada para evitar falso negativo
-                return ResponseEntity.badRequest().body(Map.of(
-                    "accepted", false,
-                    "reason", "status must be success|error"
-                ));
+    public ResponseEntity<Void> notifyDone(@RequestBody Map<String, String> body) {
+        String status = (body.getOrDefault("status", "") + "").toLowerCase();
+        if ("success".equals(status)) {
+            tracker.markSuccess();
+        } else {
+            tracker.markError();
         }
-        return ResponseEntity.ok(Map.of(
-            "accepted", true,
-            "running", tracker.isRunning(),
-            "ok", tracker.wasLastOk(),
-            "lastChangeAt", tracker.lastChangeAt()
-        ));
+        return ResponseEntity.ok().build();
     }
 }
