@@ -29,80 +29,122 @@ feather.replace();
 
 /**
  * ✅ Sem backend / sem execId
- * A página verifica periodicamente um arquivo "marcador" commitado pelo GitHub Actions:
- *   app/entrada-usuario/done.json  (conteúdo: { "done": true, "status": "success|failure|cancelled" })
- * Assim que o arquivo existir e tiver done=true → redireciona para results.html?status=...
+ * Poll em um arquivo "marcador" commitado pelo GitHub Actions:
+ *   app/entrada-usuario/done.json  → { "done": true, "status": "success|failure|cancelled" }
+ * Assim que done=true → redireciona para results.html?status=...&run=...
  *
- * Você pode sobrescrever por query string:
- *   loading.html?owner=SEU_USER&repo=SEU_REPO&branch=BRANCH
+ * Query params opcionais para override:
+ *   ?owner=USER&repo=REPO&branch=BRANCH&marker=CAMINHO
  */
 
-// === Ajuste padrão (pode sobrescrever via query) ===
-let OWNER  = 'lipesanfelice';
-let REPO   = 'workflows';
-let BRANCH = 'main';
+// ===== Config padrão (ajuste para o seu repo) =====
+let OWNER   = 'lipesanfelice';
+let REPO    = 'workflows';
+let BRANCH  = 'main';
+let MARKER  = 'app/entrada-usuario/done.json';
 
-// Permite override por query string
 const qs = new URLSearchParams(location.search);
 OWNER  = qs.get('owner')  || OWNER;
 REPO   = qs.get('repo')   || REPO;
 BRANCH = qs.get('branch') || BRANCH;
+MARKER = qs.get('marker') || MARKER;
 
-// URL raw do arquivo marcador
-const DONE_URL = `https://raw.githubusercontent.com/${OWNER}/${REPO}/${BRANCH}/app/entrada-usuario/done.json`;
+// URL raw do marcador
+function markerURL() {
+  const base = `https://raw.githubusercontent.com/${OWNER}/${REPO}/${BRANCH}/${MARKER}`;
+  // cache-busting
+  return `${base}?t=${Date.now()}`;
+}
 
-const POLL_INTERVAL_MS = 1500;
-const MAX_WAIT_MIN     = 20;  // fail-safe
-const HARD_TIMEOUT_MS  = MAX_WAIT_MIN * 60 * 1000;
-
+// ===== UI refs =====
 const msgEl  = document.getElementById('msg');
 const errBox = document.getElementById('errBox');
 
-function safeJson(s){ try { return JSON.parse(s); } catch { return null; } }
+// ===== Run token (usado na results.html para bust de cache) =====
+function newRunToken(){
+  return String(Date.now());
+}
+function sendToResults(status){
+  const run = newRunToken();
+  try { sessionStorage.setItem('lastRun', run); } catch(_) {}
+  const url = new URL('results.html', location.href);
+  url.searchParams.set('status', status || '');
+  url.searchParams.set('run', run);
+  location.href = url.toString();
+}
 
-async function checkDone(){
-  // cache-busting + no-store para evitar cache do navegador/CDN
-  const url = DONE_URL + `?t=${Date.now()}`;
+// ===== Fail-safe global =====
+const MAX_WAIT_MIN    = 20;
+const HARD_TIMEOUT_MS = MAX_WAIT_MIN * 60 * 1000;
+setTimeout(() => sendToResults('timeout'), HARD_TIMEOUT_MS);
+
+// ===== Polling com backoff suave =====
+let intervalMs = 1500;
+const MAX_INTERVAL_MS = 8000; // limite do backoff
+let startedAt = Date.now();
+
+function fmtElapsed(ms){
+  const s = Math.floor(ms/1000);
+  const m = Math.floor(s/60), r = s%60;
+  return (m ? `${m}m ` : '') + `${r}s`;
+}
+
+function safeJson(t){ try { return JSON.parse(t); } catch { return null; } }
+
+async function checkMarker(){
+  const url = markerURL();
   try {
     const r = await fetch(url, { cache: 'no-store' });
     if (r.status === 404) {
-      // ainda não existe; segue aguardando
-      setTimeout(checkDone, POLL_INTERVAL_MS);
+      // ainda não existe
+      msgEl.textContent = `Pipeline em execução… (${fmtElapsed(Date.now()-startedAt)})`;
+      scheduleNext();
       return;
     }
     if (!r.ok) {
-      // erro temporário (ex.: 403 rate limit); mostra e continua tentando
-      errBox.classList.remove('hidden');
-      errBox.textContent = `Falha ao consultar marcador: HTTP ${r.status}`;
-      setTimeout(checkDone, POLL_INTERVAL_MS + 1000);
+      // erro transitório (403 rate-limit, etc.) → exibe e tenta de novo com backoff
+      showError(`Falha ao consultar marcador: HTTP ${r.status}`);
+      scheduleNext(true);
       return;
     }
+
     const txt = await r.text();
     const j = safeJson(txt);
-    if (j && j.done === true) {
-      const status = (j.status || '').toLowerCase();
-      location.href = `results.html?status=${encodeURIComponent(status)}`;
+
+    // se o arquivo existir mas vier vazio/sem JSON, continua aguardando
+    if (!j || j.done !== true) {
+      msgEl.textContent = `Preparando resultados… (${fmtElapsed(Date.now()-startedAt)})`;
+      scheduleNext();
       return;
     }
-    // arquivo existe mas ainda não marcou done=true
-    setTimeout(checkDone, POLL_INTERVAL_MS);
+
+    // Sucesso/Erro/Cancelado informados pelo workflow
+    const status = String(j.status || '').toLowerCase();
+    sendToResults(status || 'done');
   } catch (e) {
-    errBox.classList.remove('hidden');
-    errBox.textContent = 'Erro de rede ao consultar marcador: ' + e.message;
-    setTimeout(checkDone, POLL_INTERVAL_MS + 1000);
+    showError('Erro de rede ao consultar marcador: ' + e.message);
+    scheduleNext(true);
   }
 }
 
-// Mensagem padrão
+function showError(text){
+  errBox.classList.remove('hidden');
+  errBox.textContent = text;
+}
+
+// Próxima tentativa (com backoff só quando há erro)
+function scheduleNext(withBackoff=false){
+  if (withBackoff){
+    intervalMs = Math.min(MAX_INTERVAL_MS, Math.floor(intervalMs * 1.5));
+  } else {
+    intervalMs = 1500; // reseta quando está ok
+  }
+  setTimeout(checkMarker, intervalMs);
+}
+
+// Mensagem inicial e start
 msgEl.textContent = 'Aguarde enquanto a pipeline executa…';
-
-// Fail-safe: se demorar "demais", segue para results com status=timeout
-setTimeout(() => {
-  location.href = 'results.html?status=timeout';
-}, HARD_TIMEOUT_MS);
-
-// inicia o polling
-checkDone();
+checkMarker();
 </script>
 </body>
 </html>

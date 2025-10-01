@@ -8,212 +8,252 @@
   <link href="https://unpkg.com/aos@2.3.1/dist/aos.css" rel="stylesheet">
   <script src="https://unpkg.com/aos@2.3.1/dist/aos.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/feather-icons/dist/feather.min.js"></script>
-  <!-- ECharts para dashboards -->
-  <script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
   <!-- Highlight.js para visualizar código -->
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/styles/github.min.css">
-  <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/common.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/highlight.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/languages/java.min.js"></script>
+  <!-- ECharts para gráficos interativos -->
+  <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.1/dist/echarts.min.js"></script>
   <style>
     .badge{border-radius:999px;padding:.25rem .6rem;font-size:.75rem;font-weight:600}
     .card{background:#fff;border:1px solid #e5e7eb;border-radius:.75rem}
     .soft{background:rgba(59,130,246,.08);border:1px dashed rgba(59,130,246,.35)}
     .scroll-y{max-height:22rem;overflow:auto}
-    .code-modal{backdrop-filter: blur(2px)}
-    .btn{padding:.5rem .75rem;border-radius:.5rem;font-size:.875rem;border:1px solid #d1d5db;background:#fff;color:#374151}
-    .btn:hover{background:#f9fafb}
-    .kpi{font-variant-numeric: tabular-nums}
+    .modal{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.55);z-index:50}
+    .modal.open{display:flex}
+    pre code{white-space:pre; font-size:.85rem}
   </style>
 </head>
 <body class="bg-gray-50">
-  <div id="app" class="min-h-screen flex flex-col">
-    <nav class="bg-blue-600 text-white shadow-lg">
-      <div class="container mx-auto px-4 py-3 flex justify-between items-center">
-        <div class="flex items-center space-x-2">
-          <i data-feather="code"></i>
-          <span class="font-bold text-xl">CodeAnalyzer</span>
-        </div>
-        <div class="hidden md:flex space-x-6">
-          <a class="hover:text-blue-200" href="index.html">Home</a>
-          <a class="hover:text-blue-200" href="results.html">Resultados</a>
-        </div>
-        <button class="md:hidden">
-          <i data-feather="menu"></i>
-        </button>
+<div id="app" class="min-h-screen flex flex-col">
+  <!-- Navbar -->
+  <nav class="bg-blue-600 text-white shadow-lg">
+    <div class="container mx-auto px-4 py-3 flex justify-between items-center">
+      <div class="flex items-center space-x-2">
+        <i data-feather="code"></i>
+        <span class="font-bold text-xl">CodeAnalyzer</span>
       </div>
-    </nav>
-
-    <main class="flex-grow container mx-auto px-4 py-8">
-      <div class="flex items-start justify-between gap-4 flex-wrap mb-6">
-        <div>
-          <h1 class="text-3xl font-bold text-gray-800">Resultados da análise</h1>
-          <p class="text-gray-600">Testes e explicações gerados em <b>app/entrada-usuario</b>. Dashboards calculados do <b>jacoco.xml</b>. Links do Codecov incluídos.</p>
-        </div>
-        <div class="flex gap-2 items-center">
-          <span id="chipRepo" class="badge bg-blue-50 text-blue-700 border border-blue-200">repo: —</span>
-          <span id="chipBranch" class="badge bg-gray-100 text-gray-700 border border-gray-200">branch: —</span>
-          <span id="chipStatus" class="badge bg-yellow-50 text-yellow-700 border border-yellow-200">status: —</span>
-        </div>
+      <div class="hidden md:flex space-x-6">
+        <a class="hover:text-blue-200" href="index.html">Home</a>
+        <a class="hover:text-blue-200" href="results.html">Resultados</a>
       </div>
+      <button class="md:hidden">
+        <i data-feather="menu"></i>
+      </button>
+    </div>
+  </nav>
 
-      <div class="grid md:grid-cols-3 gap-6 mb-6">
-        <!-- Lista de arquivos e KPIs -->
-        <div class="card p-4 md:col-span-2" data-aos="fade-up">
-          <div class="flex items-center justify-between mb-3">
-            <h2 class="text-lg font-semibold text-gray-800 flex items-center">
-              <i data-feather="file-text" class="mr-2"></i> Arquivos de Teste Gerados
-            </h2>
-            <div class="flex gap-2">
-              <button id="btnReload" class="px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-md text-sm">Recarregar</button>
-              <a id="btnLoading" href="loading.html" class="px-3 py-2 bg-white border border-gray-300 hover:bg-gray-50 rounded-md text-sm text-gray-700">Ver loading</a>
-              <a href="index.html" class="px-3 py-2 bg-white border border-gray-300 hover:bg-gray-50 rounded-md text-sm text-gray-700">Nova análise</a>
-            </div>
-          </div>
-
-          <div class="grid grid-cols-3 gap-3 mb-4">
-            <div class="soft rounded-md p-3">
-              <div class="text-xs text-blue-700/80">Testes (.java)</div>
-              <div id="kpiTestes" class="kpi text-2xl font-bold text-blue-700">0</div>
-            </div>
-            <div class="soft rounded-md p-3">
-              <div class="text-xs text-blue-700/80">Arquivos listados</div>
-              <div id="kpiArquivos" class="kpi text-2xl font-bold text-blue-700">0</div>
-            </div>
-            <div class="soft rounded-md p-3">
-              <div class="text-xs text-blue-700/80">Cobertura (linhas)</div>
-              <div id="kpiCobertura" class="kpi text-2xl font-bold text-blue-700">—</div>
-            </div>
-          </div>
-
-          <div id="listaArquivos" class="scroll-y space-y-2">
-            <div class="p-4 border border-dashed border-gray-300 rounded-md bg-gray-50 text-gray-500">
-              Carregando arquivos de teste…
-            </div>
-          </div>
-        </div>
-
-        <!-- Painel de cobertura -->
-        <div class="card p-4" data-aos="fade-up" data-aos-delay="100">
-          <h2 class="text-lg font-semibold text-gray-800 mb-3 flex items-center">
-            <i data-feather="pie-chart" class="mr-2"></i> Cobertura & Codecov
-          </h2>
-
-          <div class="grid gap-3 mb-3">
-            <div class="p-3 border rounded-md bg-white">
-              <div class="text-sm text-gray-600 mb-2">Cobertura geral (JaCoCo)</div>
-              <div id="chartPie" style="height:220px;"></div>
-            </div>
-
-            <div class="p-3 border rounded-md bg-white">
-              <div class="text-sm text-gray-600 mb-2">Cobertura por pacote/classe (Treemap)</div>
-              <div id="chartTreemap" style="height:320px;"></div>
-            </div>
-          </div>
-
-          <div id="areaCodecov" class="space-y-3">
-            <div class="p-4 border rounded-md bg-white">
-              <div class="text-sm text-gray-700 mb-2">Codecov</div>
-              <img id="badgeCodecov" class="w-full h-auto border rounded-md bg-white p-2" alt="Codecov badge">
-              <div class="mt-2 grid gap-2">
-                <a id="ccProject" target="_blank" class="btn">Abrir projeto no Codecov</a>
-                <a id="ccCommits" target="_blank" class="btn">Histórico de commits no Codecov</a>
-              </div>
-              <p class="text-xs text-gray-500 mt-2">Para repositórios privados, autentique-se no Codecov em outra aba.</p>
-            </div>
-          </div>
-        </div>
+  <!-- Main -->
+  <main class="flex-grow container mx-auto px-4 py-8">
+    <div class="flex items-start justify-between gap-4 flex-wrap mb-6">
+      <div>
+        <h1 class="text-3xl font-bold text-gray-800">Resultados da análise</h1>
+        <p class="text-gray-600">Testes gerados a partir de <b>entrada-usuario</b>, explicações e dashboards interativos.</p>
       </div>
-
-      <!-- Explicações -->
-      <div class="card p-4" data-aos="fade-up">
-        <h2 class="text-lg font-semibold text-gray-800 mb-3 flex items-center">
-          <i data-feather="info" class="mr-2"></i> Explicações
-        </h2>
-        <div id="listaExplicacoes" class="grid gap-3">
-          <div class="p-4 border border-dashed border-gray-300 rounded-md bg-gray-50 text-gray-500">Carregando explicações…</div>
-        </div>
-      </div>
-
-      <div id="statusBox" class="hidden mt-6 p-3 rounded-md text-sm"></div>
-    </main>
-
-    <footer class="bg-gray-800 text-white py-6">
-      <div class="container mx-auto px-4 text-center">
-        <p>&copy; 2023 CodeAnalyzer. Todos os direitos reservados.</p>
-      </div>
-    </footer>
-  </div>
-
-  <!-- Modal: Visualizador de Código -->
-  <div id="codeModal" class="code-modal fixed inset-0 bg-black/50 hidden items-center justify-center z-50">
-    <div class="bg-white rounded-xl shadow-xl w-[95vw] max-w-5xl max-h-[85vh] overflow-hidden flex flex-col">
-      <div class="px-4 py-3 border-b flex items-center justify-between">
-        <div class="font-semibold text-gray-800" id="codeTitle">Arquivo</div>
-        <button class="btn" id="btnCloseModal">Fechar</button>
-      </div>
-      <div class="p-0 overflow-auto">
-        <pre class="m-0"><code id="codeViewer" class="language-java block p-4 text-sm"></code></pre>
+      <div class="flex gap-2 items-center">
+        <span id="chipRun" class="badge bg-blue-50 text-blue-700 border border-blue-200">run: —</span>
+        <span id="chipStatus" class="badge bg-yellow-50 text-yellow-700 border border-yellow-200">status: —</span>
       </div>
     </div>
+
+    <div class="grid md:grid-cols-3 gap-6 mb-6">
+      <!-- Arquivos + KPIs -->
+      <div class="card p-4 md:col-span-2" data-aos="fade-up">
+        <div class="flex items-center justify-between mb-3">
+          <h2 class="text-lg font-semibold text-gray-800 flex items-center">
+            <i data-feather="file-text" class="mr-2"></i> Arquivos de Teste
+          </h2>
+          <div class="flex gap-2">
+            <button id="btnReload" class="px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-md text-sm">Recarregar</button>
+            <a href="index.html" class="px-3 py-2 bg-white border border-gray-300 hover:bg-gray-50 rounded-md text-sm text-gray-700">Nova análise</a>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-3 gap-3 mb-4">
+          <div class="soft rounded-md p-3">
+            <div class="text-xs text-blue-700/80">Testes</div>
+            <div id="kpiTestes" class="text-2xl font-bold text-blue-700">0</div>
+          </div>
+          <div class="soft rounded-md p-3">
+            <div class="text-xs text-blue-700/80">Arquivos</div>
+            <div id="kpiArquivos" class="text-2xl font-bold text-blue-700">0</div>
+          </div>
+          <div class="soft rounded-md p-3">
+            <div class="text-xs text-blue-700/80">Cobertura</div>
+            <div id="kpiCobertura" class="text-2xl font-bold text-blue-700">—</div>
+          </div>
+        </div>
+
+        <div id="listaArquivos" class="scroll-y space-y-2">
+          <div class="p-4 border border-dashed border-gray-300 rounded-md bg-gray-50 text-gray-500">
+            Carregando arquivos…
+          </div>
+        </div>
+      </div>
+
+      <!-- Codecov + gráficos -->
+      <div class="card p-4" data-aos="fade-up" data-aos-delay="100">
+        <h2 class="text-lg font-semibold text-gray-800 mb-3 flex items-center">
+          <i data-feather="pie-chart" class="mr-2"></i> Codecov & Gráficos
+        </h2>
+
+        <!-- Badge e links -->
+        <div class="flex items-center gap-3 mb-3">
+          <img id="badgeCodecov" alt="Codecov" class="h-6" />
+          <a id="ccProject" target="_blank" class="text-blue-600 hover:underline text-sm">Projeto</a>
+          <a id="ccCommits" target="_blank" class="text-blue-600 hover:underline text-sm">Commits</a>
+        </div>
+
+        <!-- Charts -->
+        <div class="space-y-3">
+          <div id="chartPie" class="w-full h-56 border rounded-md"></div>
+          <div id="chartTreemap" class="w-full h-56 border rounded-md"></div>
+        </div>
+
+        <p class="text-xs text-gray-500 mt-3">Se o repositório for privado, faça login no Codecov em outra aba.</p>
+      </div>
+    </div>
+
+    <!-- Explicações -->
+    <div class="card p-4" data-aos="fade-up">
+      <h2 class="text-lg font-semibold text-gray-800 mb-3 flex items-center">
+        <i data-feather="info" class="mr-2"></i> Explicações
+      </h2>
+      <div id="listaExplicacoes" class="grid gap-3">
+        <div class="p-4 border border-dashed border-gray-300 rounded-md bg-gray-50 text-gray-500">Carregando explicações…</div>
+      </div>
+    </div>
+
+    <div id="statusBox" class="hidden mt-6 p-3 rounded-md text-sm"></div>
+  </main>
+
+  <footer class="bg-gray-800 text-white py-6">
+    <div class="container mx-auto px-4 text-center">
+      <p>&copy; 2023 CodeAnalyzer. Todos os direitos reservados.</p>
+    </div>
+  </footer>
+</div>
+
+<!-- Modal de código -->
+<div id="codeModal" class="modal">
+  <div class="bg-white rounded-xl shadow-xl w-[95vw] max-w-4xl max-h-[85vh] overflow-hidden">
+    <div class="flex items-center justify-between border-b px-4 py-3">
+      <div class="font-semibold text-gray-800" id="codeTitle">Arquivo</div>
+      <button id="btnCloseModal" class="px-3 py-1.5 rounded-md border text-sm text-gray-700 bg-white hover:bg-gray-50">Fechar</button>
+    </div>
+    <div class="p-0 overflow-auto" style="max-height: calc(85vh - 52px);">
+      <pre class="m-0"><code id="codeBlock" class="language-java"></code></pre>
+    </div>
   </div>
+</div>
 
 <script>
 AOS.init();
 feather.replace();
-hljs.highlightAll();
+hljs.registerLanguage('java', window.hljsDefineJava);
 
-/** ====== CONFIG (mude os defaults ou passe por query) ====== */
-let OWNER  = 'lipesanfelice';   // <--- seu user/org
-let REPO   = 'workflows';       // <--- seu repo
-let BRANCH = 'main';            // <--- branch padrão
+// ====== CONFIG DO SEU REPO (ajuste se necessário) ======
+const OWNER  = 'lipesanfelice';
+const REPO   = 'workflows';
+const BRANCH = 'main';
 
-const qs = new URLSearchParams(location.search);
-OWNER  = qs.get('owner')  || OWNER;
-REPO   = qs.get('repo')   || REPO;
-BRANCH = qs.get('branch') || BRANCH;
-
-const STATUS_PARAM = (qs.get('status') || '').toLowerCase(); // success|failure|cancelled|timeout
-document.getElementById('chipRepo').textContent   = `repo: ${OWNER}/${REPO}`;
-document.getElementById('chipBranch').textContent = `branch: ${BRANCH}`;
-
-const chipStatus = document.getElementById('chipStatus');
-if (STATUS_PARAM) {
-  chipStatus.textContent = 'status: ' + STATUS_PARAM;
-  chipStatus.className = 'badge bg-yellow-50 text-yellow-700 border border-yellow-200';
-  if (STATUS_PARAM === 'success') chipStatus.className = 'badge bg-green-100 text-green-700 border border-green-200';
-  if (['failure','cancelled','timeout'].includes(STATUS_PARAM))
-    chipStatus.className = 'badge bg-red-100 text-red-700 border border-red-200';
-}
-
-const btnLoading = document.getElementById('btnLoading');
-btnLoading.href = `loading.html?owner=${encodeURIComponent(OWNER)}&repo=${encodeURIComponent(REPO)}&branch=${encodeURIComponent(BRANCH)}`;
+// Caminhos-base
+const GH_PATH_TESTS   = 'app/entrada-usuario/testes_explicações/tests';
+const GH_PATH_EXPL    = 'app/entrada-usuario/testes_explicações/explicacoes';
+const JACOCO_XML      = 'app/entrada-usuario/jacoco-relatorio/jacoco.xml';
 
 const GITHUB_API = 'https://api.github.com';
 const RAW_BASE   = `https://raw.githubusercontent.com/${OWNER}/${REPO}/${BRANCH}`;
-const TESTS_DIR  = 'app/entrada-usuario/testes_explicações/tests';
-const EXPL_DIR   = 'app/entrada-usuario/testes_explicações/explicacoes';
-const JACOCO_XML = 'app/entrada-usuario/jacoco-relatorio/jacoco.xml';
 
-/** ====== HELPERS ====== */
+// ====== Token RUN para reset/bust cache por rodada ======
+const qs = new URLSearchParams(location.search);
+let RUN = qs.get('run')
+        || (()=>{ try{return sessionStorage.getItem('lastRun')}catch(_){return null} })()
+        || Date.now().toString();
+try { sessionStorage.setItem('lastRun', RUN); } catch(_) {}
+
+window.addEventListener('pageshow', (e) => { if (e.persisted) location.reload(); });
+
+function noCache(url){
+  const sep = url.includes('?') ? '&' : '?';
+  return `${url}${sep}t=${encodeURIComponent(RUN)}`;
+}
+
+// ====== UI refs ======
+const chipRun        = document.getElementById('chipRun');
+const chipStatus     = document.getElementById('chipStatus');
+const kpiTestes      = document.getElementById('kpiTestes');
+const kpiArquivos    = document.getElementById('kpiArquivos');
+const kpiCobertura   = document.getElementById('kpiCobertura');
+const listaArquivos  = document.getElementById('listaArquivos');
+const listaExplicacoes = document.getElementById('listaExplicacoes');
+const statusBox      = document.getElementById('statusBox');
+const btnReload      = document.getElementById('btnReload');
+
+// Code modal
+const codeModal   = document.getElementById('codeModal');
+const codeTitle   = document.getElementById('codeTitle');
+const codeBlock   = document.getElementById('codeBlock');
+const btnCloseModal = document.getElementById('btnCloseModal');
+btnCloseModal.addEventListener('click', ()=> codeModal.classList.remove('open'));
+codeModal.addEventListener('click', (e)=>{ if(e.target===codeModal) codeModal.classList.remove('open'); });
+
+// Charts
+let chartPie, chartTreemap;
+
+// ====== Helpers ======
 function escreveStatus(msg, tipo='info'){
-  const box = document.getElementById('statusBox');
-  box.classList.remove('hidden','bg-green-100','text-green-800','border-green-200','bg-red-100','text-red-800','border-red-200','bg-blue-50','text-blue-800','border-blue-200');
-  box.classList.add('border','bg-blue-50','text-blue-800','border-blue-200');
-  if (tipo==='ok'){ box.classList.remove('bg-blue-50','text-blue-800','border-blue-200'); box.classList.add('bg-green-100','text-green-800','border-green-200'); }
-  if (tipo==='err'){ box.classList.remove('bg-blue-50','text-blue-800','border-blue-200'); box.classList.add('bg-red-100','text-red-800','border-red-200'); }
-  box.textContent = msg;
+  statusBox.classList.remove('hidden','bg-green-100','text-green-800','border-green-200','bg-red-100','text-red-800','border-red-200','bg-blue-50','text-blue-800','border-blue-200');
+  statusBox.classList.add('border','bg-blue-50','text-blue-800','border-blue-200');
+  if (tipo==='ok'){ statusBox.classList.remove('bg-blue-50','text-blue-800','border-blue-200'); statusBox.classList.add('bg-green-100','text-green-800','border-green-200'); }
+  if (tipo==='err'){ statusBox.classList.remove('bg-blue-50','text-blue-800','border-blue-200'); statusBox.classList.add('bg-red-100','text-red-800','border-red-200'); }
+  statusBox.textContent = msg;
 }
 function limpar(el){ while(el.firstChild) el.removeChild(el.firstChild); }
 function pick(arr){ return Array.isArray(arr) ? arr : []; }
 
-/** GitHub: lista recursivamente via Contents API */
+// ====== Reset UI por rodada ======
+function resetUI(){
+  chipRun.textContent = 'run: ' + RUN;
+  chipStatus.textContent = 'status: carregando…';
+  chipStatus.className = 'badge bg-yellow-50 text-yellow-700 border border-yellow-200';
+
+  kpiTestes.textContent = '0';
+  kpiArquivos.textContent = '0';
+  kpiCobertura.textContent = '—';
+
+  listaArquivos.innerHTML = `
+    <div class="p-4 border border-dashed border-gray-300 rounded-md bg-gray-50 text-gray-500">
+      Carregando arquivos…
+    </div>`;
+  listaExplicacoes.innerHTML = `
+    <div class="p-4 border border-dashed border-gray-300 rounded-md bg-gray-50 text-gray-500">
+      Carregando explicações…
+    </div>`;
+
+  try { chartPie?.dispose(); } catch(_) {}
+  try { chartTreemap?.dispose(); } catch(_) {}
+  chartPie = echarts.init(document.getElementById('chartPie'));
+  chartTreemap = echarts.init(document.getElementById('chartTreemap'));
+
+  // Codecov links/badge (com no-cache)
+  const badge = document.getElementById('badgeCodecov');
+  const proj  = document.getElementById('ccProject');
+  const commits = document.getElementById('ccCommits');
+  badge.src = noCache(`https://codecov.io/gh/${OWNER}/${REPO}/branch/${BRANCH}/graph/badge.svg`);
+  proj.href = `https://app.codecov.io/gh/${OWNER}/${REPO}/tree/${BRANCH}`;
+  commits.href = `https://app.codecov.io/gh/${OWNER}/${REPO}/commits`;
+}
+
+// ====== GitHub API ======
 async function listGithubPath(path){
-  const url = `${GITHUB_API}/repos/${OWNER}/${REPO}/contents/${encodeURIComponent(path)}?ref=${encodeURIComponent(BRANCH)}`;
-  const r = await fetch(url, { cache:'no-store' });
-  if (r.status === 404) return []; // pasta não existe
+  const base = `${GITHUB_API}/repos/${OWNER}/${REPO}/contents/${encodeURIComponent(path)}?ref=${encodeURIComponent(BRANCH)}`;
+  const r = await fetch(noCache(base), { cache:'no-store' });
+  if (r.status === 404) return [];
   if (!r.ok) throw new Error('HTTP '+r.status+' ao listar '+path);
   const j = await r.json();
   if (Array.isArray(j)) {
-    const files = [];
+    const files=[];
     for (const item of j) {
       if (item.type === 'file') files.push(item);
       if (item.type === 'dir') {
@@ -227,269 +267,219 @@ async function listGithubPath(path){
   }
   return [];
 }
-
-/** Fetch texto/raw */
 async function fetchRawText(path){
-  const r = await fetch(`${RAW_BASE}/${path}`, { cache:'no-store' });
+  const r = await fetch(noCache(`${RAW_BASE}/${path}`), { cache:'no-store' });
   if (!r.ok) throw new Error('HTTP '+r.status+' em '+path);
   return r.text();
 }
 
-/** ====== Visualizador de código ====== */
-const codeModal = document.getElementById('codeModal');
-const codeTitle = document.getElementById('codeTitle');
-const codeViewer= document.getElementById('codeViewer');
-document.getElementById('btnCloseModal').addEventListener('click', ()=> codeModal.classList.add('hidden'));
-
-async function abrirCodigo(nome, path){
-  try{
-    codeTitle.textContent = nome;
-    codeViewer.textContent = 'Carregando…';
-    codeModal.classList.remove('hidden');
-    const txt = await fetchRawText(path);
-    codeViewer.textContent = txt;
-    codeViewer.className = 'language-java block p-4 text-sm';
-    hljs.highlightElement(codeViewer);
-  }catch(e){
-    codeViewer.textContent = 'Falha ao carregar: ' + e.message;
-  }
+// ====== Render de itens ======
+function itemArquivoView(btnText, onClick){
+  const a = document.createElement('button');
+  a.type='button';
+  a.className='px-3 py-1 rounded-md border text-sm text-gray-700 bg-white hover:bg-gray-50';
+  a.textContent=btnText;
+  a.addEventListener('click', onClick);
+  return a;
 }
-
-/** ====== Render de itens ====== */
-function fileCard(item){
-  const name = item.name || item.path.split('/').pop();
-  const htmlUrl = item.html_url || `https://github.com/${OWNER}/${REPO}/blob/${BRANCH}/${item.path}`;
-  const rawUrl  = item.download_url || `${RAW_BASE}/${item.path}`;
-
+function itemArquivo(a){
+  const nome = a.name || a.path || 'arquivo';
   const el = document.createElement('div');
-  el.className = 'p-3 border rounded-md bg-white flex items-center justify-between gap-3';
+  el.className = 'p-3 border rounded-md flex items-center justify-between gap-3';
   const left = document.createElement('div');
   left.className = 'flex items-center gap-2';
   const ic = document.createElement('i');
-  ic.setAttribute('data-feather','file');
-  ic.className = 'text-gray-400';
+  ic.setAttribute('data-feather','file'); ic.className = 'text-gray-400';
   const span = document.createElement('span');
   span.className = 'font-medium text-gray-800 break-all';
-  span.textContent = name;
+  span.textContent = nome;
   left.appendChild(ic); left.appendChild(span);
+
   const right = document.createElement('div');
   right.className = 'flex gap-2';
-  const btnView = document.createElement('button');
-  btnView.className = 'btn';
-  btnView.textContent = 'Ver código';
-  btnView.addEventListener('click', ()=> abrirCodigo(name, item.path));
-  const a1 = document.createElement('a'); a1.href=rawUrl; a1.target='_blank'; a1.className='btn'; a1.textContent='Baixar';
-  const a2 = document.createElement('a'); a2.href=htmlUrl; a2.target='_blank'; a2.className='btn'; a2.textContent='Abrir no GitHub';
-  right.appendChild(btnView); right.appendChild(a1); right.appendChild(a2);
+  const btnOpen = itemArquivoView('Ver código', async ()=>{
+    try{
+      const code = await fetchRawText(a.path);
+      codeTitle.textContent = nome;
+      codeBlock.textContent = code;
+      hljs.highlightElement(codeBlock);
+      codeModal.classList.add('open');
+    }catch(e){
+      escreveStatus('Falha ao abrir código: '+e.message,'err');
+    }
+  });
+  const linkRaw = document.createElement('a');
+  linkRaw.href = noCache(`${RAW_BASE}/${a.path}`); linkRaw.target='_blank';
+  linkRaw.className='px-3 py-1 rounded-md border text-sm text-gray-700 bg-white hover:bg-gray-50';
+  linkRaw.textContent='Abrir RAW';
+
+  right.appendChild(btnOpen);
+  right.appendChild(linkRaw);
   el.appendChild(left); el.appendChild(right);
   return el;
 }
-
-function expCard(name, text){
+function itemExplicacao(e){
   const el = document.createElement('div');
   el.className = 'p-4 border rounded-md bg-white';
   const h = document.createElement('div');
   h.className = 'font-semibold text-gray-800 mb-1';
-  h.textContent = name || 'Explicação';
+  h.textContent = e.title || e.name || 'Explicação';
   const p = document.createElement('div');
-  p.className = 'text-gray-700 text-sm whitespace-pre-wrap break-words';
-  p.textContent = text || '';
+  p.className = 'text-gray-700 text-sm whitespace-pre-wrap';
+  p.textContent = e.text || '';
   el.appendChild(h); el.appendChild(p);
   return el;
 }
 
-/** ====== ECharts: gráficos de cobertura ====== */
-let chartPie, chartTreemap;
-
-function initCharts(){
-  chartPie = echarts.init(document.getElementById('chartPie'));
-  chartTreemap = echarts.init(document.getElementById('chartTreemap'));
-  window.addEventListener('resize', ()=>{ chartPie.resize(); chartTreemap.resize(); });
-}
-
-function pct(n){ return Math.round(n*100)/100; }
-
-function setPie(covered, missed){
-  const total = covered + missed;
-  const covPct = total ? (covered/total*100) : 0;
-  document.getElementById('kpiCobertura').textContent =
-    total ? `${pct(covPct).toFixed(2)}%` : '—';
-
-  chartPie.setOption({
-    tooltip: { trigger:'item', formatter: '{b}: {c} ({d}%)' },
-    series: [{
-      type: 'pie',
-      radius: ['50%','75%'],
-      label: { show:true, formatter: '{b}\n{d}%' },
-      data: [
-        { name:'Cobertas', value: covered },
-        { name:'Perdidas', value: missed }
-      ]
-    }]
-  });
-}
-
-function setTreemap(tree){
-  chartTreemap.setOption({
-    tooltip: { formatter: p => {
-      const d = p.data;
-      return `${d.name}<br/>Cov: ${pct(d.coverage)}%<br/>Linhas: ${d.covered}/${d.total}`;
-    }},
-    series: [{
-      type:'treemap',
-      roam:true,
-      breadcrumb: { show: true },
-      data: tree
-    }]
-  });
-}
-
-/** Parse do jacoco.xml → métricas */
-async function carregarJacoco(){
-  try{
-    const xmlText = await fetchRawText(JACOCO_XML);
-    const doc = new DOMParser().parseFromString(xmlText, 'application/xml');
-
-    // cobertura geral (usar <counter type="LINE">)
-    const counters = [...doc.querySelectorAll('report > counter[type="LINE"]')];
-    let covered = 0, missed = 0;
-    if (counters.length) {
-      covered = Number(counters[0].getAttribute('covered')||0);
-      missed  = Number(counters[0].getAttribute('missed')||0);
-    } else {
-      // fallback: somar pacotes
-      [...doc.querySelectorAll('report > package > counter[type="LINE"]')].forEach(c=>{
-        covered += Number(c.getAttribute('covered')||0);
-        missed  += Number(c.getAttribute('missed')||0);
-      });
-    }
-    setPie(covered, missed);
-
-    // treemap por pacote/classe
-    const pkgs = [...doc.querySelectorAll('report > package')];
-    const tree = pkgs.map(pkg=>{
-      const pkgName = pkg.getAttribute('name')||'(sem pacote)';
-      // pacote total
-      let pCov=0,pMiss=0;
-      const pc = pkg.querySelector('counter[type="LINE"]');
-      if (pc){ pCov += Number(pc.getAttribute('covered')||0); pMiss += Number(pc.getAttribute('missed')||0); }
-      else {
-        [...pkg.querySelectorAll('class > counter[type="LINE"]')].forEach(c=>{
-          pCov += Number(c.getAttribute('covered')||0);
-          pMiss+= Number(c.getAttribute('missed')||0);
-        });
-      }
-      const pTotal = pCov+pMiss;
-      const children = [...pkg.querySelectorAll('class')].map(cls=>{
-        const name = cls.getAttribute('name') || '(classe)';
-        const c = cls.querySelector('counter[type="LINE"]');
-        const ccov = c ? Number(c.getAttribute('covered')||0) : 0;
-        const cmiss= c ? Number(c.getAttribute('missed')||0)  : 0;
-        const tot = ccov+cmiss;
-        return {
-          name,
-          value: Math.max(tot, 1),
-          covered: ccov,
-          total: tot,
-          coverage: tot ? (ccov/tot*100) : 0
-        };
-      });
-
-      return {
-        name: pkgName,
-        value: Math.max(pTotal, 1),
-        covered: pCov,
-        total: pTotal,
-        coverage: pTotal ? (pCov/pTotal*100) : 0,
-        children
-      };
-    });
-
-    setTreemap(tree);
-  }catch(e){
-    // Sem jacoco → limpa gráficos e mostra aviso
-    setPie(0,0);
-    chartTreemap.clear();
-    chartTreemap.setOption({
-      title:{ text:'Sem jacoco.xml disponível', left:'center', top:'center', textStyle:{ color:'#9ca3af', fontSize:14 } }
-    });
-  }
-}
-
-/** Codecov (links + badge) */
-function setCodecovLinks(){
-  const badge = document.getElementById('badgeCodecov');
-  const proj  = document.getElementById('ccProject');
-  const commits = document.getElementById('ccCommits');
-  badge.src = `https://codecov.io/gh/${OWNER}/${REPO}/branch/${BRANCH}/graph/badge.svg`;
-  proj.href = `https://app.codecov.io/gh/${OWNER}/${REPO}/tree/${BRANCH}`;
-  commits.href = `https://app.codecov.io/gh/${OWNER}/${REPO}/commits`;
-}
-
-/** ====== Carregamento principal ====== */
-const listaArquivos = document.getElementById('listaArquivos');
-const listaExplicacoes = document.getElementById('listaExplicacoes');
-const kpiTestes = document.getElementById('kpiTestes');
-const kpiArquivos = document.getElementById('kpiArquivos');
-
+// ====== Carregadores ======
 async function carregarArquivos(){
-  const tests = await listGithubPath(TESTS_DIR);
+  const files = await listGithubPath(GH_PATH_TESTS);
+  const javaFiles = files.filter(f=> (f.name||'').toLowerCase().endsWith('.java'))
+                         .map(f=> ({ name:f.name, path:f.path }));
   limpar(listaArquivos);
-  if (!tests.length) {
+  if (!javaFiles.length){
     const d = document.createElement('div');
-    d.className = 'p-4 border border-dashed border-gray-300 rounded-md bg-gray-50 text-gray-500';
-    d.textContent = 'Nenhum arquivo de teste encontrado (pode estar processando ainda).';
+    d.className='p-4 border border-dashed border-gray-300 rounded-md bg-gray-50 text-gray-500';
+    d.textContent='Nenhum teste encontrado.';
     listaArquivos.appendChild(d);
   } else {
-    const onlyJava = tests.filter(f => (f.name||'').toLowerCase().endsWith('.java'));
-    onlyJava.forEach(item => listaArquivos.appendChild(fileCard(item)));
+    javaFiles.forEach(a=> listaArquivos.appendChild(itemArquivo(a)));
     feather.replace();
-    kpiTestes.textContent   = onlyJava.length;
-    kpiArquivos.textContent = tests.length;
   }
+  kpiTestes.textContent = String(javaFiles.length);
+  kpiArquivos.textContent = String(javaFiles.length);
 }
 
 async function carregarExplicacoes(){
-  try{
-    const expls = await listGithubPath(EXPL_DIR);
-    limpar(listaExplicacoes);
-    if (!expls.length) {
-      const d = document.createElement('div');
-      d.className = 'p-4 border border-dashed border-gray-300 rounded-md bg-gray-50 text-gray-500';
-      d.textContent = 'Sem explicações disponíveis.';
-      listaExplicacoes.appendChild(d);
-    } else {
-      for (const e of expls) {
-        const raw = e.download_url || `${RAW_BASE}/${e.path}`;
-        try {
-          const r = await fetch(raw, { cache:'no-store' });
-          const ct = (r.headers.get('content-type')||'').toLowerCase();
-          let texto = '';
-          if (ct.includes('application/json')) {
-            texto = JSON.stringify(await r.json(), null, 2);
-          } else {
-            texto = await r.text();
-          }
-          listaExplicacoes.appendChild(expCard(e.name, texto));
-        } catch {
-          listaExplicacoes.appendChild(expCard(e.name, '(falha ao carregar)'));
-        }
-      }
+  const files = await listGithubPath(GH_PATH_EXPL);
+  const txtLike = files.filter(f=>{
+    const n=(f.name||'').toLowerCase();
+    return n.endsWith('.md')||n.endsWith('.txt');
+  });
+  limpar(listaExplicacoes);
+  if (!txtLike.length){
+    const d = document.createElement('div');
+    d.className = 'p-4 border border-dashed border-gray-300 rounded-md bg-gray-50 text-gray-500';
+    d.textContent='Sem explicações disponíveis';
+    listaExplicacoes.appendChild(d);
+  } else {
+    for (const f of txtLike){
+      const text = await fetchRawText(f.path);
+      listaExplicacoes.appendChild(itemExplicacao({ title:f.name, text }));
     }
-  }catch(e){
-    escreveStatus('Erro ao carregar explicações: '+e.message, 'err');
   }
 }
 
-document.getElementById('btnReload').addEventListener('click', async ()=>{
+function parseJacoco(xml){
+  // parsing simples via regex — suficiente para KPIs e gráficos
+  const pkgRe = /<package name="([^"]+)">([\s\S]*?)<\/package>/g;
+  const srcRe = /<sourcefile name="([^"]+)">([\s\S]*?)<\/sourcefile>/g;
+  const cntRe = /<counter type="([A-Z]+)" missed="(\d+)" covered="(\d+)"/g;
+
+  const data = [];
+  let m;
+  while ((m = pkgRe.exec(xml))) {
+    const pkg = m[1]; const body = m[2];
+    let src; const files=[];
+    while ((src = srcRe.exec(body))) {
+      const fname = src[1]; const sbody = src[2];
+      const counters = {};
+      let c; while ((c = cntRe.exec(sbody))) {
+        counters[c[1]] = { missed: +c[2], covered:+c[3] };
+      }
+      files.push({ name: fname, counters });
+    }
+    data.push({ pkg, files });
+  }
+
+  function sum(arr, path){
+    return arr.reduce((acc, it)=> acc + path(it), 0);
+  }
+  // calcula cobertura de linhas global
+  const lineCovered = sum(data.flatMap(p=>p.files), f => (f.counters.LINE?.covered)||0);
+  const lineMissed  = sum(data.flatMap(p=>p.files), f => (f.counters.LINE?.missed)||0);
+  const total = lineCovered + lineMissed;
+  const percent = total>0 ? (lineCovered*100/total) : null;
+
+  return { data, lineCovered, lineMissed, total, percent };
+}
+
+function renderCharts(jc){
+  // pizza: covered vs missed
+  const pieOpt = {
+    tooltip: { trigger:'item' },
+    legend: { bottom: 0 },
+    series: [{
+      type:'pie',
+      radius: ['40%','70%'],
+      avoidLabelOverlap: false,
+      itemStyle:{ borderRadius:8, borderColor:'#fff', borderWidth:2 },
+      label: { show:false },
+      emphasis:{ label:{ show:true, fontSize:14, fontWeight:'bold' } },
+      data:[
+        { value: jc.lineCovered, name:'Cobertas' },
+        { value: jc.lineMissed,  name:'Não cobertas' },
+      ]
+    }]
+  };
+  chartPie.setOption(pieOpt);
+
+  // treemap por pacote/arquivo usando % de linhas cobertas
+  const children = jc.data.map(p => {
+    const files = p.files.map(f=>{
+      const cov = f.counters.LINE || {missed:0,covered:0};
+      const total = cov.covered + cov.missed;
+      const pct = total>0 ? (cov.covered*100/total) : 0;
+      return { name: f.name, value: Math.max(1,total), label:{ formatter:`${f.name}\n${pct.toFixed(1)}%` } };
+    });
+    const tot = files.reduce((a,b)=>a+b.value,0);
+    return { name: p.pkg || '(default)', value: Math.max(1,tot), children: files };
+  });
+
+  const treemapOpt = {
+    tooltip:{ formatter: (p)=> `${p.name}: ${p.value} linhas` },
+    series:[{
+      type:'treemap',
+      roam:true,
+      nodeClick:'zoomToNode',
+      breadcrumb:{ show:true },
+      label:{ show:true },
+      data: children
+    }]
+  };
+  chartTreemap.setOption(treemapOpt);
+}
+
+async function carregarJacoco(){
+  try{
+    const xml = await fetchRawText(JACOCO_XML);
+    const jc = parseJacoco(xml);
+    const cov = jc.percent!=null ? `${jc.percent.toFixed(2)}%` : '—';
+    kpiCobertura.textContent = cov;
+
+    renderCharts(jc);
+
+    chipStatus.textContent = 'status: pronto';
+    chipStatus.className = 'badge bg-green-100 text-green-700 border border-green-200';
+  }catch(e){
+    // Sem jacoco.xml ainda — mantém status informativo
+    chipStatus.textContent = 'status: sem jacoco.xml';
+    chipStatus.className = 'badge bg-yellow-50 text-yellow-700 border border-yellow-200';
+  }
+}
+
+// ====== Boot ======
+btnReload.addEventListener('click', async ()=>{
+  // se quiser trocar o token a cada recarregar, descomente:
+  // RUN = Date.now().toString();
+  resetUI();
   escreveStatus('Atualizando…');
   await Promise.all([carregarArquivos(), carregarExplicacoes(), carregarJacoco()]);
   escreveStatus('Resultados atualizados', 'ok');
 });
 
 document.addEventListener('DOMContentLoaded', async ()=>{
-  setCodecovLinks();
-  initCharts();
+  resetUI();
   await Promise.all([carregarArquivos(), carregarExplicacoes(), carregarJacoco()]);
   escreveStatus('Resultados carregados', 'ok');
 });
