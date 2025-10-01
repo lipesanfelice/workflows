@@ -287,6 +287,49 @@ jobs:
           find "${ROOT}" -type f -name "${SRC}" -print | sed -n '1,50p' || true
           echo "::warning::Seguirei com upload, mas isso pode causar 'path mismatch' no Codecov."
         fi
+
+    - name: Gerar manifest.json (lista de arquivos)
+      run: |
+        set -euo pipefail
+        ROOT="${{ github.workspace }}/app/entrada-usuario"
+        TEST_DIR="$ROOT/testes_explicações/tests"
+        EXPL_DIR="$ROOT/testes_explicações/explicacoes"
+
+        echo '{'                                   >  "$ROOT/manifest.json"
+        echo '  "generatedAt": "'"$(date -u +%FT%TZ)"'",' >> "$ROOT/manifest.json"
+        echo '  "tests": ['                        >> "$ROOT/manifest.json"
+        sep=""
+        if [ -d "$TEST_DIR" ]; then
+          while IFS= read -r -d '' f; do
+            bn=$(basename "$f")
+            rp=${f#"${ROOT}/"}
+            printf '%s{"name":%q,"path":%q}\n' "$sep" "$bn" "$rp" >> "$ROOT/manifest.json"
+            sep=","
+          done < <(find "$TEST_DIR" -type f -name "*.java" -print0 | sort -z)
+        fi
+        echo '  ],'                                >> "$ROOT/manifest.json"
+
+        echo '  "explanations": ['                 >> "$ROOT/manifest.json"
+        sep=""
+        if [ -d "$EXPL_DIR" ]; then
+          while IFS= read -r -d '' f; do
+            bn=$(basename "$f")
+            rp=${f#"${ROOT}/"}
+            printf '%s{"name":%q,"path":%q}\n' "$sep" "$bn" "$rp" >> "$ROOT/manifest.json"
+            sep=","
+          done < <(find "$EXPL_DIR" -type f \( -name "*.md" -o -name "*.txt" \) -print0 | sort -z)
+        fi
+        echo '  ],'                                >> "$ROOT/manifest.json"
+
+        echo '  "jacocoXml": "app/entrada-usuario/jacoco-relatorio/jacoco.xml",' >> "$ROOT/manifest.json"
+        echo '  "codecov": {'                      >> "$ROOT/manifest.json"
+        echo '    "badge": "", "project": "", "commits": ""' >> "$ROOT/manifest.json"
+        echo '  }'                                 >> "$ROOT/manifest.json"
+        echo '}'                                   >> "$ROOT/manifest.json"
+
+        echo "Manifest criado:"
+        cat "$ROOT/manifest.json"
+
     
     - name: Commit e push dos arquivos gerados (na main)
       if: ${{ github.event_name != 'pull_request' }}
