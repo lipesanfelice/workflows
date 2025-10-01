@@ -1,65 +1,56 @@
+// src/main/java/org/example/web/controller/UploadController.java
 package org.example.web.controller;
 
 import jakarta.validation.Valid;
 import org.example.web.dto.ProcessamentoRequest;
 import org.example.web.dto.ResultadoProcessamento;
-import org.example.web.Exec.ExecRegistry; // <-- pacote correto em minúsculo
 import org.example.web.service.ProcessamentoService;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
+import org.example.web.process.ProcessTracker;   // <--- importe
+
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api")
 public class UploadController {
 
     private final ProcessamentoService service;
-    private final ExecRegistry execRegistry;
+    private final ProcessTracker tracker;        // <--- adicione
 
-    public UploadController(ProcessamentoService service, ExecRegistry execRegistry) {
+    public UploadController(ProcessamentoService service, ProcessTracker tracker) {
         this.service = service;
-        this.execRegistry = execRegistry;
+        this.tracker = tracker;
     }
 
     @PostMapping(value = "/codigo", consumes = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<ResultadoProcessamento> codigo(@Valid @RequestBody ProcessamentoRequest body) throws Exception {
-        ResultadoProcessamento res = service.processarTrechoCodigo(body.getCodigo());
-
-        // vincula execId -> último SHA pushado por /entrada/*
-        if (res != null && res.getIdExecucao() != null) {
-            execRegistry.bindExecToLatest(res.getIdExecucao());
-        }
-
-        return ResponseEntity.ok(res);
+        return ResponseEntity.ok(service.processarTrechoCodigo(body.getCodigo()));
     }
 
     @PostMapping(value = "/arquivo", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<ResultadoProcessamento> arquivo(@RequestPart("file") MultipartFile file) throws Exception {
-        ResultadoProcessamento res = service.processarArquivo(file);
-
-        // vincula execId -> último SHA pushado por /entrada/*
-        if (res != null && res.getIdExecucao() != null) {
-            execRegistry.bindExecToLatest(res.getIdExecucao());
-        }
-
-        return ResponseEntity.ok(res);
+        return ResponseEntity.ok(service.processarArquivo(file));
     }
 
     @PostMapping(value = "/projeto", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<ResultadoProcessamento> projeto(@RequestPart("file") MultipartFile zip) throws Exception {
-        ResultadoProcessamento res = service.processarProjetoZip(zip);
+        return ResponseEntity.ok(service.processarProjetoZip(zip));
+    }
 
-        // vincula execId -> último SHA pushado por /entrada/*
-        if (res != null && res.getIdExecucao() != null) {
-            execRegistry.bindExecToLatest(res.getIdExecucao());
-        }
-
-        return ResponseEntity.ok(res);
+    // Endpoint que o loading.html consulta sem execId
+    @GetMapping("/process/status")
+    public Map<String, Object> status() {
+        return Map.of(
+            "running", tracker.isRunning(),
+            "done",    tracker.isDone(),
+            "error",   tracker.hasError(),
+            "status",  tracker.getStatus()
+        );
     }
 
     @GetMapping("/health")
-    public String health() { 
-        return "ok"; 
-    }
+    public String health() { return "ok"; }
 }
