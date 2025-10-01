@@ -4,7 +4,6 @@ import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.FilenameUtils;
 import org.example.web.dto.ResultadoArquivo;
 import org.example.web.dto.ResultadoProcessamento;
-import org.example.web.process.ProcessTracker;           // <<< ADICIONE ESTE IMPORT
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -20,12 +19,6 @@ import java.util.zip.ZipInputStream;
 @Service
 public class ProcessamentoService {
 
-    private final ProcessTracker tracker;               // <<< INJETADO
-
-    public ProcessamentoService(ProcessTracker tracker) {
-        this.tracker = tracker;
-    }
-
     private Path baseWorkDir() throws IOException {
         Path base = Paths.get(System.getProperty("java.io.tmpdir"), "gerador-testes");
         Files.createDirectories(base);
@@ -33,142 +26,103 @@ public class ProcessamentoService {
     }
 
     public ResultadoProcessamento processarTrechoCodigo(String codigo) throws IOException {
-        tracker.markStarted();                           // <<< INÍCIO
-        try {
-            String execId = UUID.randomUUID().toString();
-            Path work = baseWorkDir().resolve(execId);
-            Files.createDirectories(work);
+        String execId = UUID.randomUUID().toString();
+        Path work = baseWorkDir().resolve(execId);
+        Files.createDirectories(work);
 
-            // salva como arquivo único
-            Path javaFile = work.resolve("CodigoSubmetido_" + Instant.now().toEpochMilli() + ".java");
-            Files.writeString(javaFile, codigo, StandardCharsets.UTF_8, StandardOpenOption.CREATE_NEW);
+        Path javaFile = work.resolve("CodigoSubmetido_" + Instant.now().toEpochMilli() + ".java");
+        Files.writeString(javaFile, codigo, StandardCharsets.UTF_8, StandardOpenOption.CREATE_NEW);
 
-            ResultadoProcessamento res = new ResultadoProcessamento();
-            res.setIdExecucao(execId);
-            res.setTotalArquivos(1);
-            res.setTotalJava(1);
-            res.getArquivos().add(new ResultadoArquivo(javaFile.toString(), Files.size(javaFile), true, "Trecho salvo"));
-            res.setProximaAcao("ANALISAR_COBERTURA_E_GERAR_TESTES");
-
-            tracker.markSuccess();                       // <<< SUCESSO
-            return res;
-        } catch (IOException e) {
-            tracker.markError();                         // <<< ERRO
-            throw e;
-        } catch (RuntimeException e) {
-            tracker.markError();
-            throw e;
-        }
+        ResultadoProcessamento res = new ResultadoProcessamento();
+        res.setIdExecucao(execId);
+        res.setTotalArquivos(1);
+        res.setTotalJava(1);
+        res.getArquivos().add(new ResultadoArquivo(javaFile.toString(), Files.size(javaFile), true, "Trecho salvo"));
+        res.setProximaAcao("ANALISAR_COBERTURA_E_GERAR_TESTES");
+        return res;
     }
 
     public ResultadoProcessamento processarArquivo(MultipartFile file) throws IOException {
-        tracker.markStarted();                           // <<< INÍCIO
-        try {
-            String execId = UUID.randomUUID().toString();
-            Path work = baseWorkDir().resolve(execId);
-            Files.createDirectories(work);
+        String execId = UUID.randomUUID().toString();
+        Path work = baseWorkDir().resolve(execId);
+        Files.createDirectories(work);
 
-            Path destino = work.resolve(file.getOriginalFilename());
-            try (InputStream in = file.getInputStream()) {
-                Files.copy(in, destino, StandardCopyOption.REPLACE_EXISTING);
-            }
-
-            boolean isJava = FilenameUtils.getExtension(destino.getFileName().toString()).equalsIgnoreCase("java");
-
-            ResultadoProcessamento res = new ResultadoProcessamento();
-            res.setIdExecucao(execId);
-            res.setTotalArquivos(1);
-            res.setTotalJava(isJava ? 1 : 0);
-            res.getArquivos().add(new ResultadoArquivo(
-                    destino.toString(),
-                    Files.size(destino),
-                    isJava,
-                    isJava ? "Arquivo .java recebido" : "Arquivo recebido (não .java)"));
-            res.setProximaAcao("ANALISAR_COBERTURA_E_GERAR_TESTES");
-
-            tracker.markSuccess();                       // <<< SUCESSO
-            return res;
-        } catch (IOException e) {
-            tracker.markError();                         // <<< ERRO
-            throw e;
-        } catch (RuntimeException e) {
-            tracker.markError();
-            throw e;
+        Path destino = work.resolve(file.getOriginalFilename());
+        try (InputStream in = file.getInputStream()) {
+            Files.copy(in, destino, StandardCopyOption.REPLACE_EXISTING);
         }
+
+        boolean isJava = FilenameUtils.getExtension(destino.getFileName().toString()).equalsIgnoreCase("java");
+
+        ResultadoProcessamento res = new ResultadoProcessamento();
+        res.setIdExecucao(execId);
+        res.setTotalArquivos(1);
+        res.setTotalJava(isJava ? 1 : 0);
+        res.getArquivos().add(new ResultadoArquivo(destino.toString(), Files.size(destino), isJava,
+                isJava ? "Arquivo .java recebido" : "Arquivo recebido (não .java)"));
+        res.setProximaAcao("ANALISAR_COBERTURA_E_GERAR_TESTES");
+        return res;
     }
 
     public ResultadoProcessamento processarProjetoZip(MultipartFile zip) throws IOException {
-        tracker.markStarted();                           // <<< INÍCIO
-        try {
-            String execId = UUID.randomUUID().toString();
-            Path work = baseWorkDir().resolve(execId);
-            Files.createDirectories(work);
+        String execId = UUID.randomUUID().toString();
+        Path work = baseWorkDir().resolve(execId);
+        Files.createDirectories(work);
 
-            // Pastas separadas
-            Path extractedJava = work.resolve("java-files");
-            Path extractedClass = work.resolve("class-files");
-            Files.createDirectories(extractedJava);
-            Files.createDirectories(extractedClass);
+        Path extractedJava = work.resolve("java-files");
+        Path extractedClass = work.resolve("class-files");
+        Files.createDirectories(extractedJava);
+        Files.createDirectories(extractedClass);
 
-            try (ZipInputStream zis = new ZipInputStream(zip.getInputStream())) {
-                ZipEntry entry;
-                while ((entry = zis.getNextEntry()) != null) {
-                    if (entry.isDirectory()) continue;
+        try (ZipInputStream zis = new ZipInputStream(zip.getInputStream())) {
+            ZipEntry entry;
+            while ((entry = zis.getNextEntry()) != null) {
+                if (entry.isDirectory()) continue;
 
-                    String lowerName = entry.getName().toLowerCase();
-                    Path targetPath = null;
+                String lowerName = entry.getName().toLowerCase();
+                Path targetPath = null;
 
-                    if (lowerName.endsWith(".java")) {
-                        targetPath = extractedJava.resolve(Paths.get(entry.getName()).getFileName());
-                    } else if (lowerName.endsWith(".class")) {
-                        targetPath = extractedClass.resolve(Paths.get(entry.getName()).getFileName());
-                    }
+                if (lowerName.endsWith(".java")) {
+                    targetPath = extractedJava.resolve(Paths.get(entry.getName()).getFileName());
+                } else if (lowerName.endsWith(".class")) {
+                    targetPath = extractedClass.resolve(Paths.get(entry.getName()).getFileName());
+                }
 
-                    if (targetPath != null) {
-                        Files.createDirectories(targetPath.getParent());
-                        Files.copy(zis, targetPath, StandardCopyOption.REPLACE_EXISTING);
-                    }
+                if (targetPath != null) {
+                    Files.createDirectories(targetPath.getParent());
+                    Files.copy(zis, targetPath, StandardCopyOption.REPLACE_EXISTING);
                 }
             }
-
-            // Lista arquivos
-            List<File> javaFiles = FileUtils.listFiles(extractedJava.toFile(), new String[]{"java"}, true)
-                    .stream().toList();
-            List<File> classFiles = FileUtils.listFiles(extractedClass.toFile(), new String[]{"class"}, true)
-                    .stream().toList();
-
-            ResultadoProcessamento res = new ResultadoProcessamento();
-            res.setIdExecucao(execId);
-            res.setTotalArquivos(javaFiles.size() + classFiles.size());
-            res.setTotalJava(javaFiles.size());
-
-            // Adiciona detalhes
-            javaFiles.forEach(f -> res.getArquivos().add(new ResultadoArquivo(
-                    f.getAbsolutePath(),
-                    f.length(),
-                    true,
-                    "Arquivo Java extraído"
-            )));
-            classFiles.forEach(f -> res.getArquivos().add(new ResultadoArquivo(
-                    f.getAbsolutePath(),
-                    f.length(),
-                    true,
-                    "Arquivo .class extraído"
-            )));
-
-            res.setProximaAcao("ANALISAR_COBERTURA_E_GERAR_TESTES");
-
-            tracker.markSuccess();                       // <<< SUCESSO
-            return res;
-        } catch (IOException e) {
-            tracker.markError();                         // <<< ERRO
-            throw e;
-        } catch (RuntimeException e) {
-            tracker.markError();
-            throw e;
         }
+
+        List<File> javaFiles = FileUtils.listFiles(extractedJava.toFile(), new String[]{"java"}, true)
+                .stream().toList();
+        List<File> classFiles = FileUtils.listFiles(extractedClass.toFile(), new String[]{"class"}, true)
+                .stream().toList();
+
+        ResultadoProcessamento res = new ResultadoProcessamento();
+        res.setIdExecucao(execId);
+        res.setTotalArquivos(javaFiles.size() + classFiles.size());
+        res.setTotalJava(javaFiles.size());
+
+        javaFiles.forEach(f -> res.getArquivos().add(new ResultadoArquivo(
+                f.getAbsolutePath(),
+                f.length(),
+                true,
+                "Arquivo Java extraído"
+        )));
+        classFiles.forEach(f -> res.getArquivos().add(new ResultadoArquivo(
+                f.getAbsolutePath(),
+                f.length(),
+                true,
+                "Arquivo .class extraído"
+        )));
+
+        res.setProximaAcao("ANALISAR_COBERTURA_E_GERAR_TESTES");
+        return res;
     }
 
+    // (se ainda usa em algum lugar)
     private void unzip(Path zip, Path target) throws IOException {
         try (ZipInputStream zis = new ZipInputStream(Files.newInputStream(zip))) {
             ZipEntry entry;

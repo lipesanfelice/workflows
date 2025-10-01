@@ -8,32 +8,32 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
-import org.example.web.exec.ProcessTracker; // <— importe
+import org.example.web.process.ProcessTracker; // << pacote padronizado
+
+import java.util.Map; // << faltava
 
 @RestController
 @RequestMapping("/api")
 public class UploadController {
 
     private final ProcessamentoService service;
-    private final ProcessTracker tracker; // <— injete
+    private final ProcessTracker tracker;
 
     public UploadController(ProcessamentoService service, ProcessTracker tracker) {
         this.service = service;
         this.tracker = tracker;
     }
 
-    // ===== endpoint de status bem simples =====
+    /** Endpoint que o loading.html consulta */
     @GetMapping("/process/running")
-    public ResponseEntity<?> running() {
-        // você pode incluir mais campos se quiser
-        return ResponseEntity.ok(new java.util.HashMap<>() {{
-            put("running", tracker.isRunning());
-            put("ok", tracker.wasLastOk());
-            put("lastChangeAt", tracker.lastChangeAt());
-        }});
+    public Map<String, Object> status() {
+        return Map.of(
+            "running", tracker.isRunning(),
+            "ok",      tracker.wasLastOk(),
+            "lastChangeAt", tracker.lastChangeAt()
+        );
     }
 
-    // ===== seus endpoints, agora marcando início/fim =====
     @PostMapping(value = "/codigo", consumes = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<ResultadoProcessamento> codigo(@Valid @RequestBody ProcessamentoRequest body) throws Exception {
         tracker.markStarted();
@@ -71,17 +71,6 @@ public class UploadController {
             tracker.markError();
             throw e;
         }
-    }
-
-    // Endpoint que o loading.html consulta sem execId
-    @GetMapping("/process/status")
-    public Map<String, Object> status() {
-        return Map.of(
-            "running", tracker.isRunning(),
-            "done",    tracker.isDone(),
-            "error",   tracker.hasError(),
-            "status",  tracker.getStatus()
-        );
     }
 
     @GetMapping("/health")
