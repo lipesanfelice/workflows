@@ -6,6 +6,9 @@
   <title>Processando…</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.jsdelivr.net/npm/feather-icons/dist/feather.min.js"></script>
+  <style>
+    .muted{opacity:.8}
+  </style>
 </head>
 <body class="min-h-screen bg-gray-50 flex items-center justify-center">
   <div class="w-full max-w-md mx-4">
@@ -16,138 +19,152 @@
       <h1 class="text-xl font-semibold text-gray-800 mb-2">Estamos processando seu código…</h1>
       <p id="msg" class="text-gray-500">Aguarde enquanto a pipeline executa.</p>
 
-      <div id="errBox" class="hidden mt-4 text-sm text-red-700 bg-red-50 border border-red-200 rounded p-3 text-left"></div>
-
       <div class="mt-6">
         <a href="index.html" class="text-sm text-gray-500 hover:underline">Voltar</a>
       </div>
     </div>
+
+    <p id="hint" class="text-center text-xs text-gray-400 mt-3 muted"></p>
   </div>
 
 <script>
 feather.replace();
 
-/** ======== CONFIG ======== */
-let OWNER         = 'lipesanfelice';
-let REPO          = 'workflows';
-let BRANCH        = 'main';
-let WORKFLOW_FILE = '.github/workflows/ci.yml'; // <- caminho do workflow no repo
+/**
+ * Esta página verifica periodicamente o arquivo
+ *   app/entrada-usuario/done.json
+ * no seu repositório GitHub. Assim que encontrar { "done": true },
+ * redireciona para results.html?status=...&t=...
+ *
+ * Formato esperado (gravado pelo seu workflow):
+ *   {"done":true,"status":"success|failure|cancelled","ts":"..."}
+ */
 
-// Permite override via query string (útil p/ testes)
+/* ======== CONFIG ======== */
+let OWNER  = 'lipesanfelice';
+let REPO   = 'workflows';
+let BRANCH = 'main';
+
+// Permite sobrescrever por query (?owner=&repo=&branch=)
 const qs = new URLSearchParams(location.search);
-OWNER         = qs.get('owner')  || OWNER;
-REPO          = qs.get('repo')   || REPO;
-BRANCH        = qs.get('branch') || BRANCH;
-WORKFLOW_FILE = qs.get('wf')     || WORKFLOW_FILE;
+OWNER  = qs.get('owner')  || OWNER;
+REPO   = qs.get('repo')   || REPO;
+BRANCH = qs.get('branch') || BRANCH;
 
-// Endpoints
-const GH_RUNS_URL = `https://api.github.com/repos/${OWNER}/${REPO}/actions/workflows/${encodeURIComponent(WORKFLOW_FILE)}/runs?branch=${encodeURIComponent(BRANCH)}&per_page=1&event=push`;
-const DONE_URL    = `https://raw.githubusercontent.com/${OWNER}/${REPO}/${BRANCH}/app/entrada-usuario/done.json`;
+// Caminho do marcador
+const DONE_PATH = 'app/entrada-usuario/done.json';
 
-const POLL_MS         = 1200;     // intervalo primário (rápido)
-const FALLBACK_POLL_MS= 2000;     // intervalo quando em fallback
-const HARD_TIMEOUT_MS = 18*60*1000; // fail-safe geral (~18min)
+// marca única desta execução (será propagada para results.html)
+const RUN_T = qs.get('t') || String(Date.now());
 
+/* ======== TUNING ======== */
+let INTERVAL_MS = 1000;   // polling rápido
+const MAX_INTERVAL = 3000;
+const HARD_TIMEOUT_MS = 15 * 60 * 1000; // 15 min fail-safe
+
+/* ======== REFS ======== */
 const msgEl  = document.getElementById('msg');
-const errBox = document.getElementById('errBox');
+const hintEl = document.getElementById('hint');
 
-function showErr(s){
-  errBox.classList.remove('hidden');
-  errBox.textContent = s;
+/* ======== HELPERS ======== */
+function nc(url){
+  const sep = url.includes('?') ? '&' : '?';
+  return `${url}${sep}t=${RUN_T}&r=${Math.random().toString(36).slice(2)}`;
 }
-function toResults(status, runId){
-  const t = runId ? String(runId) : String(Date.now());
-  const url = new URL('results.html', location.href);
-  if (status) url.searchParams.set('status', status);
-  url.searchParams.set('t', t);  // marca para cache-busting na results.html
-  location.href = url.toString();
-}
-
-/** ============== 1) Poll pela API do GitHub Actions (rápida) ============== */
-async function pollGithubActions(){
-  try{
-    // cache bust + no-store
-    const url = `${GH_RUNS_URL}&t=${Date.now()}`;
-    const r = await fetch(url, {
-      cache:'no-store',
-      headers:{
-        'Accept':'application/vnd.github+json',
-        'Cache-Control':'no-store, no-cache, must-revalidate, max-age=0',
-        'Pragma':'no-cache',
-        'Expires':'0'
-      }
-    });
-    if (!r.ok){
-      // 403/404/5xx → tenta fallback
-      showErr(`GitHub Actions API: HTTP ${r.status}; usando fallback…`);
-      return pollDoneJsonFallback();
-    }
-    const j = await r.json();
-    const run = j && Array.isArray(j.workflow_runs) ? j.workflow_runs[0] : null;
-
-    // Se ainda não há run recente, segue tentando
-    if (!run){
-      msgEl.textContent = 'Aguardando início da pipeline…';
-      return setTimeout(pollGithubActions, POLL_MS);
-    }
-
-    // status: queued | in_progress | completed
-    // conclusion (só quando completed): success | failure | cancelled | skipped | timed_out | action_required
-    if (run.status === 'completed'){
-      const status = (run.conclusion || '').toLowerCase();
-      msgEl.textContent = `Pipeline concluída (${status || 'desconhecido'})`;
-      return toResults(status || 'success', run.id);
-    } else {
-      msgEl.textContent = 'Pipeline em execução…';
-      return setTimeout(pollGithubActions, POLL_MS);
-    }
-  }catch(e){
-    // Qualquer erro de rede → fallback
-    showErr('Falha na API do GitHub Actions; usando fallback. Detalhe: ' + e.message);
-    return pollDoneJsonFallback();
-  }
-}
-
-/** ============== 2) Fallback: done.json no repositório (pode demorar) ============== */
 function safeJson(s){ try { return JSON.parse(s); } catch { return null; } }
+function toStatusStr(v){ return (v||'').toString().toLowerCase(); }
+function show(text){ msgEl.textContent = text; }
+function hint(text){ hintEl.textContent = text || ''; }
 
-async function pollDoneJsonFallback(){
-  try{
-    const url = `${DONE_URL}?t=${Date.now()}`; // cache-busting
-    const r = await fetch(url, { cache:'no-store' });
-    if (r.status === 404){
-      // ainda não existe → tenta novamente
-      msgEl.textContent = 'Aguardando marcação de conclusão…';
-      return setTimeout(pollDoneJsonFallback, FALLBACK_POLL_MS);
+/* ======== FONTES DE DADOS ======== */
+// 1) RAW do GitHub (mais rápido quando já propagou)
+async function fetchFromRaw(){
+  const RAW = `https://raw.githubusercontent.com/${OWNER}/${REPO}/${BRANCH}/${DONE_PATH}`;
+  const r = await fetch(nc(RAW), {
+    cache: 'no-store',
+    headers: {
+      'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0',
+      'Pragma': 'no-cache'
     }
-    if (!r.ok){
-      showErr(`Falha ao consultar marcador: HTTP ${r.status}`);
-      return setTimeout(pollDoneJsonFallback, FALLBACK_POLL_MS + 800);
-    }
-    const txt = await r.text();
-    const j = safeJson(txt);
-    if (j && j.done === true){
-      const status = (j.status || '').toLowerCase();
-      return toResults(status || 'success', j.ts || Date.now());
-    }
-    // existe, mas done ainda não é true
-    return setTimeout(pollDoneJsonFallback, FALLBACK_POLL_MS);
-  }catch(e){
-    showErr('Erro ao consultar marcador: ' + e.message);
-    return setTimeout(pollDoneJsonFallback, FALLBACK_POLL_MS + 800);
+  });
+  if (r.status === 404) return { ok:false, notFound:true };
+  if (!r.ok) return { ok:false, code:r.status };
+  const txt = await r.text();
+  const j = safeJson(txt);
+  return j ? { ok:true, data:j, src:'raw' } : { ok:false, badJson:true };
+}
+
+// 2) Contents API (fallback se o RAW ainda não propagou)
+async function fetchFromAPI(){
+  const API = `https://api.github.com/repos/${OWNER}/${REPO}/contents/${encodeURIComponent(DONE_PATH)}?ref=${encodeURIComponent(BRANCH)}`;
+  const r = await fetch(nc(API), { cache: 'no-store' });
+  if (r.status === 404) return { ok:false, notFound:true };
+  if (!r.ok) return { ok:false, code:r.status };
+  const j = await r.json();
+  if (!j || j.type !== 'file' || !j.content) return { ok:false, badContent:true };
+  try {
+    const decoded = atob(j.content.replace(/\s+/g,''));
+    const obj = safeJson(decoded);
+    return obj ? { ok:true, data:obj, src:'api' } : { ok:false, badJson:true };
+  } catch {
+    return { ok:false, badBase64:true };
   }
 }
 
-/** ============== Bootstrap + Fail-safe ============== */
-msgEl.textContent = 'Verificando status da pipeline…';
+/* ======== POLLING ======== */
+let attempts = 0;
 
-// fail-safe: se nada responder, leva para results (timeout)
-setTimeout(() => toResults('timeout', Date.now()), HARD_TIMEOUT_MS);
+async function check(){
+  attempts++;
+  // Tenta RAW; se não vier, tenta API.
+  // Fazemos em sequência para economizar rate-limit, mas mantendo latência baixa.
+  try{
+    // Mostra feedback sutil
+    if (attempts % 10 === 1) hint('verificando…');
+    const raw = await fetchFromRaw();
+    let hit = null;
+    if (raw.ok) {
+      hit = raw;
+    } else if (raw.notFound || raw.badJson) {
+      const api = await fetchFromAPI();
+      if (api.ok) hit = api;
+    }
 
-// start pela API (rápida); se cair, o próprio código chama o fallback
-pollGithubActions();
+    if (hit && hit.data && hit.data.done === true) {
+      const status = toStatusStr(hit.data.status);
+      show('Finalizando…');
+      // redireciona imediatamente
+      const url = new URL('results.html', location.href);
+      url.searchParams.set('status', status || '');
+      url.searchParams.set('t', RUN_T);
+      location.replace(url.toString());
+      return;
+    }
+
+    // Ainda não finalizou — continua
+    if (attempts % 10 === 0) {
+      // pequeno backoff, mas limita a 3s
+      INTERVAL_MS = Math.min(INTERVAL_MS + 250, MAX_INTERVAL);
+    }
+    setTimeout(check, INTERVAL_MS);
+  } catch (e){
+    // Falha de rede eventual — não poluir a UI
+    if (attempts % 5 === 0) hint('reconectando…');
+    setTimeout(check, Math.min(INTERVAL_MS + 500, MAX_INTERVAL));
+  }
+}
+
+/* ======== FAIL-SAFE ======== */
+setTimeout(()=>{
+  const url = new URL('results.html', location.href);
+  url.searchParams.set('status', 'timeout');
+  url.searchParams.set('t', RUN_T);
+  location.replace(url.toString());
+}, HARD_TIMEOUT_MS);
+
+/* ======== START ======== */
+show('Aguarde enquanto a pipeline executa…');
+check();
 </script>
-
-
 </body>
 </html>
