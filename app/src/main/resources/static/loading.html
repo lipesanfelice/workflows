@@ -5,36 +5,92 @@
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <title>Processando…</title>
   <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/feather-icons/dist/feather.min.js"></script>
 </head>
 <body class="min-h-screen bg-gray-50 flex items-center justify-center">
-  <div class="bg-white shadow rounded-2xl p-8 text-center">
-    <svg class="animate-spin h-10 w-10 text-blue-600 mx-auto mb-4" viewBox="0 0 24 24">
-      <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none"></circle>
-      <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
-    </svg>
-    <h1 class="text-lg font-semibold text-gray-800">Estamos processando seu código…</h1>
-    <p class="text-sm text-gray-500 mt-1">Isso pode levar alguns instantes.</p>
+  <div class="w-full max-w-md mx-4">
+    <div class="bg-white shadow rounded-2xl p-8 text-center">
+      <div class="flex items-center justify-center mb-4">
+        <i data-feather="loader" class="w-10 h-10 animate-spin text-blue-600"></i>
+      </div>
+      <h1 class="text-xl font-semibold text-gray-800 mb-2">Estamos processando seu código…</h1>
+      <p id="msg" class="text-gray-500">Aguarde enquanto a pipeline executa.</p>
+
+      <div id="errBox" class="hidden mt-4 text-sm text-red-700 bg-red-50 border border-red-200 rounded p-3 text-left"></div>
+
+      <div class="mt-6">
+        <a href="index.html" class="text-sm text-gray-500 hover:underline">Voltar</a>
+      </div>
+    </div>
   </div>
 
-  <script>
-    const RESULTS_URL = 'results.html'; // altere se necessário
-    const STATUS_URL  = '/api/process/running';
+<script>
+feather.replace();
 
-    async function check() {
-      try {
-        const r = await fetch(STATUS_URL, { credentials: 'include' });
-        if (!r.ok) return;
-        const j = await r.json();
-        if (j && j.running === false) {
-          location.href = RESULTS_URL;
-        }
-      } catch (_) {}
+/**
+ * Este loading NÃO usa execId. Ele fica consultando o backend em
+ * GET /api/process/state.
+ * Quando o backend responder {done:true}, redireciona para results.html.
+ * Se {error:true}, também vai para results.html (você exibe o erro lá).
+ */
+
+const STATE_URL = '/api/process/state'; // ajuste se seu endpoint for outro
+
+const msgEl   = document.getElementById('msg');
+const errBox  = document.getElementById('errBox');
+
+let intervalMs = 1500;
+let stagnation = 0; // se ficar muito tempo sem variar resposta, a gente só continua esperando
+
+async function getState(){
+  try {
+    const r = await fetch(STATE_URL, { credentials:'include' });
+    if (!r.ok) {
+      // Mostra erro de status, mas continua tentando
+      errBox.classList.remove('hidden');
+      errBox.textContent = 'Falha ao consultar estado: HTTP ' + r.status;
+      return null;
     }
-    // checa de 1 em 1 segundo
-    check();
-    const t = setInterval(check, 1000);
-    // por segurança, para o timer ao sair da página
-    window.addEventListener('beforeunload', ()=> clearInterval(t));
-  </script>
+    const ct = (r.headers.get('content-type')||'').toLowerCase();
+    if (!ct.includes('application/json')) return null;
+    return await r.json();
+  } catch (e) {
+    errBox.classList.remove('hidden');
+    errBox.textContent = 'Erro de rede ao consultar estado: ' + e.message;
+    return null;
+  }
+}
+
+function toBool(v){ return v === true || String(v).toLowerCase() === 'true'; }
+
+async function loop(){
+  const st = await getState();
+
+  if (st) {
+    const started = toBool(st.started);
+    const done    = toBool(st.done);
+    const error   = toBool(st.error);
+    const statusTxt = st.status || '';
+
+    if (statusTxt) msgEl.textContent = statusTxt;
+    else msgEl.textContent = started ? 'Pipeline em execução…' : 'Aguardando início da pipeline…';
+
+    if (done || error) {
+      // terminou com sucesso ou erro → results.html
+      window.location.href = 'results.html';
+      return;
+    }
+  }
+
+  // backoff leve se ficar falhando
+  stagnation++;
+  if (stagnation > 10) intervalMs = Math.min(intervalMs + 500, 5000);
+
+  setTimeout(loop, intervalMs);
+}
+
+// inicia
+loop();
+</script>
 </body>
 </html>
