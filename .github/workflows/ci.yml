@@ -28,6 +28,54 @@ jobs:
         fetch-depth: 0            
         persist-credentials: true # mantém o token para o git push
 
+    - name: Reset marcador (done=false no início)
+      if: ${{ always() }}
+      env:
+        BRANCH: main
+        RUN_ID: ${{ github.run_id }}
+        SHA: ${{ github.sha }}
+        TS: ${{ github.run_started_at }}
+      run: |
+        set -euo pipefail
+
+        git config user.name  "github-actions[bot]"
+        git config user.email "github-actions[bot]@users.noreply.github.com"
+        git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+        git fetch origin "$BRANCH" --prune
+        if git rev-parse --verify "$BRANCH" >/dev/null 2>&1; then
+          git checkout "$BRANCH"
+        else
+          git checkout -b "$BRANCH"
+        fi
+        git reset --hard "origin/$BRANCH"
+
+        mkdir -p app/entrada-usuario
+        # se TS vier vazio por algum motivo, usa agora em UTC
+        if [ -z "${TS:-}" ]; then TS="$(date -u +%FT%TZ)"; fi
+
+        cat > app/entrada-usuario/done.json <<JSON
+        {
+          "done": false,
+          "status": "running",
+          "runId": "${RUN_ID}",
+          "sha": "${SHA}",
+          "ts": "${TS}"
+        }
+        JSON
+
+        git add app/entrada-usuario/done.json
+        if git diff --cached --quiet; then
+          echo "Sem alterações para commit do reset do done.json."
+        else
+          git commit -m "ci: reset marcador (done=false) [skip ci]"
+          if ! git push origin HEAD:"$BRANCH"; then
+            git pull --rebase --autostash origin "$BRANCH" || true
+            git push --force-with-lease origin HEAD:"$BRANCH"
+          fi
+        fi
+
+
 
     - name: Configurar Java
       uses: actions/setup-java@v4
@@ -305,10 +353,9 @@ jobs:
       if: ${{ always() }}
       env:
         BRANCH: main
-        STATUS: ${{ job.status }}                # success | failure | cancelled
+        STATUS: ${{ job.status }}   # success | failure | cancelled
         RUN_ID: ${{ github.run_id }}
         SHA: ${{ github.sha }}
-        TS: ${{ github.run_started_at }}        # início do run (ISO UTC)
       run: |
         set -euo pipefail
 
@@ -316,7 +363,6 @@ jobs:
         git config user.email "github-actions[bot]@users.noreply.github.com"
         git config --global --add safe.directory "$GITHUB_WORKSPACE"
 
-        # Garante branch alvo
         git fetch origin "$BRANCH" --prune
         if git rev-parse --verify "$BRANCH" >/dev/null 2>&1; then
           git checkout "$BRANCH"
@@ -327,13 +373,9 @@ jobs:
 
         mkdir -p app/entrada-usuario
 
-        # Se por algum motivo ${{ github.run_started_at }} não vier,
-        # caímos para a data atual UTC.
-        if [ -z "${TS:-}" ]; then
-          TS="$(date -u +%FT%TZ)"
-        fi
+        # ts de conclusão (agora)
+        TS="$(date -u +%FT%TZ)"
 
-        # done.json com metadados (run_id/sha/ts) para o loading diferenciar execuções
         cat > app/entrada-usuario/done.json <<JSON
         {
           "done": true,
@@ -345,14 +387,13 @@ jobs:
         JSON
 
         git add app/entrada-usuario/done.json
-
         if git diff --cached --quiet; then
           echo "Sem alterações para commit do done.json."
         else
           git commit -m "ci: marcar conclusão da pipeline (done.json) [skip ci]"
-          # Push tolerante a corrida
           if ! git push origin HEAD:"$BRANCH"; then
             git pull --rebase --autostash origin "$BRANCH" || true
             git push --force-with-lease origin HEAD:"$BRANCH"
           fi
         fi
+
