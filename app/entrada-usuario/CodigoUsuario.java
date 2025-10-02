@@ -1,22 +1,20 @@
-public class GeradorSequencia {
+public class ConversorTemperatura {
+    
+    public static double celsiusParaFahrenheit(double celsius) {
+        return (celsius * 9/5) + 32;
+    }
+    
+    public static double fahrenheitParaCelsius(double fahrenheit) {
+        return (fahrenheit - 32) * 5/9;
+    }
+    
+    public static double celsiusParaKelvin(double celsius) {
+        return celsius + 273.15;
+    }
+    
     public static void main(String[] args) {
-        System.out.println("Números pares de 0 a 20:");
-        for (int i = 0; i <= 20; i += 2) {
-            System.out.print(i + " ");
-        }
-        
-        System.out.println("\n\nNúmeros ímpares de 1 a 19:");
-        for (int i = 1; i <= 19; i += 2) {
-            System.out.print(i + " ");
-        }
-        
-        System.out.println("\n\nSequência Fibonacci (10 primeiros):");
-        int a = 0, b = 1;
-        for (int i = 0; i < 10; i++) {
-            System.out.print(a + " ");
-            int proximo = a + b;
-            a = b;
-            b = proximo;
-        }
+        System.out.println("25°C para Fahrenheit: " + celsiusParaFahrenheit(25));
+        System.out.println("77°F para Celsius: " + fahrenheitParaCelsius(77));
+        System.out.println("0°C para Kelvin: " + celsiusParaKelvin(0));
     }
 }

@@ -25,71 +25,125 @@
   </div>
 
 <script>
-feather.replace();
-let dono='lipesanfelice',repo='workflows',ramo='main';
+let dono='lipesanfelice', repo='workflows', ramo='main';
 const qs=new URLSearchParams(location.search);
-dono=qs.get('owner')||dono;repo=qs.get('repo')||repo;ramo=qs.get('branch')||ramo;
+dono=qs.get('owner')||dono; repo=qs.get('repo')||repo; ramo=qs.get('branch')||ramo;
 const token=qs.get('ght')||sessionStorage.getItem('ght')||'';
-const runParam=qs.get('run_id')||'';
-const msgEl=document.getElementById('msg');
-const errBox=document.getElementById('errBox');
-const timeoutMs=20*60*1000;
-const intervalo=2000;
+const runIdParam=qs.get('run_id')||'';
 const marcadorPath='app/entrada-usuario/done.json';
 
-function cabecalhos(){const h={'Cache-Control':'no-store'};if(token){h.Authorization=`Bearer ${token}`;h['X-GitHub-Api-Version']='2022-11-28'}return h}
-function fmtDur(ms){if(!ms||ms<1)return'—';let s=Math.floor(ms/1000),m=Math.floor(s/60);s%=60;let h=Math.floor(m/60);m%=60;const p=[];if(h)p.push(h+'h');if(m)p.push(m+'m');if(s)p.push(s+'s');return p.join(' ')}
-function irResultados(status){location.href=`results.html?status=${encodeURIComponent(status)}&owner=${encodeURIComponent(dono)}&repo=${encodeURIComponent(repo)}&branch=${encodeURIComponent(ramo)}`}
+const msgEl=document.getElementById('msg')||document.body.appendChild(Object.assign(document.createElement('div'),{id:'msg',style:'padding:8px'}));
+const errBox=document.getElementById('errBox')||document.body.appendChild(Object.assign(document.createElement('div'),{id:'errBox',style:'margin:8px;padding:10px;border-radius:8px;background:#fee;border:1px solid #f99;color:#900;display:'}));
+const diag=document.getElementById('diag')||document.body.appendChild(Object.assign(document.createElement('pre'),{id:'diag',style:'white-space:pre-wrap;background:#f8fafc;border:1px dashed #cbd5e1;padding:8px;border-radius:8px;color:#334155'}));
 
-async function runPorId(id){const u=`https://api.github.com/repos/${dono}/${repo}/actions/runs/${id}`;const r=await fetch(u,{cache:'no-store',headers:cabecalhos()});if(!r.ok)return {erro:r.status};return {ok:true,dados:await r.json()}}
-async function ultimoRunDaBranch(){const u=`https://api.github.com/repos/${dono}/${repo}/actions/runs?branch=${encodeURIComponent(ramo)}&per_page=1`;const r=await fetch(u,{cache:'no-store',headers:cabecalhos()});if(!r.ok)return {erro:r.status};const j=await r.json();const it=(j.workflow_runs||[])[0];if(!it)return {vazio:true};return {ok:true,dados:it}}
-async function lerMarcador(){const u=`https://raw.githubusercontent.com/${dono}/${repo}/${ramo}/${marcadorPath}?t=${Date.now()}`;const r=await fetch(u,{cache:'no-store'});if(r.status===404)return {nao:1};if(!r.ok)return {erro:r.status};try{const j=JSON.parse(await r.text());return {ok:true,j}}catch{return {bad:1}}}
+function cabecalhos(){
+  const h={'Accept':'application/vnd.github+json','Cache-Control':'no-store','X-GitHub-Api-Version':'2022-11-28'};
+  if(token) h.Authorization=`Bearer ${token}`;
+  return h;
+}
+function opt(){return {mode:'cors',cache:'no-store',referrerPolicy:'no-referrer',headers:cabecalhos()}}
+function fmt(ms){if(!ms||ms<1)return'—';let s=Math.floor(ms/1000),m=Math.floor(s/60);s%=60;let h=Math.floor(m/60);m%=60;return[(h?h+'h':''),(m?m+'m':''),(s?s+'s':'')].filter(Boolean).join(' ')}
 
-let inicio=null,modo='acoes',backoff=0;
+async function autoteste(){
+  const url='https://api.github.com/rate_limit';
+  try{
+    const r=await fetch(url,opt());
+    if(!r.ok) throw new Error('HTTP '+r.status);
+    const j=await r.json();
+    diag.textContent =
+      'Autoteste OK\n' +
+      `origin: ${location.origin||'(sem origem)'}\n`+
+      `secureContext: ${window.isSecureContext}\n`+
+      `online: ${navigator.onLine}\n`+
+      `rate remaining: ${j.resources.core.remaining}`;
+    return true;
+  }catch(e){
+    errBox.textContent='Falha no autoteste /rate_limit: '+(e&&e.message||e);
+    diag.textContent =
+      'Detalhes:\n'+
+      `origin: ${location.origin||'(sem origem)'} | secureContext: ${window.isSecureContext} | online: ${navigator.onLine}\n`+
+      'Possíveis causas: CORS (abrindo via file://), bloqueio de rede/adblock, mixed content (http -> https), proxy corporativo.\n'+
+      "Se tiver token, execute no console: sessionStorage.setItem('ght','ghp_...'); e recarregue.";
+    return false;
+  }
+}
+
+async function runPorId(id){
+  const url=`https://api.github.com/repos/${dono}/${repo}/actions/runs/${id}`;
+  diag.textContent += `\nGET ${url}`;
+  const r=await fetch(url,opt()); if(!r.ok) return {erro:r.status}; return {ok:true,dados:await r.json()};
+}
+async function ultimoRunDaBranch(){
+  const url=`https://api.github.com/repos/${dono}/${repo}/actions/runs?branch=${encodeURIComponent(ramo)}&per_page=1`;
+  diag.textContent += `\nGET ${url}`;
+  const r=await fetch(url,opt()); if(!r.ok) return {erro:r.status};
+  const j=await r.json(); const it=(j.workflow_runs||[])[0];
+  if(!it) return {vazio:true};
+  return {ok:true,dados:it};
+}
+async function lerMarcador(){
+  const url=`https://raw.githubusercontent.com/${dono}/${repo}/${ramo}/${marcadorPath}?t=${Date.now()}`;
+  diag.textContent += `\nGET ${url}`;
+  const r=await fetch(url,{mode:'cors',cache:'no-store',referrerPolicy:'no-referrer'});
+  if(r.status===404) return {nao:1};
+  if(!r.ok) return {erro:r.status};
+  try{const j=JSON.parse(await r.text()); return {ok:true,j}}catch{return {bad:1}}
+}
+function irResultados(status){
+  const p=new URLSearchParams({status,owner:dono,repo:repo,branch:ramo});
+  location.href=`results.html?${p.toString()}`;
+}
+
+let inicio=null, modo='acoes', backoff=0, watchdog=null;
+function iniciarWatchdog(ms){clearTimeout(watchdog); watchdog=setTimeout(()=>{errBox.textContent='Tempo excedido. Abrindo resultados com status=timeout.'; irResultados('timeout')}, ms)}
+iniciarWatchdog(20*60*1000);
+
 async function ciclo(){
   try{
     let runInfo=null;
     if(modo==='acoes'){
-      if(runParam){
-        const r=await runPorId(runParam);
-        if(r.erro){if(r.erro===403){modo='marcador'}else throw new Error('HTTP '+r.erro)}
+      if(runIdParam){
+        const r=await runPorId(runIdParam);
+        if(r.erro){ if(r.erro===403){modo='marcador'} else throw new Error('HTTP '+r.erro) }
         else runInfo=r.dados;
       }else{
         const r=await ultimoRunDaBranch();
-        if(r.erro){if(r.erro===403){modo='marcador'}else throw new Error('HTTP '+r.erro)}
-        else if(r.vazio){modo='marcador'}
+        if(r.erro){ if(r.erro===403){modo='marcador'} else throw new Error('HTTP '+r.erro) }
+        else if(r.vazio){ modo='marcador' }
         else runInfo=r.dados;
       }
       if(runInfo){
-        const st=runInfo.status,conc=runInfo.conclusion;
-        const t0=runInfo.run_started_at?new Date(runInfo.run_started_at).getTime():null;
-        const tf=runInfo.updated_at?new Date(runInfo.updated_at).getTime():null;
-        if(!inicio) inicio=t0||Date.now();
-        const agora=Date.now();
-        if(st==='queued'){msgEl.textContent=`Em fila… (${fmtDur(agora-inicio)})`}
-        else if(st==='in_progress'){msgEl.textContent=`Executando… (${fmtDur(agora-inicio)})`}
-        else if(st==='completed'){
-          const status=(conc||'').toLowerCase();
-          msgEl.textContent=`Concluído em ${fmtDur((tf||agora)-(t0||agora))}`;
-          return irResultados(status||'success');
-        }else{msgEl.textContent=`Aguardando… (${fmtDur(agora-(inicio||agora))})`}
+        const st=runInfo.status, conc=(runInfo.conclusion||'').toLowerCase();
+        const t0=runInfo.run_started_at?new Date(runInfo.run_started_at).getTime():Date.now();
+        const tf=runInfo.updated_at?new Date(runInfo.updated_at).getTime():Date.now();
+        if(!inicio) inicio=t0;
+        const dec=fmt(Date.now()-inicio);
+        if(st==='queued') msgEl.textContent=`Em fila… (${dec})`;
+        else if(st==='in_progress') msgEl.textContent=`Executando… (${dec})`;
+        else if(st==='completed'){ msgEl.textContent=`Concluído em ${fmt(tf-t0)}`; return irResultados(conc||'success'); }
+        else msgEl.textContent=`Aguardando… (${dec})`;
       }
     }else{
       const m=await lerMarcador();
-      if(m.ok&&m.j&&m.j.done===true){return irResultados(String(m.j.status||'success').toLowerCase())}
-      if(m.erro===403){backoff=Math.min((backoff||1000)*2,10000)}
-      msgEl.textContent='Aguardando finalização…'
+      if(m.ok&&m.j&&m.j.done===true) return irResultados(String(m.j.status||'success').toLowerCase());
+      if(m.erro===403){ backoff=Math.min((backoff||1000)*2,10000) }
+      msgEl.textContent='Aguardando finalização…';
     }
-    setTimeout(ciclo, (modo==='marcador'?(2000+(backoff||0)):intervalo));
+    setTimeout(ciclo, modo==='marcador' ? 2000+(backoff||0) : 2000);
   }catch(e){
-    errBox.classList.remove('hidden');errBox.textContent='Erro: '+e.message;
+    errBox.textContent='Erro: '+(e&&e.message||e);
     setTimeout(ciclo,3000);
   }
 }
-msgEl.textContent='Preparando…';
-setTimeout(()=>{irResultados('timeout')},timeoutMs);
-ciclo();
+
+(async()=>{
+  const ok=await autoteste();
+  if(!ok) return;
+  msgEl.textContent='Preparando…';
+  ciclo();
+})();
 </script>
+
 
 </body>
 </html>
