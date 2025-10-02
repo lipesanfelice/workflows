@@ -13,6 +13,7 @@
     .card{background:#fff;border:1px solid #e5e7eb;border-radius:.75rem}
     .soft{background:rgba(59,130,246,.08);border:1px dashed rgba(59,130,246,.35)}
     .scroll-y{max-height:22rem;overflow:auto}
+    .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono","Courier New",monospace}
   </style>
 </head>
 <body class="bg-gray-50">
@@ -34,6 +35,17 @@
     </nav>
 
     <main class="flex-grow container mx-auto px-4 py-8">
+      <!-- Banner de "modo pendente" -->
+      <div id="banner" class="hidden mb-6 rounded-lg border border-yellow-200 bg-yellow-50 text-yellow-800 p-4">
+        <div class="flex items-start">
+          <i data-feather="clock" class="mr-2 mt-0.5"></i>
+          <div>
+            <h2 class="font-semibold">Pipeline executando, logo terá os seus resultados</h2>
+            <p id="bannerMsg" class="text-sm">Aguardando finalização…</p>
+          </div>
+        </div>
+      </div>
+
       <div class="flex items-start justify-between gap-4 flex-wrap mb-6">
         <div>
           <h1 class="text-3xl font-bold text-gray-800">Resultados da análise</h1>
@@ -54,7 +66,6 @@
             </h2>
             <div class="flex gap-2">
               <button id="btnReload" class="px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-md text-sm">Recarregar</button>
-              <a id="btnLoading" href="loading.html" class="px-3 py-2 bg-white border border-gray-300 hover:bg-gray-50 rounded-md text-sm text-gray-700">Ver loading</a>
               <a href="index.html" class="px-3 py-2 bg-white border border-gray-300 hover:bg-gray-50 rounded-md text-sm text-gray-700">Nova análise</a>
             </div>
           </div>
@@ -101,6 +112,11 @@
         </div>
       </div>
 
+      <details class="mt-6">
+        <summary class="text-gray-500 cursor-pointer">Diagnóstico</summary>
+        <pre id="diag" class="mono mt-2 text-xs text-gray-700 bg-gray-50 border border-gray-200 rounded p-2 whitespace-pre-wrap"></pre>
+      </details>
+
       <div id="statusBox" class="hidden mt-6 p-3 rounded-md text-sm"></div>
     </main>
 
@@ -115,29 +131,22 @@
 AOS.init();
 feather.replace();
 
-/** ====== CONFIG (mude os defaults ou passe por query) ====== */
-let OWNER  = 'lipesanfelice';   // <--- seu user/org
-let REPO   = 'workflows';       // <--- seu repo
-let BRANCH = 'main';            // <--- branch padrão
+/** ====== CONFIG / QUERY ====== */
+let OWNER  = 'lipesanfelice';
+let REPO   = 'workflows';
+let BRANCH = 'main';
 
 const qs = new URLSearchParams(location.search);
+const PENDING   = qs.get('pending') === '1';
+const STARTED_AT= Number(qs.get('startedAt') || Date.now());
+
 OWNER  = qs.get('owner')  || OWNER;
 REPO   = qs.get('repo')   || REPO;
 BRANCH = qs.get('branch') || BRANCH;
-const GHT  = qs.get('ght') || sessionStorage.getItem('ght') || '';
 
-const STATUS_PARAM = (qs.get('status') || '').toLowerCase(); // success|failure|cancelled|timeout (vindo do loading)
+const STATUS_PARAM = (qs.get('status') || '').toLowerCase(); // success|failure|cancelled|timeout
 document.getElementById('chipRepo').textContent   = `repo: ${OWNER}/${REPO}`;
 document.getElementById('chipBranch').textContent = `branch: ${BRANCH}`;
-
-function ghHeaders(){
-    const h = { 'Cache-Control':'no-store' };
-    if (GHT) {
-      h.Authorization = `Bearer ${GHT}`;
-      h['X-GitHub-Api-Version'] = '2022-11-28';
-    }
-    return h;
-}
 
 const chipStatus = document.getElementById('chipStatus');
 if (STATUS_PARAM) {
@@ -148,25 +157,22 @@ if (STATUS_PARAM) {
     chipStatus.className = 'badge bg-red-100 text-red-700 border border-red-200';
 }
 
-const btnLoading = document.getElementById('btnLoading');
-btnLoading.href = `loading.html?owner=${encodeURIComponent(OWNER)}&repo=${encodeURIComponent(REPO)}&branch=${encodeURIComponent(BRANCH)}`;
-
-const GITHUB_API = 'https://api.github.com';
+/** ====== CONSTANTES DOS DIRETÓRIOS ====== */
 const TESTS_DIR  = 'app/entrada-usuario/testes_explicações/tests';
 const EXPL_DIR   = 'app/entrada-usuario/testes_explicações/explicacoes';
 const SONAR_JSON = 'app/entrada-usuario/relatorio-sonar.json';
+const MARKER     = 'app/entrada-usuario/done.json'; // marcador sem token
 
 /** ====== HELPERS ====== */
 function escreveStatus(msg, tipo='info'){
   const box = document.getElementById('statusBox');
   box.classList.remove('hidden','bg-green-100','text-green-800','border-green-200','bg-red-100','text-red-800','border-red-200','bg-blue-50','text-blue-800','border-blue-200');
   box.classList.add('border','bg-blue-50','text-blue-800','border-blue-200');
-  if (tipo==='ok'){ box.classList.remove('bg-blue-50','text-blue-800','border-blue-200'); box.classList.add('bg-green-100','text-green-800','border-green-200'); }
-  if (tipo==='err'){ box.classList.remove('bg-blue-50','text-blue-800','border-blue-200'); box.classList.add('bg-red-100','text-red-800','border-red-200'); }
+  if (tipo==='ok'){ box.classList.replace('bg-blue-50','bg-green-100'); box.classList.replace('text-blue-800','text-green-800'); box.classList.replace('border-blue-200','border-green-200'); }
+  if (tipo==='err'){ box.classList.replace('bg-blue-50','bg-red-100'); box.classList.replace('text-blue-800','text-red-800'); box.classList.replace('border-blue-200','border-red-200'); }
   box.textContent = msg;
 }
 function limpar(el){ while(el.firstChild) el.removeChild(el.firstChild); }
-function pick(arr){ return Array.isArray(arr) ? arr : []; }
 function tempoFmt(ms){
   if(!ms || ms < 1) return '—';
   let s = Math.floor(ms/1000);
@@ -175,42 +181,41 @@ function tempoFmt(ms){
   const parts = []; if (h) parts.push(h+'h'); if (m) parts.push(m+'m'); if (s) parts.push(s+'s');
   return parts.join(' ') || (ms+' ms');
 }
+function diagLog(s){ const d=document.getElementById('diag'); d.textContent += (d.textContent?'\n':'') + s; }
 
-/** GitHub: lista recursivamente via Contents API */
+/** ====== GITHUB RAW (sem token) ====== */
 async function listGithubPath(path){
-    // NÃO codifique as barras do path; apenas o ref (branch)
-    const url = `https://api.github.com/repos/${OWNER}/${REPO}/contents/${path}?ref=${encodeURIComponent(BRANCH)}&t=${Date.now()}`;
-    const r = await fetch(url, { cache:'no-store', headers: ghHeaders() });
-    if (r.status === 404) return [];
-    if (!r.ok) throw new Error('HTTP '+r.status+' ao listar '+path);
-    const j = await r.json();
+  // Usa Contents API pública (funciona para repo público). Se o repo for privado, adapte para /gh proxy + token.
+  const url = `https://api.github.com/repos/${OWNER}/${REPO}/contents/${path}?ref=${encodeURIComponent(BRANCH)}&t=${Date.now()}`;
+  const r = await fetch(url, { cache:'no-store' });
+  if (r.status === 404) return [];
+  if (!r.ok) throw new Error('HTTP '+r.status+' ao listar '+path);
+  const j = await r.json();
 
-    if (Array.isArray(j)) {
-      const files = [];
-      for (const item of j) {
-        if (item.type === 'file') files.push(item);
-        else if (item.type === 'dir') {
-          // recursivo
-          const deeper = await listGithubPath(item.path);
-          files.push(...deeper);
-        }
+  if (Array.isArray(j)) {
+    const files = [];
+    for (const item of j) {
+      if (item.type === 'file') files.push(item);
+      else if (item.type === 'dir') {
+        const deeper = await listGithubPath(item.path);
+        files.push(...deeper);
       }
-      return files;
-    } else if (j && j.type === 'file') {
-      return [j];
     }
-    return [];
+    return files;
+  } else if (j && j.type === 'file') {
+    return [j];
   }
+  return [];
+}
 
-  // Se você baixar JSON bruto:
-  async function fetchRawJson(path){
-    const url = `https://raw.githubusercontent.com/${OWNER}/${REPO}/${BRANCH}/${path}?t=${Date.now()}`;
-    // RAW não aceita header Authorization, então use Contents API se o repo for privado.
-    const r = await fetch(url, { cache:'no-store' });
-    if (!r.ok) throw new Error('HTTP '+r.status+' em '+path);
-    try { return JSON.parse(await r.text()); } catch { return null; }
-  }
+async function fetchRawJson(path){
+  const url = `https://raw.githubusercontent.com/${OWNER}/${REPO}/${BRANCH}/${path}?t=${Date.now()}`;
+  const r = await fetch(url, { cache:'no-store' });
+  if (!r.ok) throw new Error('HTTP '+r.status+' em '+path);
+  try { return JSON.parse(await r.text()); } catch { return null; }
+}
 
+/** ====== UI builders ====== */
 function fileCard(item){
   const name = item.name || item.path.split('/').pop();
   const htmlUrl = item.html_url || `https://github.com/${OWNER}/${REPO}/blob/${BRANCH}/${item.path}`;
@@ -249,12 +254,11 @@ function expCard(name, text){
   return el;
 }
 
-/** Codecov */
+/** ====== Codecov ====== */
 function renderCodecov(){
   const area = document.getElementById('areaCodecov');
   limpar(area);
 
-  // Badge (público): https://codecov.io/gh/OWNER/REPO/branch/BRANCH/graph/badge.svg
   const badge = document.createElement('img');
   badge.alt = 'Codecov badge';
   badge.className = 'w-full h-auto border rounded-md bg-white p-2';
@@ -276,18 +280,11 @@ function renderCodecov(){
 
   links.appendChild(aProject);
   links.appendChild(aCommits);
-
   area.appendChild(badge);
   area.appendChild(links);
-
-  // Tenta deduzir % a partir do alt do SVG (nem sempre rola) – fallback fica "—"
-  badge.addEventListener('load', async () => {
-    // não temos acesso ao conteúdo do SVG remoto para parsear aqui (CORS),
-    // então manteremos o KPI como "—" e deixamos o badge visual como referência.
-  });
 }
 
-/** Carrega resultados */
+/** ====== Carregar resultados (modo final) ====== */
 const listaArquivos = document.getElementById('listaArquivos');
 const listaExplicacoes = document.getElementById('listaExplicacoes');
 const kpiTestes = document.getElementById('kpiTestes');
@@ -323,7 +320,6 @@ async function carregarResultados(){
       d.textContent = 'Sem explicações disponíveis.';
       listaExplicacoes.appendChild(d);
     } else {
-      // Baixa e mostra texto de .md/.txt/.json (json vira texto)
       for (const e of expls) {
         const raw = e.download_url || `https://raw.githubusercontent.com/${OWNER}/${REPO}/${BRANCH}/${e.path}`;
         try {
@@ -342,16 +338,14 @@ async function carregarResultados(){
       }
     }
 
-    // RELATÓRIO SONAR (se existir, podemos exibir um número simbólico)
+    // RELATÓRIO SONAR (opcional)
     try {
       const sonar = await fetchRawJson(SONAR_JSON);
       if (sonar && (sonar.coverage || sonar.cobertura || sonar.total_coverage)) {
         const cov = sonar.coverage || sonar.cobertura || sonar.total_coverage;
         kpiCobertura.textContent = (typeof cov === 'number') ? (cov.toFixed(2)+'%') : String(cov);
       }
-    } catch {
-      // se não existir, badge do Codecov já cobre visualmente
-    }
+    } catch {}
 
     escreveStatus('Resultados atualizados', 'ok');
   } catch (e) {
@@ -361,9 +355,74 @@ async function carregarResultados(){
 
 document.getElementById('btnReload').addEventListener('click', carregarResultados);
 
+/** ====== Modo pendente: polling do marcador ====== */
+const banner    = document.getElementById('banner');
+const bannerMsg = document.getElementById('bannerMsg');
+const LENTO=7000, NORMAL=3000;
+let watchdog=null;
+function watchdogIniciar(ms){
+  clearTimeout(watchdog);
+  watchdog = setTimeout(()=>{
+    // mesmo assim vamos para final (deixa usuário atualizar manualmente)
+    const p = new URLSearchParams(location.search);
+    p.delete('pending'); p.delete('startedAt'); p.set('status','timeout');
+    location.replace('results.html?'+p.toString());
+  }, ms);
+}
+function urlMarcador(){
+  return `https://raw.githubusercontent.com/${OWNER}/${REPO}/${BRANCH}/${MARKER}?t=${Date.now()}`;
+}
+async function lerMarcador(){
+  const u = urlMarcador();
+  diagLog('GET '+u);
+  try{
+    const r = await fetch(u, { cache:'no-store' });
+    if(r.status===404) return {nao:true};
+    if(!r.ok){ return {erro:r.status, body: await r.text().catch(()=> '')}; }
+    const txt = await r.text();
+    try{ return {ok:true, j: JSON.parse(txt)} } catch { return {bad:true}; }
+  }catch(e){
+    return {erro:0, body: e?.message || String(e)};
+  }
+}
+function resetarParaFinal(status){
+  const p = new URLSearchParams(location.search);
+  p.delete('pending'); p.delete('startedAt');
+  if(status) p.set('status', String(status));
+  location.replace('results.html?'+p.toString());
+}
+async function ciclo(){
+  const delta = Date.now() - STARTED_AT;
+  const r = await lerMarcador();
+  if(r.ok && r.j && r.j.done===true){
+    const status = String(r.j.status||'success').toLowerCase();
+    bannerMsg.textContent = `Concluído em ${tempoFmt(r.j.tookMs || delta)}. Carregando resultados…`;
+    return resetarParaFinal(status);
+  }
+  if(r.bad){
+    bannerMsg.textContent = `Marcador inválido. Aguardando… (${tempoFmt(delta)})`;
+  }else if(r.nao){
+    bannerMsg.textContent = `Aguardando finalização… (${tempoFmt(delta)})`;
+  }else if(r.erro){
+    bannerMsg.textContent = `Aguardando… (${tempoFmt(delta)})`;
+    diagLog(`Erro ao ler marcador: ${r.erro} ${r.body||''}`);
+  }
+  setTimeout(ciclo, r.nao ? LENTO : NORMAL);
+}
+
+/** ====== Init ====== */
 document.addEventListener('DOMContentLoaded', async ()=>{
+  feather.replace();
   renderCodecov();
-  await carregarResultados();
+
+  if (PENDING) {
+    banner.classList.remove('hidden');
+    bannerMsg.textContent = 'Pipeline executando, logo terá os seus resultados';
+    watchdogIniciar(20*60*1000); // 20 min
+    ciclo();
+  } else {
+    await carregarResultados();
+  }
 });
 </script>
 </body>

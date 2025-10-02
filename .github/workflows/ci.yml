@@ -300,17 +300,25 @@ jobs:
           -v
       env:
         CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
-
     
-    - name: Marcar conclusão (não recomendado se causar loop)
-      if: always()
+    - name: Escreve marcador de sucesso
+      if: ${{ success() }}
       run: |
-        mkdir -p app/entrada-usuario
-        echo "{\"done\": true, \"status\": \"${{ job.status }}\"}" > app/entrada-usuario/done.json
-        git config user.name "github-actions"
-        git config user.email "github-actions@users.noreply.github.com"
-        git add app/entrada-usuario/done.json || true
-        git commit -m "mark done [skip ci]" || true
-        git push || true
+          mkdir -p app/entrada-usuario
+          node -e "const fs=require('fs'); const now=Date.now(); const j={done:true,status:'success',endedAt:now}; fs.writeFileSync('app/entrada-usuario/done.json', JSON.stringify(j,null,2));"
+    - name: Escreve marcador de falha
+      if: ${{ failure() }}
+      run: |
+          mkdir -p app/entrada-usuario
+          node -e "const fs=require('fs'); const now=Date.now(); const j={done:true,status:'failure',endedAt:now}; fs.writeFileSync('app/entrada-usuario/done.json', JSON.stringify(j,null,2));"
+    - name: Commit do marcador
+      if: ${{ success() || failure() || cancelled() }}
+      run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add app/entrada-usuario/done.json
+          git commit -m "mark: done [skip ci]" || echo "nada a commitar"
+          git push
+
 
 

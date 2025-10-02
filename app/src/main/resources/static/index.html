@@ -44,6 +44,7 @@
       </div>
 
       <div class="grid md:grid-cols-3 gap-6">
+        <!-- Colar código -->
         <div class="bg-white rounded-lg shadow-md overflow-hidden" data-aos="fade-up">
           <div class="bg-blue-50 px-4 py-3 border-b border-blue-100">
             <h3 class="font-semibold text-blue-700 flex items-center">
@@ -62,6 +63,7 @@
           </div>
         </div>
 
+        <!-- Upload .java -->
         <div class="bg-white rounded-lg shadow-md overflow-hidden" data-aos="fade-up" data-aos-delay="100">
           <div class="bg-blue-50 px-4 py-3 border-b border-blue-100">
             <h3 class="font-semibold text-blue-700 flex items-center">
@@ -87,6 +89,7 @@
           </div>
         </div>
 
+        <!-- Upload .zip -->
         <div class="bg-white rounded-lg shadow-md overflow-hidden" data-aos="fade-up" data-aos-delay="200">
           <div class="bg-blue-50 px-4 py-3 border-b border-blue-100">
             <h3 class="font-semibold text-blue-700 flex items-center">
@@ -132,6 +135,7 @@
   </footer>
 </div>
 
+<!-- Modal de feedback rápido (opcional) -->
 <div id="loading-modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 hidden">
   <div class="bg-white rounded-lg p-6 max-w-md w-full mx-4" data-aos="zoom-in">
     <div class="text-center">
@@ -152,7 +156,6 @@
   const DONO_PADRAO='lipesanfelice';
   const REPO_PADRAO='workflows';
   const RAMO_PADRAO='main';
-  const TOKEN_GH=sessionStorage.getItem('ght')||'';
 </script>
 
 <script>
@@ -235,32 +238,38 @@
   async function salvarZipGithub(file){return postComFallback('projeto',()=>{const fd=new FormData();fd.append('projetoZip',file);return fd})}
 </script>
 
+<!-- >>> NOVO: ir direto para results.html em modo pendente -->
 <script>
-  async function enviarParaLoading(tipo,payload,meta){
-    const dono=(meta&&meta.dono)||DONO_PADRAO;
-    const repo=(meta&&meta.repo)||REPO_PADRAO;
-    const ramo=(meta&&meta.ramo)||RAMO_PADRAO;
-    const ght=(meta&&meta.ght)||TOKEN_GH||'';
+  async function enviarParaResultados(tipo,payload,meta){
+    const dono =(meta&&meta.dono)||DONO_PADRAO;
+    const repo =(meta&&meta.repo)||REPO_PADRAO;
+    const ramo =(meta&&meta.ramo)||RAMO_PADRAO;
     const evento=(meta&&meta.evento)||'';
     const iniciou=Date.now();
-    let runId='';
-    try{
-      const r=await fetch('/api/process/start',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({tipo,payload})});
-      if(r.ok){const j=await r.json().catch(()=>({}));runId=j.runId||j.run_id||j.id||''}
-    }catch(_){}
-    const p=new URLSearchParams();
-    p.set('owner',dono);
-    p.set('repo',repo);
-    p.set('branch',ramo);
-    p.set('startedAt',String(iniciou));
-    if(evento)p.set('event',evento);
-    if(ght)p.set('ght',ght);
-    if(runId)p.set('run_id',runId);
-    sessionStorage.setItem('pendingJob',JSON.stringify({tipo,quando:iniciou,payload}));
-    await fetch('/api/process/reset',{method:'POST'}).catch(()=>{});
-    location.href='loading.html?'+p.toString();
-  }
 
+    // Dispara sua pipeline no backend (best-effort)
+    try{
+      await fetch('/api/process/start',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({tipo,payload})
+      });
+    }catch(_){}
+
+    // Guarda info (opcional) para depuração local
+    sessionStorage.setItem('pendingJob', JSON.stringify({ tipo, quando: iniciou, payload }));
+
+    // Redireciona DIRETO para results em modo pendente
+    const p=new URLSearchParams();
+    p.set('owner', dono);
+    p.set('repo',  repo);
+    p.set('branch',ramo);
+    p.set('startedAt', String(iniciou));
+    p.set('pending','1');
+    if(evento) p.set('event', evento);
+
+    location.href='results.html?'+p.toString();
+  }
 </script>
 
 <script>
@@ -273,7 +282,7 @@
       mostrarStatus(res.msg,res.ok?'success':'error');
       if(!res.ok){progresso(0,'');return}
       progresso(55,'Preparando processamento…');
-      await enviarParaLoading('codigo',{codigo},{dono:DONO_PADRAO,repo:REPO_PADRAO,ramo:RAMO_PADRAO,ght:TOKEN_GH})
+      await enviarParaResultados('codigo',{codigo},{dono:DONO_PADRAO,repo:REPO_PADRAO,ramo:RAMO_PADRAO});
     }catch(e){mostrarStatus('Erro ao salvar: '+e.message,'error')}
     finally{setTimeout(pararLoading,200)}
   });
@@ -288,7 +297,7 @@
       if(!res.ok){progresso(0,'');return}
       progresso(55,'Preparando processamento…');
       const b64=await arquivoParaBase64(f);
-      await enviarParaLoading('arquivo',{nome:f.name,mime:f.type||'text/x-java',base64:b64},{dono:DONO_PADRAO,repo:REPO_PADRAO,ramo:RAMO_PADRAO,ght:TOKEN_GH})
+      await enviarParaResultados('arquivo',{nome:f.name,mime:f.type||'text/x-java',base64:b64},{dono:DONO_PADRAO,repo:REPO_PADRAO,ramo:RAMO_PADRAO});
     }catch(e){mostrarStatus('Erro ao salvar: '+e.message,'error')}
     finally{setTimeout(pararLoading,200)}
   });
@@ -303,7 +312,7 @@
       if(!res.ok){progresso(0,'');return}
       progresso(55,'Preparando processamento…');
       const b64=await arquivoParaBase64(f);
-      await enviarParaLoading('zip',{nome:f.name,mime:f.type||'application/zip',base64:b64},{dono:DONO_PADRAO,repo:REPO_PADRAO,ramo:RAMO_PADRAO,ght:TOKEN_GH})
+      await enviarParaResultados('zip',{nome:f.name,mime:f.type||'application/zip',base64:b64},{dono:DONO_PADRAO,repo:REPO_PADRAO,ramo:RAMO_PADRAO});
     }catch(e){mostrarStatus('Erro ao salvar: '+e.message,'error')}
     finally{setTimeout(pararLoading,200)}
   });
