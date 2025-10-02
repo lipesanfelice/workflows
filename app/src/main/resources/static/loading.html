@@ -51,11 +51,54 @@ function urlRunById(id){return `/gh/repos/${dono}/${repo}/actions/runs/${id}`}
 
 function opt(){return {cache:'no-store',headers:{'X-Requested-With':'fetch'}}}
 
+/* =========================
+   Rate limit backoff helpers
+   ========================= */
+let cooldownUntil = 0;
+
+function parseRateHeaders(resp){
+  const rem = Number(resp.headers.get('X-RateLimit-Remaining')||'');
+  const reset = Number(resp.headers.get('X-RateLimit-Reset')||'');
+  return { remaining: isNaN(rem)?null:rem, reset: isNaN(reset)?null:reset };
+}
+
+function applyBackoffFromResponse(resp){
+  const { remaining, reset } = parseRateHeaders(resp);
+  if (remaining !== null) {
+    // Log no diagnóstico para ajudar
+    diag.textContent += `\nRate remaining: ${remaining}` + (reset? ` | reset: ${new Date(reset*1000).toLocaleTimeString()}` : '');
+  }
+  if (remaining !== null && remaining <= 1 && reset) {
+    const resetMs = reset*1000;
+    cooldownUntil = Math.max(cooldownUntil, resetMs);
+    errBox.classList.remove('hidden');
+    errBox.textContent = `Atingiu rate limit. Aguardando até ${new Date(resetMs).toLocaleTimeString()} antes de consultar novamente.`;
+  }
+}
+
+function nextDelay(defaultMs){
+  const now = Date.now();
+  if (cooldownUntil && now < cooldownUntil) {
+    // Espera até o reset (com folga de 500ms)
+    return Math.max(1000, cooldownUntil - now + 500);
+  }
+  return defaultMs;
+}
+
+/* ========================= */
+
 async function autoteste(){
   try{
     const r=await fetch(urlRate(),opt()); if(!r.ok) throw new Error('HTTP '+r.status);
     const j=await r.json();
-    diag.textContent=['Autoteste OK','rate remaining: '+(j.resources?.core?.remaining??'?')].join('\n');
+    const remaining = (j.resources?.core?.remaining??'?');
+    const limit = (j.resources?.core?.limit??'?');
+    diag.textContent=['Autoteste OK',`rate remaining: ${remaining} / ${limit}`].join('\n');
+    if (Number(remaining)===0 && j.resources?.core?.reset){
+      cooldownUntil = (j.resources.core.reset*1000);
+      errBox.classList.remove('hidden');
+      errBox.textContent = `Atingiu rate limit. Aguardando até ${new Date(cooldownUntil).toLocaleTimeString()} antes de iniciar o polling.`;
+    }
     return true;
   }catch(e){
     errBox.classList.remove('hidden');errBox.textContent='Falha no autoteste: '+(e?.message||e);
@@ -63,10 +106,11 @@ async function autoteste(){
   }
 }
 
-// >>> MODIFICADO
+// Exibe corpo do erro e aplica backoff
 async function getRunById(id){
   const u=urlRunById(id);diag.textContent+=`\nGET ${u}`;
   const r=await fetch(u,opt());
+  applyBackoffFromResponse(r);
   if(!r.ok){
     const body=await r.text().catch(()=> '');
     errBox.classList.remove('hidden');
@@ -76,10 +120,11 @@ async function getRunById(id){
   return {ok:true,dados:await r.json()};
 }
 
-// >>> MODIFICADO
+// Exibe corpo do erro e aplica backoff
 async function acharRunNovo(){
   const u=urlRuns();diag.textContent+=`\nGET ${u}`;
   const r=await fetch(u,opt());
+  applyBackoffFromResponse(r);
   if(!r.ok){
     const body=await r.text().catch(()=> '');
     errBox.classList.remove('hidden');
@@ -112,33 +157,25 @@ function watchdogIniciar(ms){clearTimeout(watchdog);watchdog=setTimeout(()=>{err
 watchdogIniciar(20*60*1000);
 
 const prazoAparecer=120000;
+const LENTO = 8000;   // antes do run aparecer
+const NORMAL = 2000;  // após fixar run
+const RAPIDO = 1500;  // acompanhamento do run
 
 async function ciclo(){
   try{
     if(!idFixado){
       const delta=Date.now()-startedAt;
-      if(delta<prazoAparecer){
-        const achado=await acharRunNovo();
-        if(achado.ok){
-          idFixado=String(achado.dados.id);
-          t0=new Date(achado.dados.run_started_at||achado.dados.created_at).getTime();
-          msgEl.textContent='Execução encontrada. Acompanhando…';
-        }else if(achado.erro){
-          throw new Error('HTTP '+achado.erro);
-        }else{
-          msgEl.textContent='Aguardando a execução iniciar… ('+fmt(delta)+')';
-        }
-        return setTimeout(ciclo,2000);
+      const achado=await acharRunNovo();
+      if(achado.ok){
+        idFixado=String(achado.dados.id);
+        t0=new Date(achado.dados.run_started_at||achado.dados.created_at).getTime();
+        msgEl.textContent='Execução encontrada. Acompanhando…';
+        return setTimeout(ciclo, nextDelay(NORMAL));
+      }else if(achado.erro){
+        throw new Error('HTTP '+achado.erro);
       }else{
-        const achado=await acharRunNovo();
-        if(achado.ok){
-          idFixado=String(achado.dados.id);
-          t0=new Date(achado.dados.run_started_at||achado.dados.created_at).getTime();
-          msgEl.textContent='Execução encontrada. Acompanhando…';
-          return setTimeout(ciclo,1500);
-        }
-        msgEl.textContent='Ainda aguardando a execução iniciar… ('+fmt(delta)+')';
-        return setTimeout(ciclo,2000);
+        msgEl.textContent='Aguardando a execução iniciar… ('+fmt(delta)+')';
+        return setTimeout(ciclo, nextDelay(LENTO));
       }
     }
 
@@ -148,16 +185,21 @@ async function ciclo(){
     const st=run.status;
     const conc=(run.conclusion||'').toLowerCase();
     const tInicio=new Date(run.run_started_at||run.created_at).getTime();
-    const tAgora=Date.now();
-    const dec=fmt(tAgora-(t0||tInicio));
-    if(st==='queued'){msgEl.textContent='Em fila… ('+dec+')'}
-    else if(st==='in_progress'){msgEl.textContent='Executando… ('+dec+')'}
-    else if(st==='completed'){msgEl.textContent='Concluído em '+fmt(new Date(run.updated_at).getTime()-tInicio);return irResultados(conc||'success')}
-    else{msgEl.textContent='Aguardando… ('+dec+')'}
-    setTimeout(ciclo,1500);
+    const dec=fmt(Date.now()-(t0||tInicio));
+
+    if(st==='queued'){ msgEl.textContent='Em fila… ('+dec+')'; }
+    else if(st==='in_progress'){ msgEl.textContent='Executando… ('+dec+')'; }
+    else if(st==='completed'){
+      msgEl.textContent='Concluído em '+fmt(new Date(run.updated_at).getTime()-tInicio);
+      return irResultados(conc||'success');
+    } else {
+      msgEl.textContent='Aguardando… ('+dec+')';
+    }
+    setTimeout(ciclo, nextDelay(RAPIDO));
   }catch(e){
-    errBox.classList.remove('hidden');errBox.textContent='Erro: '+(e?.message||e);
-    setTimeout(ciclo,3000);
+    errBox.classList.remove('hidden');
+    errBox.textContent='Erro: '+(e?.message||e);
+    setTimeout(ciclo, nextDelay(3000));
   }
 }
 
