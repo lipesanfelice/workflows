@@ -103,7 +103,7 @@ async function ciclo(){
   try{
     if(!idFixado){
       const delta=Date.now()-startedAt;
-      if(delta<przoAparecer){
+      if(delta<prazoAparecer){
         const achado=await acharRunNovo();
         if(achado.ok){
           idFixado=String(achado.dados.id);
