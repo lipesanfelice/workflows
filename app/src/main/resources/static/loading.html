@@ -63,10 +63,34 @@ async function autoteste(){
   }
 }
 
+// >>> MODIFICADO
 async function getRunById(id){
   const u=urlRunById(id);diag.textContent+=`\nGET ${u}`;
-  const r=await fetch(u,opt()); if(!r.ok) return {erro:r.status};
+  const r=await fetch(u,opt());
+  if(!r.ok){
+    const body=await r.text().catch(()=> '');
+    errBox.classList.remove('hidden');
+    errBox.textContent = `Erro ${r.status}: ${body || 'sem corpo'}`;
+    return {erro:r.status};
+  }
   return {ok:true,dados:await r.json()};
+}
+
+// >>> MODIFICADO
+async function acharRunNovo(){
+  const u=urlRuns();diag.textContent+=`\nGET ${u}`;
+  const r=await fetch(u,opt());
+  if(!r.ok){
+    const body=await r.text().catch(()=> '');
+    errBox.classList.remove('hidden');
+    errBox.textContent = `Erro ${r.status}: ${body || 'sem corpo'}`;
+    return {erro:r.status};
+  }
+  const j=await r.json();
+  const lista=j.workflow_runs||[];
+  const cand=lista.find(eCandidato);
+  if(!cand) return {nao:true};
+  return {ok:true,dados:cand};
 }
 
 function eCandidato(run){
@@ -74,16 +98,6 @@ function eCandidato(run){
   if(tCriado < startedAt-10000) return false;
   if(eventoEsperado && run.event!==eventoEsperado) return false;
   return true;
-}
-
-async function acharRunNovo(){
-  const u=urlRuns();diag.textContent+=`\nGET ${u}`;
-  const r=await fetch(u,opt()); if(!r.ok) return {erro:r.status};
-  const j=await r.json();
-  const lista=j.workflow_runs||[];
-  const cand=lista.find(eCandidato);
-  if(!cand) return {nao:true};
-  return {ok:true,dados:cand};
 }
 
 function irResultados(status){
