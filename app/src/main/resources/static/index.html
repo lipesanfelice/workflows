@@ -241,19 +241,26 @@
     const repo=(meta&&meta.repo)||REPO_PADRAO;
     const ramo=(meta&&meta.ramo)||RAMO_PADRAO;
     const ght=(meta&&meta.ght)||TOKEN_GH||'';
+    const evento=(meta&&meta.evento)||'';
+    const iniciou=Date.now();
     let runId='';
     try{
       const r=await fetch('/api/process/start',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({tipo,payload})});
       if(r.ok){const j=await r.json().catch(()=>({}));runId=j.runId||j.run_id||j.id||''}
     }catch(_){}
     const p=new URLSearchParams();
-    p.set('owner',dono);p.set('repo',repo);p.set('branch',ramo);
+    p.set('owner',dono);
+    p.set('repo',repo);
+    p.set('branch',ramo);
+    p.set('startedAt',String(iniciou));
+    if(evento)p.set('event',evento);
     if(ght)p.set('ght',ght);
     if(runId)p.set('run_id',runId);
-    sessionStorage.setItem('pendingJob',JSON.stringify({tipo,quando:Date.now(),payload}));
+    sessionStorage.setItem('pendingJob',JSON.stringify({tipo,quando:iniciou,payload}));
     await fetch('/api/process/reset',{method:'POST'}).catch(()=>{});
-    location.href='loading.html?'+p.toString()
+    location.href='loading.html?'+p.toString();
   }
+
 </script>
 
 <script>

@@ -14,7 +14,7 @@
         <i data-feather="loader" class="w-10 h-10 animate-spin text-blue-600"></i>
       </div>
       <h1 class="text-xl font-semibold text-gray-800 mb-2">Estamos processando seu código…</h1>
-      <p id="msg" class="text-gray-500">Aguardando o status da pipeline…</p>
+      <p id="msg" class="text-gray-500">Aguardando o início da execução…</p>
 
       <div id="errBox" class="hidden mt-4 text-sm text-red-700 bg-red-50 border border-red-200 rounded p-3 text-left"></div>
 
@@ -32,142 +32,125 @@
 <script>
 feather.replace();
 
-let dono = 'lipesanfelice';
-let repo = 'workflows';
-let ramo = 'main';
+let dono='lipesanfelice',repo='workflows',ramo='main';
+const qs=new URLSearchParams(location.search);
+dono=qs.get('owner')||dono;repo=qs.get('repo')||repo;ramo=qs.get('branch')||ramo;
+const runIdInicial=qs.get('run_id')||'';
+const startedAt=Number(qs.get('startedAt')||Date.now());
+const eventoEsperado=qs.get('event')||'';
 
-const qs = new URLSearchParams(location.search);
-dono = qs.get('owner')  || dono;
-repo = qs.get('repo')   || repo;
-ramo = qs.get('branch') || ramo;
+const msgEl=document.getElementById('msg');
+const errBox=document.getElementById('errBox');
+const diag=document.getElementById('diag');
 
-const runIdParam = qs.get('run_id') || '';
+function fmt(ms){if(!ms||ms<1)return'—';let s=Math.floor(ms/1000),m=Math.floor(s/60);s%=60;let h=Math.floor(m/60);m%=60;const p=[];if(h)p.push(h+'h');if(m)p.push(m+'m');if(s)p.push(s+'s');return p.join(' ')}
 
-const msgEl  = document.getElementById('msg');
-const errBox = document.getElementById('errBox');
-const diag   = document.getElementById('diag');
+function urlRate(){return `/gh/rate_limit`}
+function urlRuns(){return `/gh/repos/${dono}/${repo}/actions/runs?branch=${encodeURIComponent(ramo)}&per_page=10`}
+function urlRunById(id){return `/gh/repos/${dono}/${repo}/actions/runs/${id}`}
 
-function opt(){ return { cache:'no-store', headers:{ 'X-Requested-With':'fetch' } } }
-function urlRate(){ return `/gh/rate_limit`; }
-function urlRuns(){ return `/gh/repos/${dono}/${repo}/actions/runs?branch=${encodeURIComponent(ramo)}&per_page=1`; }
-function urlRunsById(id){ return `/gh/repos/${dono}/${repo}/actions/runs/${id}`; }
-
-function fmt(ms){
-  if(!ms||ms<1) return '—';
-  let s=Math.floor(ms/1000), m=Math.floor(s/60); s%=60; let h=Math.floor(m/60); m%=60;
-  const p=[]; if(h)p.push(h+'h'); if(m)p.push(m+'m'); if(s)p.push(s+'s'); return p.join(' ');
-}
+function opt(){return {cache:'no-store',headers:{'X-Requested-With':'fetch'}}}
 
 async function autoteste(){
   try{
-    const r = await fetch(urlRate(), opt());
-    if(!r.ok) throw new Error('HTTP '+r.status);
-    const j = await r.json();
-    diag.textContent = [
-      'Autoteste OK',
-      'origin: '+(location.origin||'(sem origem)'),
-      'secureContext: '+window.isSecureContext,
-      'online: '+navigator.onLine,
-      'rate remaining: '+(j.resources && j.resources.core ? j.resources.core.remaining : '?')
-    ].join('\n');
+    const r=await fetch(urlRate(),opt()); if(!r.ok) throw new Error('HTTP '+r.status);
+    const j=await r.json();
+    diag.textContent=['Autoteste OK','rate remaining: '+(j.resources?.core?.remaining??'?')].join('\n');
     return true;
   }catch(e){
-    errBox.classList.remove('hidden');
-    errBox.textContent = 'Falha no autoteste: '+(e && e.message ? e.message : e);
-    diag.textContent = [
-      'Detalhes:',
-      'origin: '+(location.origin||'(sem origem)')+' | secureContext: '+window.isSecureContext+' | online: '+navigator.onLine,
-      'Provável bloqueio por CSP. Como estamos usando proxy /gh, verifique se o backend está rodando e expondo /gh/rate_limit.'
-    ].join('\n');
+    errBox.classList.remove('hidden');errBox.textContent='Falha no autoteste: '+(e?.message||e);
     return false;
   }
 }
 
-async function runPorId(id){
-  const url = urlRunsById(id);
-  diag.textContent += `\nGET ${url}`;
-  const r = await fetch(url, opt());
-  if(!r.ok) return { erro:r.status };
-  return { ok:true, dados: await r.json() };
+async function getRunById(id){
+  const u=urlRunById(id);diag.textContent+=`\nGET ${u}`;
+  const r=await fetch(u,opt()); if(!r.ok) return {erro:r.status};
+  return {ok:true,dados:await r.json()};
 }
 
-async function ultimoRunDaBranch(){
-  const url = urlRuns();
-  diag.textContent += `\nGET ${url}`;
-  const r = await fetch(url, opt());
-  if(!r.ok) return { erro:r.status };
-  const j = await r.json();
-  const it = (j.workflow_runs||[])[0];
-  if(!it) return { vazio:true };
-  return { ok:true, dados: it };
+function eCandidato(run){
+  const tCriado=new Date(run.created_at).getTime();
+  if(tCriado < startedAt-10000) return false;
+  if(eventoEsperado && run.event!==eventoEsperado) return false;
+  return true;
+}
+
+async function acharRunNovo(){
+  const u=urlRuns();diag.textContent+=`\nGET ${u}`;
+  const r=await fetch(u,opt()); if(!r.ok) return {erro:r.status};
+  const j=await r.json();
+  const lista=j.workflow_runs||[];
+  const cand=lista.find(eCandidato);
+  if(!cand) return {nao:true};
+  return {ok:true,dados:cand};
 }
 
 function irResultados(status){
-  const p = new URLSearchParams({ status, owner:dono, repo:repo, branch:ramo });
-  location.href = `results.html?${p.toString()}`;
+  const p=new URLSearchParams({status,owner:dono,repo:repo,branch:ramo});
+  location.href=`results.html?${p.toString()}`;
 }
 
-let inicio=null, watchdog=null;
-function iniciarWatchdog(ms){
-  clearTimeout(watchdog);
-  watchdog = setTimeout(()=>{ 
-    errBox.classList.remove('hidden');
-    errBox.textContent='Tempo excedido. Abrindo resultados com status=timeout.';
-    irResultados('timeout');
-  }, ms);
-}
+let idFixado=runIdInicial||null;
+let t0=null;
+let watchdog=null;
+function watchdogIniciar(ms){clearTimeout(watchdog);watchdog=setTimeout(()=>{errBox.classList.remove('hidden');errBox.textContent='Tempo excedido. Abrindo resultados com status=timeout.';irResultados('timeout')},ms)}
+watchdogIniciar(20*60*1000);
 
-iniciarWatchdog(20*60*1000);
+const prazoAparecer=120000;
 
 async function ciclo(){
   try{
-    let runInfo = null;
-
-    if(runIdParam){
-      const r = await runPorId(runIdParam);
-      if(r.erro){ throw new Error('HTTP '+r.erro); }
-      runInfo = r.dados;
-    }else{
-      const r = await ultimoRunDaBranch();
-      if(r.erro){ throw new Error('HTTP '+r.erro); }
-      if(r.vazio){
-        msgEl.textContent = 'Nenhuma execução encontrada na branch. Indo aos resultados…';
-        return irResultados('unknown');
+    if(!idFixado){
+      const delta=Date.now()-startedAt;
+      if(delta<przoAparecer){
+        const achado=await acharRunNovo();
+        if(achado.ok){
+          idFixado=String(achado.dados.id);
+          t0=new Date(achado.dados.run_started_at||achado.dados.created_at).getTime();
+          msgEl.textContent='Execução encontrada. Acompanhando…';
+        }else if(achado.erro){
+          throw new Error('HTTP '+achado.erro);
+        }else{
+          msgEl.textContent='Aguardando a execução iniciar… ('+fmt(delta)+')';
+        }
+        return setTimeout(ciclo,2000);
+      }else{
+        const achado=await acharRunNovo();
+        if(achado.ok){
+          idFixado=String(achado.dados.id);
+          t0=new Date(achado.dados.run_started_at||achado.dados.created_at).getTime();
+          msgEl.textContent='Execução encontrada. Acompanhando…';
+          return setTimeout(ciclo,1500);
+        }
+        msgEl.textContent='Ainda aguardando a execução iniciar… ('+fmt(delta)+')';
+        return setTimeout(ciclo,2000);
       }
-      runInfo = r.dados;
     }
 
-    const st   = runInfo.status;
-    const conc = (runInfo.conclusion || '').toLowerCase();
-    const t0   = runInfo.run_started_at ? new Date(runInfo.run_started_at).getTime() : Date.now();
-    const tf   = runInfo.updated_at     ? new Date(runInfo.updated_at).getTime()     : Date.now();
-
-    if(!inicio) inicio=t0;
-    const dec = fmt(Date.now()-inicio);
-
-    if(st==='queued'){
-      msgEl.textContent = `Em fila… (${dec})`;
-    }else if(st==='in_progress'){
-      msgEl.textContent = `Executando… (${dec})`;
-    }else if(st==='completed'){
-      msgEl.textContent = `Concluído em ${fmt(tf-t0)}`;
-      return irResultados(conc || 'success');
-    }else{
-      msgEl.textContent = `Aguardando… (${dec})`;
-    }
-
-    setTimeout(ciclo, 2000);
+    const info=await getRunById(idFixado);
+    if(info.erro){ throw new Error('HTTP '+info.erro) }
+    const run=info.dados;
+    const st=run.status;
+    const conc=(run.conclusion||'').toLowerCase();
+    const tInicio=new Date(run.run_started_at||run.created_at).getTime();
+    const tAgora=Date.now();
+    const dec=fmt(tAgora-(t0||tInicio));
+    if(st==='queued'){msgEl.textContent='Em fila… ('+dec+')'}
+    else if(st==='in_progress'){msgEl.textContent='Executando… ('+dec+')'}
+    else if(st==='completed'){msgEl.textContent='Concluído em '+fmt(new Date(run.updated_at).getTime()-tInicio);return irResultados(conc||'success')}
+    else{msgEl.textContent='Aguardando… ('+dec+')'}
+    setTimeout(ciclo,1500);
   }catch(e){
-    errBox.classList.remove('hidden');
-    errBox.textContent = 'Erro: '+(e && e.message ? e.message : e);
-    setTimeout(ciclo, 3000);
+    errBox.classList.remove('hidden');errBox.textContent='Erro: '+(e?.message||e);
+    setTimeout(ciclo,3000);
   }
 }
 
 (async()=>{
-  const ok = await autoteste();
+  const ok=await autoteste();
   if(!ok) return;
-  msgEl.textContent = 'Preparando…';
+  msgEl.textContent='Preparando…';
   ciclo();
 })();
 </script>
