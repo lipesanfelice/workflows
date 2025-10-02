@@ -1,324 +1,7 @@
-<!-- <!DOCTYPE html>
-<html lang="pt-BR">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Testador de Cobertura de Código Java</title>
-    <style>
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            line-height: 1.6;
-            margin: 0;
-            padding: 20px;
-            background-color: #f5f5f5;
-            color: #333;
-        }
-        .container {
-            max-width: 1000px;
-            margin: 0 auto;
-            background: white;
-            padding: 20px;
-            border-radius: 8px;
-            box-shadow: 0 0 10px rgba(0,0,0,0.1);
-        }
-        h1 {
-            color: #2c3e50;
-            text-align: center;
-            margin-bottom: 30px;
-        }
-        .tab-container {
-            display: flex;
-            margin-bottom: 20px;
-            border-bottom: 1px solid #ddd;
-        }
-        .tab {
-            padding: 10px 20px;
-            cursor: pointer;
-            background: #eee;
-            border: 1px solid #ddd;
-            border-bottom: none;
-            border-radius: 5px 5px 0 0;
-            margin-right: 5px;
-        }
-        .tab.active {
-            background: white;
-            border-bottom: 1px solid white;
-            margin-bottom: -1px;
-            font-weight: bold;
-        }
-        .tab-content {
-            display: none;
-            padding: 20px;
-            border: 1px solid #ddd;
-            border-top: none;
-            border-radius: 0 0 5px 5px;
-        }
-        .tab-content.active {
-            display: block;
-        }
-        textarea {
-            width: 100%;
-            height: 300px;
-            padding: 10px;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-            font-family: monospace;
-            font-size: 14px;
-            resize: vertical;
-        }
-        button {
-            background-color: #3498db;
-            color: white;
-            border: none;
-            padding: 10px 15px;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 16px;
-            margin-top: 10px;
-        }
-        button:hover {
-            background-color: #2980b9;
-        }
-        #result {
-            margin-top: 20px;
-            padding: 15px;
-            border-radius: 4px;
-            background-color: #f8f9fa;
-            border: 1px solid #ddd;
-            white-space: pre-wrap;
-            font-family: monospace;
-        }
-        .file-input {
-            margin: 15px 0;
-        }
-        .status {
-            margin-top: 20px;
-            padding: 10px;
-            border-radius: 4px;
-        }
-        .success {
-            background-color: #d4edda;
-            color: #155724;
-            border: 1px solid #c3e6cb;
-        }
-        .error {
-            background-color: #f8d7da;
-            color: #721c24;
-            border: 1px solid #f5c6cb;
-        }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <h1>Testador de Cobertura de Código Java</h1>
-        
-        <div class="tab-container">
-            <div class="tab active" onclick="openTab(event, 'codigo')">Código Fonte</div>
-            <div class="tab" onclick="openTab(event, 'arquivo')">Arquivo Java</div>
-            <div class="tab" onclick="openTab(event, 'projeto')">Projeto ZIP</div>
-        </div>
-        
-        <div id="codigo" class="tab-content active">
-            <h2>Submeter Código Java</h2>
-            <textarea id="javaCode" placeholder="Cole seu código Java aqui...">public class Exemplo {
-    public static void main(String[] args) {
-        System.out.println("Hello World!");
-    }
-}</textarea>
-            <button onclick="submitCode()">Submeter Código</button>
-        </div>
-        
-        <div id="arquivo" class="tab-content">
-            <h2>Enviar Arquivo Java</h2>
-            <div class="file-input">
-                <input type="file" id="javaFile" accept=".java">
-            </div>
-            <button onclick="submitFile()">Enviar Arquivo</button>
-        </div>
-        
-        <div id="projeto" class="tab-content">
-            <h2>Enviar Projeto (ZIP)</h2>
-            <div class="file-input">
-                <input type="file" id="zipFile" accept=".zip">
-            </div>
-            <button onclick="submitZip()">Enviar Projeto</button>
-        </div>
-        
-        <div id="status" class="status" style="display: none;"></div>
-        <div id="result"></div>
-    </div>
-
-    <script>
-        function openTab(evt, tabName) {
-            const tabContents = document.getElementsByClassName("tab-content");
-            for (let i = 0; i < tabContents.length; i++) {
-                tabContents[i].classList.remove("active");
-            }
-            
-            const tabs = document.getElementsByClassName("tab");
-            for (let i = 0; i < tabs.length; i++) {
-                tabs[i].classList.remove("active");
-            }
-            
-            document.getElementById(tabName).classList.add("active");
-            evt.currentTarget.classList.add("active");
-        }
-        
-        function showStatus(message, isError = false) {
-            const statusDiv = document.getElementById("status");
-            statusDiv.style.display = "block";
-            statusDiv.textContent = message;
-            statusDiv.className = isError ? "status error" : "status success";
-        }
-        
-        function submitCode() {
-            const code = document.getElementById("javaCode").value.trim();
-            if (!code) {
-                showStatus("Por favor, insira algum código Java.", true);
-                return;
-            }
-            
-            // Primeiro salva no GitHub
-            fetch('/entrada/codigo', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/x-www-form-urlencoded',
-                },
-                body: 'codigo=' + encodeURIComponent(code)
-            })
-            .then(response => response.text())
-            .then(message => {
-                showStatus(message);
-                
-                // Depois processa para análise
-                return fetch('/api/codigo', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({ codigo: code })
-                });
-            })
-            .then(response => response.json())
-            .then(data => {
-                document.getElementById("result").textContent = JSON.stringify(data, null, 2);
-            })
-            .catch(error => {
-                showStatus("Erro ao processar código: " + error.message, true);
-                console.error('Error:', error);
-            });
-        }
-        
-        function submitFile() {
-            const fileInput = document.getElementById("javaFile");
-            if (!fileInput.files.length) {
-                showStatus("Por favor, selecione um arquivo Java.", true);
-                return;
-            }
-            
-            const formData = new FormData();
-            formData.append("arquivo", fileInput.files[0]);
-            
-            // Primeiro salva no GitHub
-            fetch('/entrada/arquivo', {
-                method: 'POST',
-                body: formData
-            })
-            .then(response => response.text())
-            .then(message => {
-                showStatus(message);
-                
-                // Depois processa para análise
-                const formDataProcessamento = new FormData();
-                formDataProcessamento.append("file", fileInput.files[0]);
-                
-                return fetch('/api/arquivo', {
-                    method: 'POST',
-                    body: formDataProcessamento
-                });
-            })
-            .then(response => response.json())
-            .then(data => {
-                document.getElementById("result").textContent = JSON.stringify(data, null, 2);
-            })
-            .catch(error => {
-                showStatus("Erro ao processar arquivo: " + error.message, true);
-                console.error('Error:', error);
-            });
-        }
-        
-        function submitZip() {
-            const fileInput = document.getElementById("zipFile");
-            if (!fileInput.files.length) {
-                showStatus("Por favor, selecione um arquivo ZIP.", true);
-                return;
-            }
-            
-            const formData = new FormData();
-            formData.append("projetoZip", fileInput.files[0]);
-            
-            // Primeiro salva no GitHub
-            fetch('/entrada/projeto', {
-                method: 'POST',
-                body: formData
-            })
-            .then(response => response.text())
-            .then(message => {
-                showStatus(message);
-                
-                // Depois processa para análise
-                const formDataProcessamento = new FormData();
-                formDataProcessamento.append("file", fileInput.files[0]);
-                
-                return fetch('/api/projeto', {
-                    method: 'POST',
-                    body: formDataProcessamento
-                });
-            })
-            .then(response => response.json())
-            .then(data => {
-                document.getElementById("result").textContent = JSON.stringify(data, null, 2);
-            })
-            .catch(error => {
-                showStatus("Erro ao processar projeto: " + error.message, true);
-                console.error('Error:', error);
-            });
-        }
-    </script>
-
-<script>
-// --- Redireciona automaticamente para loading.html quando qualquer fetch JSON retornar execId ---
-(function(){
-  const _fetch = window.fetch;
-  window.fetch = async function(...args){
-    const resp = await _fetch.apply(this, args);
-    try {
-      const clone = resp.clone();
-      const ct = (clone.headers.get('content-type')||'').toLowerCase();
-      if (ct.includes('application/json')){
-        const data = await clone.json();
-        const execId = data && (data.execId || data.id || data.exec || data.executionId || (data.meta && data.meta.execId));
-        if (execId) {
-          // Evita loop de redirecionamento
-          if (!/loading\.html/i.test(location.pathname)) {
-            location.href = 'loading.html?execId=' + encodeURIComponent(execId);
-          }
-        }
-      }
-    } catch(_) {}
-    return resp;
-  };
-})();
-</script>
-
-</body>
-</html>
- -->
-
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-  <meta charset="UTF-8" />
+  <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Code Analysis Platform</title>
   <script src="https://cdn.tailwindcss.com"></script>
@@ -330,12 +13,11 @@
     .dropzone{border:2px dashed #cbd5e0;transition:all .3s ease}
     .dropzone.active{border-color:#4299e1;background-color:#ebf8ff}
     .progress-bar{transition:width .5s ease}
-    pre.json {white-space:pre-wrap;word-break:break-word}
+    pre.json{white-space:pre-wrap;word-break:break-word}
   </style>
 </head>
 <body class="bg-gray-50">
 <div id="app" class="min-h-screen flex flex-col">
-  <!-- Navbar -->
   <nav class="bg-blue-600 text-white shadow-lg">
     <div class="container mx-auto px-4 py-3 flex justify-between items-center">
       <div class="flex items-center space-x-2">
@@ -352,7 +34,6 @@
     </div>
   </nav>
 
-  <!-- Main -->
   <main class="flex-grow container mx-auto px-4 py-8">
     <section id="upload-section" class="mb-8">
       <div class="text-center mb-8">
@@ -363,7 +44,6 @@
       </div>
 
       <div class="grid md:grid-cols-3 gap-6">
-        <!-- Colar código -->
         <div class="bg-white rounded-lg shadow-md overflow-hidden" data-aos="fade-up">
           <div class="bg-blue-50 px-4 py-3 border-b border-blue-100">
             <h3 class="font-semibold text-blue-700 flex items-center">
@@ -382,7 +62,6 @@
           </div>
         </div>
 
-        <!-- Upload .java -->
         <div class="bg-white rounded-lg shadow-md overflow-hidden" data-aos="fade-up" data-aos-delay="100">
           <div class="bg-blue-50 px-4 py-3 border-b border-blue-100">
             <h3 class="font-semibold text-blue-700 flex items-center">
@@ -408,7 +87,6 @@
           </div>
         </div>
 
-        <!-- Upload .zip -->
         <div class="bg-white rounded-lg shadow-md overflow-hidden" data-aos="fade-up" data-aos-delay="200">
           <div class="bg-blue-50 px-4 py-3 border-b border-blue-100">
             <h3 class="font-semibold text-blue-700 flex items-center">
@@ -436,10 +114,8 @@
       </div>
     </section>
 
-    <!-- Status -->
     <div id="status" class="hidden rounded-md p-3 text-sm"></div>
 
-    <!-- Resultado (debug) -->
     <section class="bg-white rounded-lg shadow-md p-4">
       <h2 class="text-lg font-semibold mb-2 flex items-center text-gray-800">
         <i data-feather="activity" class="mr-2"></i>
@@ -449,7 +125,6 @@
     </section>
   </main>
 
-  <!-- Footer -->
   <footer class="bg-gray-800 text-white py-6">
     <div class="container mx-auto px-4 text-center">
       <p>&copy; 2023 CodeAnalyzer. Todos os direitos reservados.</p>
@@ -457,7 +132,6 @@
   </footer>
 </div>
 
-<!-- Modal de carregamento -->
 <div id="loading-modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 hidden">
   <div class="bg-white rounded-lg p-6 max-w-md w-full mx-4" data-aos="zoom-in">
     <div class="text-center">
@@ -467,7 +141,7 @@
       <h3 class="text-xl font-semibold text-gray-800 mb-2">Processando…</h3>
       <p class="text-gray-600 mb-4">Isso pode levar alguns instantes.</p>
       <div class="w-full bg-gray-200 rounded-full h-2.5">
-        <div id="progress-bar" class="progress-bar bg-blue-600 h-2.5 rounded-full" style="width: 0%"></div>
+        <div id="progress-bar" class="progress-bar bg-blue-600 h-2.5 rounded-full" style="width:0%"></div>
       </div>
       <p id="progress-text" class="text-sm text-gray-500 mt-2">Iniciando…</p>
     </div>
@@ -475,190 +149,156 @@
 </div>
 
 <script>
-  AOS.init();
-  feather.replace();
-
-  const statusDiv = document.getElementById('status');
-  const resultPre = document.getElementById('result');
-  const loadingModal = document.getElementById('loading-modal');
-  const progressBar = document.getElementById('progress-bar');
-  const progressText = document.getElementById('progress-text');
-
-  function mostrarStatus(msg, tipo='success') {
-    statusDiv.classList.remove('hidden','bg-green-100','text-green-800','border','border-green-200','bg-red-100','text-red-800','border-red-200');
-    if (tipo==='success') statusDiv.classList.add('bg-green-100','text-green-800','border','border-green-200');
-    else statusDiv.classList.add('bg-red-100','text-red-800','border-red-200');
-    statusDiv.textContent = msg;
-  }
-  function mostrarResultado(obj) {
-    try { resultPre.textContent = JSON.stringify(obj,null,2); } catch(e){ resultPre.textContent = String(obj ?? ''); }
-  }
-  function iniciarLoading(txt){ loadingModal.classList.remove('hidden'); progressBar.style.width='0%'; progressText.textContent=txt||'Iniciando…'; }
-  function progresso(p,t){ progressBar.style.width=`${Math.max(0,Math.min(100,p))}%`; if(t) progressText.textContent=t; }
-  function pararLoading(){ loadingModal.classList.add('hidden'); }
+  const DONO_PADRAO='lipesanfelice';
+  const REPO_PADRAO='workflows';
+  const RAMO_PADRAO='main';
+  const TOKEN_GH=sessionStorage.getItem('ght')||'';
 </script>
 
 <script>
-  const fileUpload = document.getElementById('file-upload');
-  const fileDropzone = document.getElementById('file-dropzone');
-  const fileInfo = document.getElementById('file-info');
-  const fileName = document.getElementById('file-name');
-  const fileSize = document.getElementById('file-size');
-  const submitFileBtn = document.getElementById('submit-file');
+  AOS.init();
+  feather.replace();
+  const statusDiv=document.getElementById('status');
+  const resultPre=document.getElementById('result');
+  const loadingModal=document.getElementById('loading-modal');
+  const progressBar=document.getElementById('progress-bar');
+  const progressText=document.getElementById('progress-text');
+  function mostrarStatus(msg,tipo='success'){
+    statusDiv.classList.remove('hidden','bg-green-100','text-green-800','border','border-green-200','bg-red-100','text-red-800','border-red-200');
+    if(tipo==='success')statusDiv.classList.add('bg-green-100','text-green-800','border','border-green-200');else statusDiv.classList.add('bg-red-100','text-red-800','border-red-200');
+    statusDiv.textContent=msg
+  }
+  function mostrarResultado(obj){
+    try{resultPre.textContent=JSON.stringify(obj,null,2)}catch(e){resultPre.textContent=String(obj??'')}
+  }
+  function iniciarLoading(txt){loadingModal.classList.remove('hidden');progressBar.style.width='0%';progressText.textContent=txt||'Iniciando…'}
+  function progresso(p,t){progressBar.style.width=`${Math.max(0,Math.min(100,p))}%`;if(t)progressText.textContent=t}
+  function pararLoading(){loadingModal.classList.add('hidden')}
+</script>
 
-  const zipUpload = document.getElementById('zip-upload');
-  const zipDropzone = document.getElementById('zip-dropzone');
-  const zipInfo = document.getElementById('zip-info');
-  const zipName = document.getElementById('zip-name');
-  const zipSize = document.getElementById('zip-size');
-  const submitZipBtn = document.getElementById('submit-zip');
-
-  ['dragenter','dragover'].forEach(ev=>{
-    [fileDropzone,zipDropzone].forEach(zone=>zone.addEventListener(ev,e=>{e.preventDefault();zone.classList.add('active');}));
-  });
-  ['dragleave','drop'].forEach(ev=>{
-    [fileDropzone,zipDropzone].forEach(zone=>zone.addEventListener(ev,e=>{e.preventDefault();zone.classList.remove('active');}));
-  });
-
-  fileDropzone.addEventListener('drop', e=>{
-    const f=e.dataTransfer.files?.[0];
-    if(f&&f.name.endsWith('.java')) selecionarArquivo(f,'java');
-  });
-  zipDropzone.addEventListener('drop', e=>{
-    const f=e.dataTransfer.files?.[0];
-    if(f&&f.name.endsWith('.zip')) selecionarArquivo(f,'zip');
-  });
-  fileUpload.addEventListener('change', ()=>{ if(fileUpload.files.length) selecionarArquivo(fileUpload.files[0],'java'); });
-  zipUpload.addEventListener('change', ()=>{ if(zipUpload.files.length) selecionarArquivo(zipUpload.files[0],'zip'); });
-
+<script>
+  const fileUpload=document.getElementById('file-upload');
+  const fileDropzone=document.getElementById('file-dropzone');
+  const fileInfo=document.getElementById('file-info');
+  const fileName=document.getElementById('file-name');
+  const fileSize=document.getElementById('file-size');
+  const submitFileBtn=document.getElementById('submit-file');
+  const zipUpload=document.getElementById('zip-upload');
+  const zipDropzone=document.getElementById('zip-dropzone');
+  const zipInfo=document.getElementById('zip-info');
+  const zipName=document.getElementById('zip-name');
+  const zipSize=document.getElementById('zip-size');
+  const submitZipBtn=document.getElementById('submit-zip');
+  ['dragenter','dragover'].forEach(ev=>{[fileDropzone,zipDropzone].forEach(zone=>zone.addEventListener(ev,e=>{e.preventDefault();zone.classList.add('active')}))});
+  ['dragleave','drop'].forEach(ev=>{[fileDropzone,zipDropzone].forEach(zone=>zone.addEventListener(ev,e=>{e.preventDefault();zone.classList.remove('active')}))});
+  fileDropzone.addEventListener('drop',e=>{const f=e.dataTransfer.files?.[0];if(f&&f.name.endsWith('.java'))selecionarArquivo(f,'java')});
+  zipDropzone.addEventListener('drop',e=>{const f=e.dataTransfer.files?.[0];if(f&&f.name.endsWith('.zip'))selecionarArquivo(f,'zip')});
+  fileUpload.addEventListener('change',()=>{if(fileUpload.files.length)selecionarArquivo(fileUpload.files[0],'java')});
+  zipUpload.addEventListener('change',()=>{if(zipUpload.files.length)selecionarArquivo(zipUpload.files[0],'zip')});
   function selecionarArquivo(arq,tipo){
-    const java = tipo==='java';
-    const info = java?fileInfo:zipInfo;
-    const nome = java?fileName:zipName;
-    const tam = java?fileSize:zipSize;
-    const btn = java?submitFileBtn:submitZipBtn;
-    nome.textContent = arq.name;
-    tam.textContent = `(${(arq.size/1024).toFixed(2)} KB)`;
-    info.classList.remove('hidden');
-    btn.classList.remove('hidden');
-    if(java) window.arquivoJavaSelecionado = arq; else window.zipSelecionado = arq;
+    const java=tipo==='java';
+    const info=java?fileInfo:zipInfo;
+    const nome=java?fileName:zipName;
+    const tam=java?fileSize:zipSize;
+    const btn=java?submitFileBtn:submitZipBtn;
+    if(nome)nome.textContent=arq.name;
+    if(tam)tam.textContent=`(${(arq.size/1024).toFixed(2)} KB)`;
+    if(info)info.classList.remove('hidden');
+    if(btn)btn.classList.remove('hidden');
+    if(java)window.arquivoJavaSelecionado=arq;else window.zipSelecionado=arq
   }
 </script>
 
 <script>
   async function arquivoParaBase64(arquivo){
-    return new Promise((resolve,reject)=>{
-      const r=new FileReader();
-      r.onload=()=>resolve(r.result.split(',')[1]);
-      r.onerror=reject;
-      r.readAsDataURL(arquivo);
-    });
+    return new Promise((resolve,reject)=>{const r=new FileReader();r.onload=()=>resolve(r.result.split(',')[1]);r.onerror=reject;r.readAsDataURL(arquivo)})
   }
-  async function enviarParaLoading(tipo,payload){
-    sessionStorage.setItem('pendingJob', JSON.stringify({ tipo, quando: Date.now(), payload }));
-    const ts = Date.now();
-    await fetch('/api/process/reset', { method:'POST' }).catch(()=>{});
-    window.location.href = 'loading.html';
+  const ENTRADA_BASES=['/entrada-usuario','/entrada'];
+  async function postComFallback(subpath,makeBody,makeHeaders){
+    let ultimo;
+    for(const base of ENTRADA_BASES){
+      const url=base.replace(/\/+$/,'')+'/'+subpath.replace(/^\/+/,'');
 
-    //window.location.href = `loading.html?startedAt=${ts}`;
-  }
-
-  /* ---------- fallback inteligente: /entrada-usuario -> /entrada ---------- */
-  const ENTRADA_BASES = ['/entrada-usuario', '/entrada'];
-
-  async function postComFallback(subpath, makeBody, makeHeaders) {
-    let lastErr;
-    for (const base of ENTRADA_BASES) {
-      const url = base.replace(/\/+$/,'') + '/' + subpath.replace(/^\/+/,'');
-      try {
-        const body = makeBody();
-        const headers = makeHeaders?.() || undefined;
-        const resp = await fetch(url, { method: 'POST', body, headers, credentials: 'include' });
-        if (resp.ok) {
-          const text = await resp.text();
-          mostrarResultado({salvoEm:url, mensagem:text});
-          return { ok: true, msg: text, baseUsada: base };
-        }
-        if (![404,405].includes(resp.status)) {
-          const text = await resp.text().catch(()=> '');
-          return { ok: false, msg: text || (`HTTP ${resp.status}`), baseUsada: base };
-        }
-        lastErr = resp;
-      } catch (e) {
-        lastErr = e;
-      }
+      try{
+        const body=makeBody();
+        const headers=makeHeaders?.()||undefined;
+        const resp=await fetch(url,{method:'POST',body,headers,credentials:'include'});
+        if(resp.ok){const text=await resp.text();mostrarResultado({salvoEm:url,mensagem:text});return{ok:true,msg:text,baseUsada:base}}
+        if(![404,405].includes(resp.status)){const text=await resp.text().catch(()=> '');return{ok:false,msg:text||(`HTTP ${resp.status}`),baseUsada:base}}
+        ultimo=resp
+      }catch(e){ultimo=e}
     }
-    return { ok: false, msg: `Falha ao salvar (tentado: ${ENTRADA_BASES.join(', ')}). Último erro: ${lastErr?.status || lastErr?.message || lastErr}`, baseUsada: null };
+    return{ok:false,msg:`Falha ao salvar (tentado: ${ENTRADA_BASES.join(', ')}). Último erro: ${ultimo?.status||ultimo?.message||ultimo}`,baseUsada:null}
   }
+  async function salvarCodigoGithub(codigo){return postComFallback('codigo',()=>new URLSearchParams({codigo}),()=>({'Content-Type':'application/x-www-form-urlencoded'}))}
+  async function salvarArquivoGithub(file){return postComFallback('arquivo',()=>{const fd=new FormData();fd.append('arquivo',file);return fd})}
+  async function salvarZipGithub(file){return postComFallback('projeto',()=>{const fd=new FormData();fd.append('projetoZip',file);return fd})}
+</script>
 
-  /* ------- helpers de salvamento que usam o fallback ------- */
-  async function salvarCodigoGithub(codigo){
-    return postComFallback('codigo', () => new URLSearchParams({ codigo }), () => ({ 'Content-Type':'application/x-www-form-urlencoded' }));
-  }
-  async function salvarArquivoGithub(file){
-    return postComFallback('arquivo', () => { const fd = new FormData(); fd.append('arquivo', file); return fd; });
-  }
-  async function salvarZipGithub(file){
-    return postComFallback('projeto', () => { const fd = new FormData(); fd.append('projetoZip', file); return fd; });
+<script>
+  async function enviarParaLoading(tipo,payload,meta){
+    const dono=(meta&&meta.dono)||DONO_PADRAO;
+    const repo=(meta&&meta.repo)||REPO_PADRAO;
+    const ramo=(meta&&meta.ramo)||RAMO_PADRAO;
+    const ght=(meta&&meta.ght)||TOKEN_GH||'';
+    let runId='';
+    try{
+      const r=await fetch('/api/process/start',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({tipo,payload})});
+      if(r.ok){const j=await r.json().catch(()=>({}));runId=j.runId||j.run_id||j.id||''}
+    }catch(_){}
+    const p=new URLSearchParams();
+    p.set('owner',dono);p.set('repo',repo);p.set('branch',ramo);
+    if(ght)p.set('ght',ght);
+    if(runId)p.set('run_id',runId);
+    sessionStorage.setItem('pendingJob',JSON.stringify({tipo,quando:Date.now(),payload}));
+    await fetch('/api/process/reset',{method:'POST'}).catch(()=>{});
+    location.href='loading.html?'+p.toString()
   }
 </script>
 
 <script>
-  // -------- Handlers: salvam primeiro, depois redirecionam pro loading --------
-  document.getElementById('submit-code').addEventListener('click', async ()=>{
+  document.getElementById('submit-code').addEventListener('click',async()=>{
     const codigo=(document.getElementById('code-input').value||'').trim();
-    if(!codigo){ mostrarStatus('Por favor, insira algum código Java.','error'); return; }
-
-    iniciarLoading('Salvando entrada…'); progresso(25,'Enviando para a entrada…');
+    if(!codigo){mostrarStatus('Por favor, insira algum código Java.','error');return}
+    iniciarLoading('Salvando entrada…');progresso(25,'Enviando para a entrada…');
     try{
-      const res = await salvarCodigoGithub(codigo);
-      mostrarStatus(res.msg, res.ok?'success':'error');
-      if(!res.ok){ progresso(0,''); return; }
+      const res=await salvarCodigoGithub(codigo);
+      mostrarStatus(res.msg,res.ok?'success':'error');
+      if(!res.ok){progresso(0,'');return}
       progresso(55,'Preparando processamento…');
-      await enviarParaLoading('codigo',{ codigo });
-    }catch(e){
-      mostrarStatus('Erro ao salvar: '+e.message,'error');
-    }finally{
-      setTimeout(pararLoading,200);
-    }
+      await enviarParaLoading('codigo',{codigo},{dono:DONO_PADRAO,repo:REPO_PADRAO,ramo:RAMO_PADRAO,ght:TOKEN_GH})
+    }catch(e){mostrarStatus('Erro ao salvar: '+e.message,'error')}
+    finally{setTimeout(pararLoading,200)}
   });
 
-  document.getElementById('submit-file').addEventListener('click', async ()=>{
+  document.getElementById('submit-file').addEventListener('click',async()=>{
     const f=window.arquivoJavaSelecionado;
-    if(!f){ mostrarStatus('Selecione um arquivo .java.','error'); return; }
-
-    iniciarLoading('Salvando entrada…'); progresso(25,'Enviando arquivo para a entrada…');
+    if(!f){mostrarStatus('Selecione um arquivo .java.','error');return}
+    iniciarLoading('Salvando entrada…');progresso(25,'Enviando arquivo para a entrada…');
     try{
-      const res = await salvarArquivoGithub(f);
-      mostrarStatus(res.msg, res.ok?'success':'error');
-      if(!res.ok){ progresso(0,''); return; }
+      const res=await salvarArquivoGithub(f);
+      mostrarStatus(res.msg,res.ok?'success':'error');
+      if(!res.ok){progresso(0,'');return}
       progresso(55,'Preparando processamento…');
       const b64=await arquivoParaBase64(f);
-      await enviarParaLoading('arquivo',{ nome:f.name, mime:f.type||'text/x-java', base64:b64 });
-    }catch(e){
-      mostrarStatus('Erro ao salvar: '+e.message,'error');
-    }finally{
-      setTimeout(pararLoading,200);
-    }
+      await enviarParaLoading('arquivo',{nome:f.name,mime:f.type||'text/x-java',base64:b64},{dono:DONO_PADRAO,repo:REPO_PADRAO,ramo:RAMO_PADRAO,ght:TOKEN_GH})
+    }catch(e){mostrarStatus('Erro ao salvar: '+e.message,'error')}
+    finally{setTimeout(pararLoading,200)}
   });
 
-  document.getElementById('submit-zip').addEventListener('click', async ()=>{
+  document.getElementById('submit-zip').addEventListener('click',async()=>{
     const f=window.zipSelecionado;
-    if(!f){ mostrarStatus('Selecione um arquivo .zip.','error'); return; }
-
-    iniciarLoading('Salvando entrada…'); progresso(25,'Enviando ZIP para a entrada…');
+    if(!f){mostrarStatus('Selecione um arquivo .zip.','error');return}
+    iniciarLoading('Salvando entrada…');progresso(25,'Enviando ZIP para a entrada…');
     try{
-      const res = await salvarZipGithub(f);
-      mostrarStatus(res.msg, res.ok?'success':'error');
-      if(!res.ok){ progresso(0,''); return; }
+      const res=await salvarZipGithub(f);
+      mostrarStatus(res.msg,res.ok?'success':'error');
+      if(!res.ok){progresso(0,'');return}
       progresso(55,'Preparando processamento…');
       const b64=await arquivoParaBase64(f);
-      await enviarParaLoading('zip',{ nome:f.name, mime:f.type||'application/zip', base64:b64 });
-    }catch(e){
-      mostrarStatus('Erro ao salvar: '+e.message,'error');
-    }finally{
-      setTimeout(pararLoading,200);
-    }
+      await enviarParaLoading('zip',{nome:f.name,mime:f.type||'application/zip',base64:b64},{dono:DONO_PADRAO,repo:REPO_PADRAO,ramo:RAMO_PADRAO,ght:TOKEN_GH})
+    }catch(e){mostrarStatus('Erro ao salvar: '+e.message,'error')}
+    finally{setTimeout(pararLoading,200)}
   });
 </script>
 </body>
