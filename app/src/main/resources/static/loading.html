@@ -14,9 +14,14 @@
         <i data-feather="loader" class="w-10 h-10 animate-spin text-blue-600"></i>
       </div>
       <h1 class="text-xl font-semibold text-gray-800 mb-2">Estamos processando seu código…</h1>
-      <p id="msg" class="text-gray-500">Aguarde enquanto a pipeline executa.</p>
+      <p id="msg" class="text-gray-500">Aguardando o status da pipeline…</p>
 
       <div id="errBox" class="hidden mt-4 text-sm text-red-700 bg-red-50 border border-red-200 rounded p-3 text-left"></div>
+
+      <details class="mt-4 text-left">
+        <summary class="text-sm text-gray-500 cursor-pointer">Diagnóstico</summary>
+        <pre id="diag" class="mt-2 text-xs text-gray-700 bg-gray-50 border border-gray-200 rounded p-2 whitespace-pre-wrap"></pre>
+      </details>
 
       <div class="mt-6">
         <a href="index.html" class="text-sm text-gray-500 hover:underline">Voltar</a>
@@ -25,125 +30,147 @@
   </div>
 
 <script>
-let dono='lipesanfelice', repo='workflows', ramo='main';
-const qs=new URLSearchParams(location.search);
-dono=qs.get('owner')||dono; repo=qs.get('repo')||repo; ramo=qs.get('branch')||ramo;
-const token=qs.get('ght')||sessionStorage.getItem('ght')||'';
-const runIdParam=qs.get('run_id')||'';
-const marcadorPath='app/entrada-usuario/done.json';
+feather.replace();
 
-const msgEl=document.getElementById('msg')||document.body.appendChild(Object.assign(document.createElement('div'),{id:'msg',style:'padding:8px'}));
-const errBox=document.getElementById('errBox')||document.body.appendChild(Object.assign(document.createElement('div'),{id:'errBox',style:'margin:8px;padding:10px;border-radius:8px;background:#fee;border:1px solid #f99;color:#900;display:'}));
-const diag=document.getElementById('diag')||document.body.appendChild(Object.assign(document.createElement('pre'),{id:'diag',style:'white-space:pre-wrap;background:#f8fafc;border:1px dashed #cbd5e1;padding:8px;border-radius:8px;color:#334155'}));
+let dono = 'lipesanfelice';
+let repo = 'workflows';
+let ramo = 'main';
 
-function cabecalhos(){
-  const h={'Accept':'application/vnd.github+json','Cache-Control':'no-store','X-GitHub-Api-Version':'2022-11-28'};
-  if(token) h.Authorization=`Bearer ${token}`;
-  return h;
+const qs = new URLSearchParams(location.search);
+dono = qs.get('owner')  || dono;
+repo = qs.get('repo')   || repo;
+ramo = qs.get('branch') || ramo;
+
+const runIdParam = qs.get('run_id') || '';
+
+const msgEl  = document.getElementById('msg');
+const errBox = document.getElementById('errBox');
+const diag   = document.getElementById('diag');
+
+function opt(){ return { cache:'no-store', headers:{ 'X-Requested-With':'fetch' } } }
+function urlRate(){ return `/gh/rate_limit`; }
+function urlRuns(){ return `/gh/repos/${dono}/${repo}/actions/runs?branch=${encodeURIComponent(ramo)}&per_page=1`; }
+function urlRunsById(id){ return `/gh/repos/${dono}/${repo}/actions/runs/${id}`; }
+
+function fmt(ms){
+  if(!ms||ms<1) return '—';
+  let s=Math.floor(ms/1000), m=Math.floor(s/60); s%=60; let h=Math.floor(m/60); m%=60;
+  const p=[]; if(h)p.push(h+'h'); if(m)p.push(m+'m'); if(s)p.push(s+'s'); return p.join(' ');
 }
-function opt(){return {mode:'cors',cache:'no-store',referrerPolicy:'no-referrer',headers:cabecalhos()}}
-function fmt(ms){if(!ms||ms<1)return'—';let s=Math.floor(ms/1000),m=Math.floor(s/60);s%=60;let h=Math.floor(m/60);m%=60;return[(h?h+'h':''),(m?m+'m':''),(s?s+'s':'')].filter(Boolean).join(' ')}
 
 async function autoteste(){
-  const url='https://api.github.com/rate_limit';
   try{
-    const r=await fetch(url,opt());
+    const r = await fetch(urlRate(), opt());
     if(!r.ok) throw new Error('HTTP '+r.status);
-    const j=await r.json();
-    diag.textContent =
-      'Autoteste OK\n' +
-      `origin: ${location.origin||'(sem origem)'}\n`+
-      `secureContext: ${window.isSecureContext}\n`+
-      `online: ${navigator.onLine}\n`+
-      `rate remaining: ${j.resources.core.remaining}`;
+    const j = await r.json();
+    diag.textContent = [
+      'Autoteste OK',
+      'origin: '+(location.origin||'(sem origem)'),
+      'secureContext: '+window.isSecureContext,
+      'online: '+navigator.onLine,
+      'rate remaining: '+(j.resources && j.resources.core ? j.resources.core.remaining : '?')
+    ].join('\n');
     return true;
   }catch(e){
-    errBox.textContent='Falha no autoteste /rate_limit: '+(e&&e.message||e);
-    diag.textContent =
-      'Detalhes:\n'+
-      `origin: ${location.origin||'(sem origem)'} | secureContext: ${window.isSecureContext} | online: ${navigator.onLine}\n`+
-      'Possíveis causas: CORS (abrindo via file://), bloqueio de rede/adblock, mixed content (http -> https), proxy corporativo.\n'+
-      "Se tiver token, execute no console: sessionStorage.setItem('ght','ghp_...'); e recarregue.";
+    errBox.classList.remove('hidden');
+    errBox.textContent = 'Falha no autoteste: '+(e && e.message ? e.message : e);
+    diag.textContent = [
+      'Detalhes:',
+      'origin: '+(location.origin||'(sem origem)')+' | secureContext: '+window.isSecureContext+' | online: '+navigator.onLine,
+      'Provável bloqueio por CSP. Como estamos usando proxy /gh, verifique se o backend está rodando e expondo /gh/rate_limit.'
+    ].join('\n');
     return false;
   }
 }
 
 async function runPorId(id){
-  const url=`https://api.github.com/repos/${dono}/${repo}/actions/runs/${id}`;
+  const url = urlRunsById(id);
   diag.textContent += `\nGET ${url}`;
-  const r=await fetch(url,opt()); if(!r.ok) return {erro:r.status}; return {ok:true,dados:await r.json()};
-}
-async function ultimoRunDaBranch(){
-  const url=`https://api.github.com/repos/${dono}/${repo}/actions/runs?branch=${encodeURIComponent(ramo)}&per_page=1`;
-  diag.textContent += `\nGET ${url}`;
-  const r=await fetch(url,opt()); if(!r.ok) return {erro:r.status};
-  const j=await r.json(); const it=(j.workflow_runs||[])[0];
-  if(!it) return {vazio:true};
-  return {ok:true,dados:it};
-}
-async function lerMarcador(){
-  const url=`https://raw.githubusercontent.com/${dono}/${repo}/${ramo}/${marcadorPath}?t=${Date.now()}`;
-  diag.textContent += `\nGET ${url}`;
-  const r=await fetch(url,{mode:'cors',cache:'no-store',referrerPolicy:'no-referrer'});
-  if(r.status===404) return {nao:1};
-  if(!r.ok) return {erro:r.status};
-  try{const j=JSON.parse(await r.text()); return {ok:true,j}}catch{return {bad:1}}
-}
-function irResultados(status){
-  const p=new URLSearchParams({status,owner:dono,repo:repo,branch:ramo});
-  location.href=`results.html?${p.toString()}`;
+  const r = await fetch(url, opt());
+  if(!r.ok) return { erro:r.status };
+  return { ok:true, dados: await r.json() };
 }
 
-let inicio=null, modo='acoes', backoff=0, watchdog=null;
-function iniciarWatchdog(ms){clearTimeout(watchdog); watchdog=setTimeout(()=>{errBox.textContent='Tempo excedido. Abrindo resultados com status=timeout.'; irResultados('timeout')}, ms)}
+async function ultimoRunDaBranch(){
+  const url = urlRuns();
+  diag.textContent += `\nGET ${url}`;
+  const r = await fetch(url, opt());
+  if(!r.ok) return { erro:r.status };
+  const j = await r.json();
+  const it = (j.workflow_runs||[])[0];
+  if(!it) return { vazio:true };
+  return { ok:true, dados: it };
+}
+
+function irResultados(status){
+  const p = new URLSearchParams({ status, owner:dono, repo:repo, branch:ramo });
+  location.href = `results.html?${p.toString()}`;
+}
+
+let inicio=null, watchdog=null;
+function iniciarWatchdog(ms){
+  clearTimeout(watchdog);
+  watchdog = setTimeout(()=>{ 
+    errBox.classList.remove('hidden');
+    errBox.textContent='Tempo excedido. Abrindo resultados com status=timeout.';
+    irResultados('timeout');
+  }, ms);
+}
+
 iniciarWatchdog(20*60*1000);
 
 async function ciclo(){
   try{
-    let runInfo=null;
-    if(modo==='acoes'){
-      if(runIdParam){
-        const r=await runPorId(runIdParam);
-        if(r.erro){ if(r.erro===403){modo='marcador'} else throw new Error('HTTP '+r.erro) }
-        else runInfo=r.dados;
-      }else{
-        const r=await ultimoRunDaBranch();
-        if(r.erro){ if(r.erro===403){modo='marcador'} else throw new Error('HTTP '+r.erro) }
-        else if(r.vazio){ modo='marcador' }
-        else runInfo=r.dados;
-      }
-      if(runInfo){
-        const st=runInfo.status, conc=(runInfo.conclusion||'').toLowerCase();
-        const t0=runInfo.run_started_at?new Date(runInfo.run_started_at).getTime():Date.now();
-        const tf=runInfo.updated_at?new Date(runInfo.updated_at).getTime():Date.now();
-        if(!inicio) inicio=t0;
-        const dec=fmt(Date.now()-inicio);
-        if(st==='queued') msgEl.textContent=`Em fila… (${dec})`;
-        else if(st==='in_progress') msgEl.textContent=`Executando… (${dec})`;
-        else if(st==='completed'){ msgEl.textContent=`Concluído em ${fmt(tf-t0)}`; return irResultados(conc||'success'); }
-        else msgEl.textContent=`Aguardando… (${dec})`;
-      }
+    let runInfo = null;
+
+    if(runIdParam){
+      const r = await runPorId(runIdParam);
+      if(r.erro){ throw new Error('HTTP '+r.erro); }
+      runInfo = r.dados;
     }else{
-      const m=await lerMarcador();
-      if(m.ok&&m.j&&m.j.done===true) return irResultados(String(m.j.status||'success').toLowerCase());
-      if(m.erro===403){ backoff=Math.min((backoff||1000)*2,10000) }
-      msgEl.textContent='Aguardando finalização…';
+      const r = await ultimoRunDaBranch();
+      if(r.erro){ throw new Error('HTTP '+r.erro); }
+      if(r.vazio){
+        msgEl.textContent = 'Nenhuma execução encontrada na branch. Indo aos resultados…';
+        return irResultados('unknown');
+      }
+      runInfo = r.dados;
     }
-    setTimeout(ciclo, modo==='marcador' ? 2000+(backoff||0) : 2000);
+
+    const st   = runInfo.status;
+    const conc = (runInfo.conclusion || '').toLowerCase();
+    const t0   = runInfo.run_started_at ? new Date(runInfo.run_started_at).getTime() : Date.now();
+    const tf   = runInfo.updated_at     ? new Date(runInfo.updated_at).getTime()     : Date.now();
+
+    if(!inicio) inicio=t0;
+    const dec = fmt(Date.now()-inicio);
+
+    if(st==='queued'){
+      msgEl.textContent = `Em fila… (${dec})`;
+    }else if(st==='in_progress'){
+      msgEl.textContent = `Executando… (${dec})`;
+    }else if(st==='completed'){
+      msgEl.textContent = `Concluído em ${fmt(tf-t0)}`;
+      return irResultados(conc || 'success');
+    }else{
+      msgEl.textContent = `Aguardando… (${dec})`;
+    }
+
+    setTimeout(ciclo, 2000);
   }catch(e){
-    errBox.textContent='Erro: '+(e&&e.message||e);
-    setTimeout(ciclo,3000);
+    errBox.classList.remove('hidden');
+    errBox.textContent = 'Erro: '+(e && e.message ? e.message : e);
+    setTimeout(ciclo, 3000);
   }
 }
 
 (async()=>{
-  const ok=await autoteste();
+  const ok = await autoteste();
   if(!ok) return;
-  msgEl.textContent='Preparando…';
+  msgEl.textContent = 'Preparando…';
   ciclo();
 })();
 </script>
-
 
 </body>
 </html>
