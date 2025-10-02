@@ -26,121 +26,70 @@
 
 <script>
 feather.replace();
+let dono='lipesanfelice',repo='workflows',ramo='main';
+const qs=new URLSearchParams(location.search);
+dono=qs.get('owner')||dono;repo=qs.get('repo')||repo;ramo=qs.get('branch')||ramo;
+const token=qs.get('ght')||sessionStorage.getItem('ght')||'';
+const runParam=qs.get('run_id')||'';
+const msgEl=document.getElementById('msg');
+const errBox=document.getElementById('errBox');
+const timeoutMs=20*60*1000;
+const intervalo=2000;
+const marcadorPath='app/entrada-usuario/done.json';
 
-/**
- * ✅ Sem backend / sem execId
- * A página verifica periodicamente um arquivo "marcador" commitado pelo GitHub Actions:
- *   app/entrada-usuario/done.json  (conteúdo: { "done": true, "status": "success|failure|cancelled" })
- * Assim que o arquivo existir e tiver done=true → redireciona para results.html?status=...
- *
- * Você pode sobrescrever por query string:
- *   loading.html?owner=SEU_USER&repo=SEU_REPO&branch=BRANCH
- */
+function cabecalhos(){const h={'Cache-Control':'no-store'};if(token){h.Authorization=`Bearer ${token}`;h['X-GitHub-Api-Version']='2022-11-28'}return h}
+function fmtDur(ms){if(!ms||ms<1)return'—';let s=Math.floor(ms/1000),m=Math.floor(s/60);s%=60;let h=Math.floor(m/60);m%=60;const p=[];if(h)p.push(h+'h');if(m)p.push(m+'m');if(s)p.push(s+'s');return p.join(' ')}
+function irResultados(status){location.href=`results.html?status=${encodeURIComponent(status)}&owner=${encodeURIComponent(dono)}&repo=${encodeURIComponent(repo)}&branch=${encodeURIComponent(ramo)}`}
 
-// === Ajuste padrão (pode sobrescrever via query) ===
-let OWNER  = 'lipesanfelice';
-let REPO   = 'workflows';
-let BRANCH = 'main';
+async function runPorId(id){const u=`https://api.github.com/repos/${dono}/${repo}/actions/runs/${id}`;const r=await fetch(u,{cache:'no-store',headers:cabecalhos()});if(!r.ok)return {erro:r.status};return {ok:true,dados:await r.json()}}
+async function ultimoRunDaBranch(){const u=`https://api.github.com/repos/${dono}/${repo}/actions/runs?branch=${encodeURIComponent(ramo)}&per_page=1`;const r=await fetch(u,{cache:'no-store',headers:cabecalhos()});if(!r.ok)return {erro:r.status};const j=await r.json();const it=(j.workflow_runs||[])[0];if(!it)return {vazio:true};return {ok:true,dados:it}}
+async function lerMarcador(){const u=`https://raw.githubusercontent.com/${dono}/${repo}/${ramo}/${marcadorPath}?t=${Date.now()}`;const r=await fetch(u,{cache:'no-store'});if(r.status===404)return {nao:1};if(!r.ok)return {erro:r.status};try{const j=JSON.parse(await r.text());return {ok:true,j}}catch{return {bad:1}}}
 
-// Permite override por query string
-const qs = new URLSearchParams(location.search);
-OWNER  = qs.get('owner')  || OWNER;
-REPO   = qs.get('repo')   || REPO;
-BRANCH = qs.get('branch') || BRANCH;
-
-// URL raw do arquivo marcador
-const DONE_URL = `https://raw.githubusercontent.com/${OWNER}/${REPO}/${BRANCH}/app/entrada-usuario/done.json`;
-
-const POLL_INTERVAL_MS = 1500;
-const MAX_WAIT_MIN     = 20;  // fail-safe
-const HARD_TIMEOUT_MS  = MAX_WAIT_MIN * 60 * 1000;
-
-const msgEl  = document.getElementById('msg');
-const errBox = document.getElementById('errBox');
-
-
-function safeJson(s){ try { return JSON.parse(s); } catch { return null; } }
-
-// Lê token opcional (?ght=...) ou sessionStorage
-  const GHT = qs.get('ght') || sessionStorage.getItem('ght') || '';
-
-  // NÃO codifique as barras do caminho:
-  const API_URL = `https://api.github.com/repos/${OWNER}/${REPO}/contents/${DONE_PATH}?ref=${encodeURIComponent(BRANCH)}`;
-  const RAW_URL = `https://raw.githubusercontent.com/${OWNER}/${REPO}/${BRANCH}/${DONE_PATH}`;
-
-  function headersGitHub(){
-    const h = { 'Cache-Control':'no-store' };
-    if (GHT) {
-      h.Authorization = `Bearer ${GHT}`;
-      h['X-GitHub-Api-Version'] = '2022-11-28';
+let inicio=null,modo='acoes',backoff=0;
+async function ciclo(){
+  try{
+    let runInfo=null;
+    if(modo==='acoes'){
+      if(runParam){
+        const r=await runPorId(runParam);
+        if(r.erro){if(r.erro===403){modo='marcador'}else throw new Error('HTTP '+r.erro)}
+        else runInfo=r.dados;
+      }else{
+        const r=await ultimoRunDaBranch();
+        if(r.erro){if(r.erro===403){modo='marcador'}else throw new Error('HTTP '+r.erro)}
+        else if(r.vazio){modo='marcador'}
+        else runInfo=r.dados;
+      }
+      if(runInfo){
+        const st=runInfo.status,conc=runInfo.conclusion;
+        const t0=runInfo.run_started_at?new Date(runInfo.run_started_at).getTime():null;
+        const tf=runInfo.updated_at?new Date(runInfo.updated_at).getTime():null;
+        if(!inicio) inicio=t0||Date.now();
+        const agora=Date.now();
+        if(st==='queued'){msgEl.textContent=`Em fila… (${fmtDur(agora-inicio)})`}
+        else if(st==='in_progress'){msgEl.textContent=`Executando… (${fmtDur(agora-inicio)})`}
+        else if(st==='completed'){
+          const status=(conc||'').toLowerCase();
+          msgEl.textContent=`Concluído em ${fmtDur((tf||agora)-(t0||agora))}`;
+          return irResultados(status||'success');
+        }else{msgEl.textContent=`Aguardando… (${fmtDur(agora-(inicio||agora))})`}
+      }
+    }else{
+      const m=await lerMarcador();
+      if(m.ok&&m.j&&m.j.done===true){return irResultados(String(m.j.status||'success').toLowerCase())}
+      if(m.erro===403){backoff=Math.min((backoff||1000)*2,10000)}
+      msgEl.textContent='Aguardando finalização…'
     }
-    return h;
-  }
-
-  async function getByAPI(){
-    const r = await fetch(API_URL + `&t=${Date.now()}`, { cache:'no-store', headers: headersGitHub() });
-    if (r.status===404) return {ok:false, notFound:true, src:'api'};
-    if (!r.ok)        return {ok:false, code:r.status,  src:'api'};
-    const j = await r.json();
-    if (j && j.type==='file' && j.encoding==='base64' && j.content){
-      const txt  = atob(j.content.replace(/\n/g,''));
-      try { return { ok:true, data: JSON.parse(txt), src:'api' }; }
-      catch { return { ok:false, badJson:true, src:'api' }; }
-    }
-    return { ok:false, notFile:true, src:'api' };
-  }
-
-  async function getByRAW(){
-    const r = await fetch(RAW_URL + `?t=${Date.now()}`, { cache:'no-store' });
-    if (r.status===404) return {ok:false, notFound:true, src:'raw'};
-    if (!r.ok)        return {ok:false, code:r.status,  src:'raw'};
-    try { return { ok:true, data: JSON.parse(await r.text()), src:'raw' }; }
-    catch { return { ok:false, badJson:true, src:'raw' }; }
-  }
-
-async function checkDone(){
-  // cache-busting + no-store para evitar cache do navegador/CDN
-  const url = DONE_URL + `?t=${Date.now()}`;
-  try {
-    const r = await fetch(url, { cache: 'no-store' });
-    if (r.status === 404) {
-      // ainda não existe; segue aguardando
-      setTimeout(checkDone, POLL_INTERVAL_MS);
-      return;
-    }
-    if (!r.ok) {
-      // erro temporário (ex.: 403 rate limit); mostra e continua tentando
-      errBox.classList.remove('hidden');
-      errBox.textContent = `Falha ao consultar marcador: HTTP ${r.status}`;
-      setTimeout(checkDone, POLL_INTERVAL_MS + 1000);
-      return;
-    }
-    const txt = await r.text();
-    const j = safeJson(txt);
-    if (j && j.done === true) {
-      const status = (j.status || '').toLowerCase();
-      location.href = `results.html?status=${encodeURIComponent(status)}`;
-      return;
-    }
-    // arquivo existe mas ainda não marcou done=true
-    setTimeout(checkDone, POLL_INTERVAL_MS);
-  } catch (e) {
-    errBox.classList.remove('hidden');
-    errBox.textContent = 'Erro de rede ao consultar marcador: ' + e.message;
-    setTimeout(checkDone, POLL_INTERVAL_MS + 1000);
+    setTimeout(ciclo, (modo==='marcador'?(2000+(backoff||0)):intervalo));
+  }catch(e){
+    errBox.classList.remove('hidden');errBox.textContent='Erro: '+e.message;
+    setTimeout(ciclo,3000);
   }
 }
-
-// Mensagem padrão
-msgEl.textContent = 'Aguarde enquanto a pipeline executa…';
-
-// Fail-safe: se demorar "demais", segue para results com status=timeout
-setTimeout(() => {
-  location.href = 'results.html?status=timeout';
-}, HARD_TIMEOUT_MS);
-
-// inicia o polling
-checkDone();
+msgEl.textContent='Preparando…';
+setTimeout(()=>{irResultados('timeout')},timeoutMs);
+ciclo();
 </script>
+
 </body>
 </html>
