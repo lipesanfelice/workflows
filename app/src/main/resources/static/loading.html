@@ -58,7 +58,45 @@ const HARD_TIMEOUT_MS  = MAX_WAIT_MIN * 60 * 1000;
 const msgEl  = document.getElementById('msg');
 const errBox = document.getElementById('errBox');
 
+
 function safeJson(s){ try { return JSON.parse(s); } catch { return null; } }
+
+// Lê token opcional (?ght=...) ou sessionStorage
+  const GHT = qs.get('ght') || sessionStorage.getItem('ght') || '';
+
+  // NÃO codifique as barras do caminho:
+  const API_URL = `https://api.github.com/repos/${OWNER}/${REPO}/contents/${DONE_PATH}?ref=${encodeURIComponent(BRANCH)}`;
+  const RAW_URL = `https://raw.githubusercontent.com/${OWNER}/${REPO}/${BRANCH}/${DONE_PATH}`;
+
+  function headersGitHub(){
+    const h = { 'Cache-Control':'no-store' };
+    if (GHT) {
+      h.Authorization = `Bearer ${GHT}`;
+      h['X-GitHub-Api-Version'] = '2022-11-28';
+    }
+    return h;
+  }
+
+  async function getByAPI(){
+    const r = await fetch(API_URL + `&t=${Date.now()}`, { cache:'no-store', headers: headersGitHub() });
+    if (r.status===404) return {ok:false, notFound:true, src:'api'};
+    if (!r.ok)        return {ok:false, code:r.status,  src:'api'};
+    const j = await r.json();
+    if (j && j.type==='file' && j.encoding==='base64' && j.content){
+      const txt  = atob(j.content.replace(/\n/g,''));
+      try { return { ok:true, data: JSON.parse(txt), src:'api' }; }
+      catch { return { ok:false, badJson:true, src:'api' }; }
+    }
+    return { ok:false, notFile:true, src:'api' };
+  }
+
+  async function getByRAW(){
+    const r = await fetch(RAW_URL + `?t=${Date.now()}`, { cache:'no-store' });
+    if (r.status===404) return {ok:false, notFound:true, src:'raw'};
+    if (!r.ok)        return {ok:false, code:r.status,  src:'raw'};
+    try { return { ok:true, data: JSON.parse(await r.text()), src:'raw' }; }
+    catch { return { ok:false, badJson:true, src:'raw' }; }
+  }
 
 async function checkDone(){
   // cache-busting + no-store para evitar cache do navegador/CDN

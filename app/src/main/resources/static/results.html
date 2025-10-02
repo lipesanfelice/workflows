@@ -124,10 +124,20 @@ const qs = new URLSearchParams(location.search);
 OWNER  = qs.get('owner')  || OWNER;
 REPO   = qs.get('repo')   || REPO;
 BRANCH = qs.get('branch') || BRANCH;
+const GHT  = qs.get('ght') || sessionStorage.getItem('ght') || '';
 
 const STATUS_PARAM = (qs.get('status') || '').toLowerCase(); // success|failure|cancelled|timeout (vindo do loading)
 document.getElementById('chipRepo').textContent   = `repo: ${OWNER}/${REPO}`;
 document.getElementById('chipBranch').textContent = `branch: ${BRANCH}`;
+
+function ghHeaders(){
+    const h = { 'Cache-Control':'no-store' };
+    if (GHT) {
+      h.Authorization = `Bearer ${GHT}`;
+      h['X-GitHub-Api-Version'] = '2022-11-28';
+    }
+    return h;
+}
 
 const chipStatus = document.getElementById('chipStatus');
 if (STATUS_PARAM) {
@@ -168,37 +178,38 @@ function tempoFmt(ms){
 
 /** GitHub: lista recursivamente via Contents API */
 async function listGithubPath(path){
-  const url = `${GITHUB_API}/repos/${OWNER}/${REPO}/contents/${encodeURIComponent(path)}?ref=${encodeURIComponent(BRANCH)}`;
-  const r = await fetch(url, { cache:'no-store' });
-  if (r.status === 404) return []; // pasta não existe ainda
-  if (!r.ok) throw new Error('HTTP '+r.status+' ao listar '+path);
-  const j = await r.json();
-  // Pode vir um único arquivo (objeto) ou um array (pasta)
-  if (Array.isArray(j)) {
-    // expande subpastas
-    const files = [];
-    for (const item of j) {
-      if (item.type === 'file') files.push(item);
-      if (item.type === 'dir') {
-        const deeper = await listGithubPath(item.path);
-        files.push(...deeper);
-      }
-    }
-    return files;
-  } else if (j && j.type === 'file') {
-    return [j];
-  }
-  return [];
-}
+    // NÃO codifique as barras do path; apenas o ref (branch)
+    const url = `https://api.github.com/repos/${OWNER}/${REPO}/contents/${path}?ref=${encodeURIComponent(BRANCH)}&t=${Date.now()}`;
+    const r = await fetch(url, { cache:'no-store', headers: ghHeaders() });
+    if (r.status === 404) return [];
+    if (!r.ok) throw new Error('HTTP '+r.status+' ao listar '+path);
+    const j = await r.json();
 
-/** GitHub: baixa JSON bruto (ex.: relatorio-sonar.json) */
-async function fetchRawJson(path){
-  const url = `https://raw.githubusercontent.com/${OWNER}/${REPO}/${BRANCH}/${path}`;
-  const r = await fetch(url, { cache:'no-store' });
-  if (!r.ok) throw new Error('HTTP '+r.status+' em '+path);
-  const txt = await r.text();
-  try { return JSON.parse(txt); } catch { return null; }
-}
+    if (Array.isArray(j)) {
+      const files = [];
+      for (const item of j) {
+        if (item.type === 'file') files.push(item);
+        else if (item.type === 'dir') {
+          // recursivo
+          const deeper = await listGithubPath(item.path);
+          files.push(...deeper);
+        }
+      }
+      return files;
+    } else if (j && j.type === 'file') {
+      return [j];
+    }
+    return [];
+  }
+
+  // Se você baixar JSON bruto:
+  async function fetchRawJson(path){
+    const url = `https://raw.githubusercontent.com/${OWNER}/${REPO}/${BRANCH}/${path}?t=${Date.now()}`;
+    // RAW não aceita header Authorization, então use Contents API se o repo for privado.
+    const r = await fetch(url, { cache:'no-store' });
+    if (!r.ok) throw new Error('HTTP '+r.status+' em '+path);
+    try { return JSON.parse(await r.text()); } catch { return null; }
+  }
 
 function fileCard(item){
   const name = item.name || item.path.split('/').pop();
