@@ -1,25 +1,20 @@
-public class ConversorUnidades {
+public class ConversorTemperatura {
     
-    public static double metroParaCentimetro(double metro) {
-        return metro * 100;
+    public static double celsiusParaFahrenheit(double celsius) {
+        return (celsius * 9/5) + 32;
     }
     
-    public static double centimetroParaMetro(double centimetro) {
-        return centimetro / 100;
+    public static double fahrenheitParaCelsius(double fahrenheit) {
+        return (fahrenheit - 32) * 5/9;
     }
     
-    public static double kilometroParaMetro(double kilometro) {
-        return kilometro * 1000;
-    }
-    
-    public static double litroParaMililitro(double litro) {
-        return litro * 1000;
+    public static double celsiusParaKelvin(double celsius) {
+        return celsius + 273.15;
     }
     
     public static void main(String[] args) {
-        System.out.println("2 metros em centímetros: " + metroParaCentimetro(2));
-        System.out.println("150 cm em metros: " + centimetroParaMetro(150));
-        System.out.println("3.5 km em metros: " + kilometroParaMetro(3.5));
-        System.out.println("2 litros em ml: " + litroParaMililitro(2));
+        System.out.println("25°C para Fahrenheit: " + celsiusParaFahrenheit(25));
+        System.out.println("77°F para Celsius: " + fahrenheitParaCelsius(77));
+        System.out.println("0°C para Kelvin: " + celsiusParaKelvin(0));
     }
 }
