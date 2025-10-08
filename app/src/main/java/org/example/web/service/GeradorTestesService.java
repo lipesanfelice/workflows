@@ -42,6 +42,9 @@ public class GeradorTestesService {
             String sonarJson = "";
             try { sonarJson = Files.readString(Path.of(sonarJsonPath)); } catch (Exception ignored) {}
 
+            var plano = org.example.util.PriorizadorSonar.gerarPlano(sonarJson);
+            String metasPriorizacao = org.example.util.PriorizadorSonar.metasComoTexto(plano);
+
             List<Path> arquivos = listarJava(baseEntrada);
             Collections.sort(arquivos);
 
@@ -60,7 +63,7 @@ public class GeradorTestesService {
                     try {
                         String codigoAlvo = LeitorCodigo.lerAteLimite(arq, maxCode);
                         String sonarCut   = SonarUtil.extrairTrechoPorArquivo(sonarJson, fileName, maxSonar);
-                        String prompt     = Prompts.montarPromptGroqPorArquivo(sonarCut, arq.toString(), codigoAlvo);
+                        String prompt     = Prompts.montarPromptGroqPorArquivo(metasPriorizacao, sonarCut, arq.toString(), codigoAlvo);
 
                         var resp = ia.gerar(prompt);
 

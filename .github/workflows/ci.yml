@@ -47,13 +47,6 @@ jobs:
     - name: Conceder permissão para o wrapper
       run: chmod +x gradlew
 
-    # - name: Enviar cobertura para Codecov (somente entrada-usuario)
-    #   uses: codecov/codecov-action@v4
-    #   with:
-    #     token: ${{ secrets.CODECOV_TOKEN }}
-    #     files: app/build/reports/jacoco/test/jacocoTestReport.xml
-    #     fail_ci_if_error: true
-
     - name: SonarQube (somente entrada-usuario)
       env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
@@ -138,8 +131,8 @@ jobs:
         GROQ_MODELO: llama-3.1-8b-instant
         SONAR_RELATORIO_JSON: ${{ github.workspace }}/app/entrada-usuario/relatorio-sonar.json
         CODIGO_FONTE_DIR: ${{ github.workspace }}/app/entrada-usuario
-        IA_SLEEP_MS: '8000'          # ~8s entre arquivos (evita TPM 6000)
-        IA_CODE_MAX_CHARS: '3000'    # pode ajustar
+        IA_SLEEP_MS: '8000'          
+        IA_CODE_MAX_CHARS: '3000'    
         IA_SONAR_MAX_CHARS: '2000'
       run: |
         ./gradlew -p app bootRun --args='--acao=gerar-testes --spring.main.web-application-type=none --app.entrada.diretorio=${{ github.workspace }}/app/entrada-usuario'
@@ -319,6 +312,3 @@ jobs:
           git add app/entrada-usuario/done.json
           git commit -m "mark: done [skip ci]" || echo "nada a commitar"
           git push
-
-
-
