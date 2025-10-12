@@ -33,8 +33,6 @@ public class ExtratorCodecov {
 
             JSONObject json = new JSONObject(resposta.toString());
 
-
-            //JSONObject commit = json.getJSONObject("commit");
             // Pega o primeiro commit da lista "results"
             JSONObject commit = json.getJSONArray("results").getJSONObject(0);
 

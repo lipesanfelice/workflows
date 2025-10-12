@@ -122,7 +122,7 @@
 
     <footer class="bg-gray-800 text-white py-6">
       <div class="container mx-auto px-4 text-center">
-        <p>&copy; 2023 CodeAnalyzer. Todos os direitos reservados.</p>
+        <p>&copy; 2025 CodeAnalyzer. Todos os direitos reservados.</p>
       </div>
     </footer>
   </div>
@@ -337,15 +337,6 @@ async function carregarResultados(){
         }
       }
     }
-
-    // RELATÓRIO SONAR (opcional)
-    try {
-      const sonar = await fetchRawJson(SONAR_JSON);
-      if (sonar && (sonar.coverage || sonar.cobertura || sonar.total_coverage)) {
-        const cov = sonar.coverage || sonar.cobertura || sonar.total_coverage;
-        kpiCobertura.textContent = (typeof cov === 'number') ? (cov.toFixed(2)+'%') : String(cov);
-      }
-    } catch {}
 
     escreveStatus('Resultados atualizados', 'ok');
   } catch (e) {

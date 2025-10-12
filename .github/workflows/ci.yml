@@ -47,7 +47,7 @@ jobs:
     - name: Conceder permissão para o wrapper
       run: chmod +x gradlew
 
-    - name: SonarQube (somente entrada-usuario)
+    - name: SonarQube
       env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
       run: |
@@ -144,10 +144,6 @@ jobs:
         find "${{ github.workspace }}/app/entrada-usuario/testes_explicações/tests" -type f -name "*.java" | sed -n '1,200p'
         echo "Relatório:"
         cat "${{ github.workspace }}/app/entrada-usuario/testes_explicações/relatorio.txt" || true
-
-    # opcional: rodar testes + cobertura agora
-    # - name: Testes + JaCoCo
-    #   run: ./gradlew -p app test jacocoTestReport
 
     - name: Verificar presença de fontes e testes do usuário
       id: check_usuario

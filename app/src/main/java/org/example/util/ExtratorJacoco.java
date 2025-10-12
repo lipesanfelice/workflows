@@ -15,8 +15,8 @@ public class ExtratorJacoco {
                 return;
             }
             DocumentBuilderFactory dbFactory = DocumentBuilderFactory.newInstance();
-            dbFactory.setValidating(false); // não validar o XML com DTD
-            dbFactory.setFeature("http://apache.org/xml/features/nonvalidating/load-external-dtd", false); // não carregar DTD externa
+            dbFactory.setValidating(false);
+            dbFactory.setFeature("http://apache.org/xml/features/nonvalidating/load-external-dtd", false); 
             DocumentBuilder dBuilder = dbFactory.newDocumentBuilder();
             Document doc = dBuilder.parse(xmlFile);
 

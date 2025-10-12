@@ -1,20 +1,20 @@
-public class ConversorMoedas {
+public class ConversorTemperatura {
     
-    public static double realParaDolar(double real) {
-        return real * 0.19; // Cotação aproximada
+    public static double celsiusParaFahrenheit(double celsius) {
+        return (celsius * 9/5) + 32;
     }
     
-    public static double dolarParaReal(double dolar) {
-        return dolar * 5.25; // Cotação aproximada
+    public static double fahrenheitParaCelsius(double fahrenheit) {
+        return (fahrenheit - 32) * 5/9;
     }
     
-    public static double realParaEuro(double real) {
-        return real * 0.18; // Cotação aproximada
+    public static double celsiusParaKelvin(double celsius) {
+        return celsius + 273.15;
     }
     
     public static void main(String[] args) {
-        System.out.println("100 reais em dólar: $" + realParaDolar(100));
-        System.out.println("50 dólares em reais: R$" + dolarParaReal(50));
-        System.out.println("200 reais em euro: €" + realParaEuro(200));
+        System.out.println("25°C para Fahrenheit: " + celsiusParaFahrenheit(25));
+        System.out.println("77°F para Celsius: " + fahrenheitParaCelsius(77));
+        System.out.println("0°C para Kelvin: " + celsiusParaKelvin(0));
     }
 }
