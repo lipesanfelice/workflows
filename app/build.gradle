@@ -94,6 +94,7 @@ configurations {
 
 def dirEntrada = file('entrada-usuario')
 def dirTestsIA = file('entrada-usuario/testes_explicações/tests')
+def dirTestsUsuario = file('entrada-usuario/testes')
 def dirWork = layout.buildDirectory.dir('usuario-src').get().asFile
 def dirMain = new File(dirWork, 'src/main/java')
 def dirTest = new File(dirWork, 'src/test/java')
@@ -259,6 +260,7 @@ tasks.register('resolverDepsUsuario') {
 tasks.register('organizarUsuario') {
     inputs.files(fileTree(dirEntrada) { include '**/*.java' })
     inputs.files(fileTree(dirTestsIA) { include '**/*.java' })
+    inputs.files(fileTree(dirTestsUsuario) { include '**/*.java' })
     outputs.dir(dirWork)
 
     doLast {
@@ -329,7 +331,9 @@ tasks.register('organizarUsuario') {
         def fontesUsuario = []
         def testesIA = []
         inputs.files.files.each { File origem ->
-            boolean isTeste = origem.toPath().startsWith(dirTestsIA.toPath())
+            // boolean isTeste = origem.toPath().startsWith(dirTestsIA.toPath())
+            boolean isTeste = origem.toPath().startsWith(dirTestsIA.toPath()) ||
+                            origem.toPath().startsWith(dirTestsUsuario.toPath())
             String texto = origem.getText('UTF-8')
             (isTeste ? testesIA : fontesUsuario) << [file: origem, text: texto]
         }
