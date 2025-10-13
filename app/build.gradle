@@ -1385,14 +1385,12 @@ jacoco {
 }
 
 tasks.register('jacocoRelatorioUsuario', JacocoReport) {
-    dependsOn 'testUsuario'  // que por sua vez depende das duas
+    dependsOn 'testUsuario'
 
-    def execs = files(
-        layout.buildDirectory.file("jacoco/testUsuarioJunit.exec"),
-        layout.buildDirectory.file("jacoco/testUsuarioNg.exec")
-    ).filter { it != null && it.asFile.exists() }
+    def execJunit = layout.buildDirectory.file("jacoco/testUsuarioJunit.exec")
+    def execNg    = layout.buildDirectory.file("jacoco/testUsuarioNg.exec")
 
-    executionData.setFrom(execs)
+    executionData.setFrom(files(execJunit, execNg))
     classDirectories.setFrom(sourceSets.usuario.output.classesDirs)
 
     sourceDirectories.setFrom(files(file('entrada-usuario')))
@@ -1406,12 +1404,18 @@ tasks.register('jacocoRelatorioUsuario', JacocoReport) {
         xml.outputLocation.set(file('entrada-usuario/jacoco-relatorio/jacoco.xml'))
     }
 
-    onlyIf { !executionData.files.isEmpty() }
+    onlyIf {
+        execJunit.get().asFile.exists() || execNg.get().asFile.exists()
+    }
+
     doFirst {
         file('entrada-usuario/jacoco-relatorio/html').mkdirs()
-        if (executionData.files.isEmpty()) logger.lifecycle('jacoco: nenhum executionData encontrado; relatório será omitido')
+        if (!(execJunit.get().asFile.exists() || execNg.get().asFile.exists())) {
+            logger.lifecycle('jacoco: nenhum executionData encontrado; relatório será omitido')
+        }
     }
 }
+
 
 
 tasks.register('usuarioCobertura') {
