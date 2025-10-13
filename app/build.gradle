@@ -291,6 +291,15 @@ tasks.register('organizarUsuario') {
             return nomes
         }
 
+        def stripMarkdownFences = { String s ->
+            if (s == null) return s
+            // remove linhas de abertura tipo ``` ou ```java
+            s = s.replaceAll('(?m)^```\\w*\\s*\\r?\\n?', '')
+            // remove linhas de fechamento ```
+            s = s.replaceAll('(?m)^```\\s*$', '')
+            return s
+        }
+
         // Carrega tudo
         def fontesUsuario = []
         def testesIA = []
@@ -566,6 +575,8 @@ tasks.register('organizarUsuario') {
 
         def gravar = { String texto, boolean isTeste ->
             if (isTeste) {
+                // limpeza extra por garantia
+                texto = stripMarkdownFences(texto)
                 texto = ajustarTesteParaPacoteUsuario(texto)
             }
             String pacote = extrairPacote(texto)
@@ -586,24 +597,45 @@ tasks.register('organizarUsuario') {
         }
 
         // Se o teste tentar acessar .users.get(...).isActive = X; troca por TestHooks.setActive(...)
+        // testesIA = testesIA.collect { ti ->
+        //     String t = ti.text
+        //     String patched = t.replaceAll(
+        //         /(\b[A-Za-z_][A-Za-z0-9_]*)\.users\.get\(([^)]+)\)\.isActive\s*=\s*(true|false)\s*;/,
+        //         'TestHooks.setActive($1, $2, $3);'
+        //     )
+
+        //     // se o teste referir LoginAttempt, injeta stub
+        //     if (patched.contains("LoginAttempt")) {
+        //         injetarStubLoginAttempt()
+        //     }
+        //     // se precisou setActive, injeta TestHooks
+        //     if (!patched.equals(t) || patched.contains("TestHooks.setActive(")) {
+        //         injetarTestHooks()
+        //     }
+
+        //     [file: ti.file, text: patched]
+        // }
+
         testesIA = testesIA.collect { ti ->
-            String t = ti.text
+            // 1) limpa cercas de Markdown
+            String t = stripMarkdownFences(ti.text)
+
+            // 2) patches existentes
             String patched = t.replaceAll(
-                /(\b[A-Za-z_][A-Za-z0-9_]*)\.users\.get\(([^)]+)\)\.isActive\s*=\s*(true|false)\s*;/,
+                /(\\b[A-Za-z_][A-Za-z0-9_]*)\\.users\\.get\\(([^)]+)\\)\\.isActive\\s*=\\s*(true|false)\\s*;/,
                 'TestHooks.setActive($1, $2, $3);'
             )
 
-            // se o teste referir LoginAttempt, injeta stub
             if (patched.contains("LoginAttempt")) {
                 injetarStubLoginAttempt()
             }
-            // se precisou setActive, injeta TestHooks
             if (!patched.equals(t) || patched.contains("TestHooks.setActive(")) {
                 injetarTestHooks()
             }
 
             [file: ti.file, text: patched]
         }
+
 
 
 
