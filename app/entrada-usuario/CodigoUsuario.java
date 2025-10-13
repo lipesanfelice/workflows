@@ -1,20 +1,20 @@
-public class ConversorTemperatura {
+public class CalculadoraGeometrica {
     
-    public static double celsiusParaFahrenheit(double celsius) {
-        return (celsius * 9/5) + 32;
+    public static double areaCirculo(double raio) {
+        return Math.PI * raio * raio;
     }
     
-    public static double fahrenheitParaCelsius(double fahrenheit) {
-        return (fahrenheit - 32) * 5/9;
+    public static double areaRetangulo(double base, double altura) {
+        return base * altura;
     }
     
-    public static double celsiusParaKelvin(double celsius) {
-        return celsius + 273.15;
+    public static double areaTriangulo(double base, double altura) {
+        return (base * altura) / 2;
     }
     
     public static void main(String[] args) {
-        System.out.println("25°C para Fahrenheit: " + celsiusParaFahrenheit(25));
-        System.out.println("77°F para Celsius: " + fahrenheitParaCelsius(77));
-        System.out.println("0°C para Kelvin: " + celsiusParaKelvin(0));
+        System.out.println("Área do círculo (raio 5): " + areaCirculo(5));
+        System.out.println("Área do retângulo (4x6): " + areaRetangulo(4, 6));
+        System.out.println("Área do triângulo (3x4): " + areaTriangulo(3, 4));
     }
 }

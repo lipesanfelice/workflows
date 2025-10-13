@@ -8,6 +8,7 @@ plugins {
 }
 
 import org.gradle.testing.jacoco.plugins.JacocoTaskExtension
+import java.util.regex.Pattern
 repositories {
     mavenCentral()
 }
@@ -291,14 +292,38 @@ tasks.register('organizarUsuario') {
             return nomes
         }
 
-        def stripMarkdownFences = { String s ->
+        def sanitizeJavaTest = { String s ->
             if (s == null) return s
-            // remove linhas de abertura tipo ``` ou ```java
             s = s.replaceAll('(?m)^```\\w*\\s*\\r?\\n?', '')
-            // remove linhas de fechamento ```
             s = s.replaceAll('(?m)^```\\s*$', '')
-            return s
+            s = s.replace('\uFEFF', '')
+
+            def lines = s.readLines()
+
+            def isValidStart = { String ln ->
+                return (ln ==~ /\s*/) ||                        // vazia
+                    (ln ==~ /\s*package\s+.*/) ||
+                    (ln ==~ /\s*import\s+.*/)  ||
+                    (ln ==~ /\s*@.*/)          ||
+                    (ln ==~ /\s*(public\s+)?(class|interface|enum|record)\b.*/) ||
+                    (ln ==~ /\s*\/\/.*/) || (ln ==~ /\s*\/\*.*/) || (ln ==~ /\s*\*.*/)
+            }
+
+            // ✅ Regex sem slashy: evita erro do parser
+            def fileNameOnly = Pattern.compile('^[A-Za-z0-9_.\\/\\-]+\\.java$')
+
+            while (!lines.isEmpty() && !isValidStart(lines[0])) {
+                def head = lines[0].trim()
+                if (fileNameOnly.matcher(head).matches()) {  // "Algo.java" sozinho no topo
+                    lines.remove(0)
+                    continue
+                }
+                lines.remove(0) // qualquer lixo antes do primeiro token Java válido
+            }
+            return lines.join('\n')
         }
+
+
 
         // Carrega tudo
         def fontesUsuario = []
@@ -352,7 +377,6 @@ tasks.register('organizarUsuario') {
         }
 
 
-        // ---- dentro de organizarUsuario { ... } substitua a função ajustarTesteParaPacoteUsuario por esta: ----
         def ajustarTesteParaPacoteUsuario = { String texto ->
             // 1) alinhar pacote
             String pkgTeste = extrairPacote(texto)
@@ -575,8 +599,7 @@ tasks.register('organizarUsuario') {
 
         def gravar = { String texto, boolean isTeste ->
             if (isTeste) {
-                // limpeza extra por garantia
-                texto = stripMarkdownFences(texto)
+                texto = sanitizeJavaTest(texto)
                 texto = ajustarTesteParaPacoteUsuario(texto)
             }
             String pacote = extrairPacote(texto)
@@ -617,24 +640,20 @@ tasks.register('organizarUsuario') {
         // }
 
         testesIA = testesIA.collect { ti ->
-            // 1) limpa cercas de Markdown
-            String t = stripMarkdownFences(ti.text)
-
-            // 2) patches existentes
+            String t = sanitizeJavaTest(ti.text)
             String patched = t.replaceAll(
                 /(\\b[A-Za-z_][A-Za-z0-9_]*)\\.users\\.get\\(([^)]+)\\)\\.isActive\\s*=\\s*(true|false)\\s*;/,
                 'TestHooks.setActive($1, $2, $3);'
             )
-
             if (patched.contains("LoginAttempt")) {
                 injetarStubLoginAttempt()
             }
             if (!patched.equals(t) || patched.contains("TestHooks.setActive(")) {
                 injetarTestHooks()
             }
-
             [file: ti.file, text: patched]
         }
+
 
 
 
