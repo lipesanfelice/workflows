@@ -894,6 +894,12 @@ dependencies {
     testImplementation 'org.mockito:mockito-core:5.13.0'
     testImplementation 'org.hamcrest:hamcrest:2.2'
     testImplementation 'org.assertj:assertj-core:3.26.0'
+
+    usuarioTestImplementation platform('org.junit:junit-bom:5.10.2')
+    usuarioTestImplementation 'org.junit.jupiter:junit-jupiter'
+    usuarioTestRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+    usuarioImplementation fileTree('entrada-usuario/libs') { include '*.jar' }
+    testImplementation 'org.mockito:mockito-core:5.13.0'
 }
 
 tasks.withType(Test).configureEach {
@@ -1332,38 +1338,66 @@ tasks.named(sourceSets.usuarioTest.compileJavaTaskName) {
     dependsOn 'organizarUsuario', 'resolverDepsUsuario', tasks.named(sourceSets.usuario.classesTaskName)
 }
 
-def temTestNg
-try {
-    temTestNg = configurations.usuarioTestRuntimeClasspath.resolve().any { it.name.startsWith('testng-') } || configurations.testRuntimeClasspath.resolve().any { it.name.startsWith('testng-') }
-} catch (Throwable ignore) {
-    temTestNg = false
+// JUnit (Jupiter + Vintage)
+tasks.register('testUsuarioJunit', Test) {
+    dependsOn tasks.named(sourceSets.usuario.classesTaskName),
+              tasks.named(sourceSets.usuarioTest.classesTaskName)
+
+    testClassesDirs = sourceSets.usuarioTest.output.classesDirs
+    classpath       = sourceSets.usuarioTest.runtimeClasspath
+
+    useJUnitPlatform()
+    ignoreFailures = true
+
+    jacoco { destinationFile = layout.buildDirectory.file("jacoco/testUsuarioJunit.exec").get().asFile }
+
+    afterSuite { desc, result ->
+        if (!desc.parent) println "Resumo testUsuarioJunit -> total: ${result.testCount}, passaram: ${result.successfulTestCount}, falharam: ${result.failedTestCount}, skipped: ${result.skippedTestCount}"
+    }
 }
 
-tasks.register('testUsuario', Test) {
-    dependsOn tasks.named(sourceSets.usuario.classesTaskName), tasks.named(sourceSets.usuarioTest.classesTaskName)
+// TestNG (se não houver testes TestNG, roda 0 testes sem erro)
+tasks.register('testUsuarioNg', Test) {
+    dependsOn tasks.named(sourceSets.usuario.classesTaskName),
+              tasks.named(sourceSets.usuarioTest.classesTaskName)
+
     testClassesDirs = sourceSets.usuarioTest.output.classesDirs
-    classpath = sourceSets.usuarioTest.runtimeClasspath
-    if (temTestNg) { useTestNG() } else { useJUnitPlatform() }
+    classpath       = sourceSets.usuarioTest.runtimeClasspath
+
+    useTestNG()
     ignoreFailures = true
-    jacoco { destinationFile = layout.buildDirectory.file("jacoco/testUsuario.exec").get().asFile }
-    afterSuite { desc, result -> if (!desc.parent) { println "Resumo testUsuario -> total: ${result.testCount}, passaram: ${result.successfulTestCount}, falharam: ${result.failedTestCount}, skipped: ${result.skippedTestCount}" } }
-    finalizedBy('jacocoRelatorioUsuario')
+
+    jacoco { destinationFile = layout.buildDirectory.file("jacoco/testUsuarioNg.exec").get().asFile }
+
+    afterSuite { desc, result ->
+        if (!desc.parent) println "Resumo testUsuarioNg -> total: ${result.testCount}, passaram: ${result.successfulTestCount}, falharam: ${result.failedTestCount}, skipped: ${result.skippedTestCount}"
+    }
 }
+
+// Alias para manter compatibilidade com quem chama "testUsuario"
+tasks.register('testUsuario') {
+    dependsOn 'testUsuarioJunit', 'testUsuarioNg'
+}
+
 
 jacoco {
     toolVersion = '0.8.12'
 }
 
 tasks.register('jacocoRelatorioUsuario', JacocoReport) {
-    dependsOn 'testUsuario'
+    dependsOn 'testUsuario'  // que por sua vez depende das duas
+
     def execs = files(
-        fileTree("$buildDir") { include '**/*.exec' },
-        layout.buildDirectory.file("jacoco/testUsuario.exec")
-    ).filter { it != null && it.exists() }
+        layout.buildDirectory.file("jacoco/testUsuarioJunit.exec"),
+        layout.buildDirectory.file("jacoco/testUsuarioNg.exec")
+    ).filter { it != null && it.asFile.exists() }
+
     executionData.setFrom(execs)
     classDirectories.setFrom(sourceSets.usuario.output.classesDirs)
+
     sourceDirectories.setFrom(files(file('entrada-usuario')))
     additionalSourceDirs.setFrom(sourceDirectories)
+
     reports {
         xml.required.set(true)
         html.required.set(true)
@@ -1371,9 +1405,14 @@ tasks.register('jacocoRelatorioUsuario', JacocoReport) {
         html.outputLocation.set(file('entrada-usuario/jacoco-relatorio/html'))
         xml.outputLocation.set(file('entrada-usuario/jacoco-relatorio/jacoco.xml'))
     }
+
     onlyIf { !executionData.files.isEmpty() }
-    doFirst { file('entrada-usuario/jacoco-relatorio/html').mkdirs(); if (executionData.files.isEmpty()) logger.lifecycle('jacoco: nenhum executionData encontrado; relatório será omitido') }
+    doFirst {
+        file('entrada-usuario/jacoco-relatorio/html').mkdirs()
+        if (executionData.files.isEmpty()) logger.lifecycle('jacoco: nenhum executionData encontrado; relatório será omitido')
+    }
 }
+
 
 tasks.register('usuarioCobertura') {
     dependsOn 'testUsuario'
@@ -1385,14 +1424,6 @@ tasks.withType(Test).configureEach {
         exceptionFormat "full"
         showStandardStreams = false
     }
-}
-
-dependencies {
-    usuarioTestImplementation platform('org.junit:junit-bom:5.10.2')
-    usuarioTestImplementation 'org.junit.jupiter:junit-jupiter'
-    usuarioTestRuntimeOnly 'org.junit.platform:junit-platform-launcher'
-    usuarioImplementation fileTree('entrada-usuario/libs') { include '*.jar' }
-    testImplementation 'org.mockito:mockito-core:5.13.0'
 }
 
 tasks.withType(JavaExec).configureEach {
