@@ -825,7 +825,76 @@ tasks.register('jacocoRelatorioUsuario', JacocoReport) {
     }
 }
 
+tasks.register("sanearTestesUsuario") {
+    doLast {
+        def raiz = file("$buildDir/usuario-src/src/test/java")
+        if (!raiz.exists()) return
+        raiz.eachFileRecurse { f ->
+            if (f.isFile() && f.name.endsWith(".java")) {
+                def txt = f.getText("UTF-8")
+                txt = txt.replaceAll("^\uFEFF", "")
+                def linhas = txt.readLines()
+                def filtradas = []
+                linhas.each { L ->
+                    def t = L.trim()
+                    if (t.matches("[\\w./-]+\\.java") && !t.contains("package") && !t.contains("class")) { }
+                    else { filtradas << L }
+                }
+                def novo = filtradas.join("\n").trim()
+                if (!novo.contains("\npackage ") && !novo.startsWith("package ")) {
+                    def rel = raiz.toPath().relativize(f.toPath()).toString()
+                    def caminho = rel.replace("\\", "/")
+                    def pacote = caminho.contains("/") ? caminho.substring(0, caminho.lastIndexOf("/")).replace("/", ".") : "org.example.generated"
+                    if (pacote == "" ) pacote = "org.example.generated"
+                    novo = "package ${pacote};\n\n" + novo
+                }
+                f.setText(novo, "UTF-8")
+            }
+        }
+    }
+}
 
+tasks.named("compileUsuarioTestJava") {
+    dependsOn("sanearTestesUsuario")
+    options.encoding = "UTF-8"
+}
+
+tasks.withType(Test).configureEach {
+    useJUnitPlatform()
+    testLogging {
+        events "passed","skipped","failed"
+        showStandardStreams = false
+        exceptionFormat "short"
+    }
+}
+
+tasks.named("testUsuario") {
+    useJUnitPlatform()
+    include "**/*Test.class", "**/*Tests.class", "**/*IT.class"
+    failFast = false
+}
+
+tasks.register("jacocoRelatorioGeral", JacocoReport) {
+    dependsOn(tasks.findByName("test"), tasks.findByName("testUsuario"))
+    executionData fileTree(projectDir) {
+        include "**/build/jacoco/*.exec", "**/jacoco/*.exec"
+    }
+    sourceDirectories.from = files(sourceSets.main.allSource.srcDirs, sourceSets.findByName("usuario")?.allSource?.srcDirs ?: [])
+    classDirectories.from = files(
+        fileTree(dir: "$buildDir/classes/java/main"),
+        fileTree(dir: "$buildDir/classes/java/usuario")
+    )
+    reports {
+        xml.required = true
+        html.required = true
+        csv.required = false
+        html.outputLocation = layout.buildDirectory.dir("reports/jacoco/geral").get().asFile
+    }
+}
+
+tasks.named("jacocoRelatorioUsuario") {
+    finalizedBy("jacocoRelatorioGeral")
+}
 
 
 tasks.register('usuarioCobertura') {
