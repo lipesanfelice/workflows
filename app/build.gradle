@@ -825,7 +825,8 @@ tasks.register('jacocoRelatorioUsuario', JacocoReport) {
     }
 }
 
-tasks.register("sanearTestesUsuario") {
+// sanearTestesUsuario — registra se não existir; senão, apenas configura
+def configurarSanear = { ->
     doLast {
         def baseMain = file("$buildDir/usuario-src/src/main/java")
         def baseTest = file("$buildDir/usuario-src/src/test/java")
@@ -885,6 +886,55 @@ tasks.register("sanearTestesUsuario") {
         }
     }
 }
+if (tasks.findByName("sanearTestesUsuario") == null) {
+    tasks.register("sanearTestesUsuario") { configurarSanear.delegate = it; configurarSanear() }
+} else {
+    tasks.named("sanearTestesUsuario").configure { configurarSanear.delegate = it; configurarSanear() }
+}
+
+tasks.named("compileUsuarioTestJava") {
+    dependsOn("sanearTestesUsuario")
+    options.encoding = "UTF-8"
+}
+
+// jacocoRelatorioUsuario — registra se não existir; senão, configura
+jacoco { toolVersion = "0.8.12" }
+
+def configurarJacocoRelUsuario = { ->
+    dependsOn("testUsuario")
+    doFirst { file("$projectDir/entrada-usuario/jacoco-relatorio").mkdirs() }
+    executionData fileTree(dir: "$buildDir/jacoco", include: ["*.exec"])
+    sourceDirectories.from = files(
+        sourceSets.main.allSource.srcDirs,
+        (sourceSets.findByName("usuario")?.allSource?.srcDirs ?: [])
+    )
+    classDirectories.from = files(
+        fileTree(dir: "$buildDir/classes/java/main"),
+        fileTree(dir: "$buildDir/classes/java/usuario")
+    )
+    reports {
+        xml.required = true
+        xml.outputLocation = file("$projectDir/entrada-usuario/jacoco-relatorio/jacoco.xml")
+        html.required = true
+        html.outputLocation = file("$projectDir/entrada-usuario/jacoco-relatorio/html")
+        csv.required = false
+    }
+}
+if (tasks.findByName("jacocoRelatorioUsuario") == null) {
+    tasks.register("jacocoRelatorioUsuario", JacocoReport) { configurarJacocoRelUsuario.delegate = it; configurarJacocoRelUsuario() }
+} else {
+    tasks.named("jacocoRelatorioUsuario", JacocoReport).configure { configurarJacocoRelUsuario.delegate = it; configurarJacocoRelUsuario() }
+}
+
+// testUsuario sempre cria o .exec no caminho esperado e chama o relatório
+tasks.named("testUsuario") {
+    useJUnitPlatform()
+    outputs.upToDateWhen { false }
+    doFirst { file("$buildDir/jacoco").mkdirs() }
+    jacoco { destinationFile = file("$buildDir/jacoco/testUsuario.exec") }
+    finalizedBy("jacocoRelatorioUsuario")
+}
+
 
 tasks.named("compileUsuarioTestJava") {
     dependsOn("sanearTestesUsuario")
@@ -902,47 +952,29 @@ tasks.withType(Test).configureEach {
     }
 }
 
-jacoco {
-    toolVersion = "0.8.12"
-}
-
 tasks.named("testUsuario") {
     useJUnitPlatform()
-    outputs.upToDateWhen { false }
-    doFirst { file("$buildDir/jacoco").mkdirs() }
-    jacoco {
-        destinationFile = file("$buildDir/jacoco/testUsuario.exec")
-    }
-    finalizedBy("jacocoRelatorioUsuario")
+    include "**/*Test.class", "**/*Tests.class", "**/*IT.class"
+    failFast = false
 }
 
-tasks.register("jacocoRelatorioUsuario", JacocoReport) {
-    dependsOn("testUsuario")
-    doFirst { file("$projectDir/entrada-usuario/jacoco-relatorio").mkdirs() }
-
-    executionData fileTree(dir: "$buildDir/jacoco", include: ["*.exec"])
-
-    def fontes = files(
-        sourceSets.main.allSource.srcDirs,
-        (sourceSets.findByName("usuario")?.allSource?.srcDirs ?: [])
-    )
-    def classes = files(
+tasks.register("jacocoRelatorioGeral", JacocoReport) {
+    dependsOn(tasks.findByName("test"), tasks.findByName("testUsuario"))
+    executionData fileTree(projectDir) {
+        include "**/build/jacoco/*.exec", "**/jacoco/*.exec"
+    }
+    sourceDirectories.from = files(sourceSets.main.allSource.srcDirs, sourceSets.findByName("usuario")?.allSource?.srcDirs ?: [])
+    classDirectories.from = files(
         fileTree(dir: "$buildDir/classes/java/main"),
         fileTree(dir: "$buildDir/classes/java/usuario")
     )
-
-    sourceDirectories.from = fontes
-    classDirectories.from = classes
-
     reports {
         xml.required = true
-        xml.outputLocation = file("$projectDir/entrada-usuario/jacoco-relatorio/jacoco.xml")
         html.required = true
-        html.outputLocation = file("$projectDir/entrada-usuario/jacoco-relatorio/html")
         csv.required = false
+        html.outputLocation = layout.buildDirectory.dir("reports/jacoco/geral").get().asFile
     }
 }
-
 
 tasks.named("jacocoRelatorioUsuario") {
     finalizedBy("jacocoRelatorioGeral")
