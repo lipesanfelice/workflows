@@ -827,29 +827,61 @@ tasks.register('jacocoRelatorioUsuario', JacocoReport) {
 
 tasks.register("sanearTestesUsuario") {
     doLast {
-        def raiz = file("$buildDir/usuario-src/src/test/java")
-        if (!raiz.exists()) return
-        raiz.eachFileRecurse { f ->
-            if (f.isFile() && f.name.endsWith(".java")) {
-                def txt = f.getText("UTF-8")
-                txt = txt.replaceAll("^\uFEFF", "")
-                def linhas = txt.readLines()
-                def filtradas = []
-                linhas.each { L ->
-                    def t = L.trim()
-                    if (t.matches("[\\w./-]+\\.java") && !t.contains("package") && !t.contains("class")) { }
-                    else { filtradas << L }
+        def baseMain = file("$buildDir/usuario-src/src/main/java")
+        def baseTest = file("$buildDir/usuario-src/src/test/java")
+        if (!baseTest.exists()) return
+
+        def descobrirPacote = { File raiz ->
+            if (!raiz?.exists()) return null
+            def candidatos = []
+            raiz.eachFileRecurse { f ->
+                if (f.isFile() && f.name.endsWith(".java") && f.name != "module-info.java") {
+                    def txt = f.getText("UTF-8")
+                    def m = (txt =~ /(?m)^\s*package\s+([A-Za-z_][\w.]*?)\s*;\s*$/)
+                    if (m.find()) candidatos << m.group(1) else candidatos << null
                 }
-                def novo = filtradas.join("\n").trim()
-                if (!novo.contains("\npackage ") && !novo.startsWith("package ")) {
-                    def rel = raiz.toPath().relativize(f.toPath()).toString()
-                    def caminho = rel.replace("\\", "/")
-                    def pacote = caminho.contains("/") ? caminho.substring(0, caminho.lastIndexOf("/")).replace("/", ".") : "org.example.generated"
-                    if (pacote == "" ) pacote = "org.example.generated"
-                    novo = "package ${pacote};\n\n" + novo
-                }
-                f.setText(novo, "UTF-8")
             }
+            if (candidatos.isEmpty()) return null
+            def comPacote = candidatos.find { it != null }
+            return comPacote ?: null
+        }
+
+        def pacoteMain = descobrirPacote(baseMain)
+
+        baseTest.eachFileRecurse { f ->
+            if (!(f.isFile() && f.name.endsWith(".java"))) return
+            def txt = f.getText("UTF-8").replaceAll("^\uFEFF", "")
+            def linhas = txt.readLines()
+            def filtradas = []
+            linhas.each { L ->
+                def t = L.trim()
+                if (t.matches("[\\w./-]+\\.java") && !t.contains("package") && !t.contains("class")) { }
+                else { filtradas << L }
+            }
+            def conteudo = filtradas.join("\n").trim()
+
+            String pacoteTeste = null
+            def mPkg = (conteudo =~ /(?m)^\s*package\s+([A-Za-z_][\w.]*?)\s*;\s*$/)
+            if (mPkg.find()) pacoteTeste = mPkg.group(1)
+
+            if (pacoteMain == null) {
+                if (pacoteTeste != null) {
+                    conteudo = conteudo.replaceFirst("(?m)^\\s*package\\s+[A-Za-z_][\\w.]*?\\s*;\\s*\\n?", "")
+                }
+            } else {
+                if (pacoteTeste == null) {
+                    def rel = baseTest.toPath().relativize(f.toPath()).toString().replace("\\","/")
+                    def pacoteInferido = rel.contains("/") ? rel.substring(0, rel.lastIndexOf("/")).replace("/", ".") : "org.example.generated"
+                    conteudo = "package ${pacoteInferido};\n\n" + conteudo
+                    pacoteTeste = pacoteInferido
+                }
+                def jaImporta = conteudo.contains("import ${pacoteMain}.*;") || conteudo.contains("import ${pacoteMain}.")
+                if (!jaImporta && pacoteTeste != pacoteMain) {
+                    conteudo = conteudo.replaceFirst("(?s)^(\\s*package\\s+[^{;]+;\\s*)", "\$1\nimport ${pacoteMain}.*;\n")
+                }
+            }
+
+            f.setText(conteudo, "UTF-8")
         }
     }
 }
@@ -858,6 +890,8 @@ tasks.named("compileUsuarioTestJava") {
     dependsOn("sanearTestesUsuario")
     options.encoding = "UTF-8"
 }
+
+
 
 tasks.withType(Test).configureEach {
     useJUnitPlatform()
