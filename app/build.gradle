@@ -902,29 +902,47 @@ tasks.withType(Test).configureEach {
     }
 }
 
-tasks.named("testUsuario") {
-    useJUnitPlatform()
-    include "**/*Test.class", "**/*Tests.class", "**/*IT.class"
-    failFast = false
+jacoco {
+    toolVersion = "0.8.12"
 }
 
-tasks.register("jacocoRelatorioGeral", JacocoReport) {
-    dependsOn(tasks.findByName("test"), tasks.findByName("testUsuario"))
-    executionData fileTree(projectDir) {
-        include "**/build/jacoco/*.exec", "**/jacoco/*.exec"
+tasks.named("testUsuario") {
+    useJUnitPlatform()
+    outputs.upToDateWhen { false }
+    doFirst { file("$buildDir/jacoco").mkdirs() }
+    jacoco {
+        destinationFile = file("$buildDir/jacoco/testUsuario.exec")
     }
-    sourceDirectories.from = files(sourceSets.main.allSource.srcDirs, sourceSets.findByName("usuario")?.allSource?.srcDirs ?: [])
-    classDirectories.from = files(
+    finalizedBy("jacocoRelatorioUsuario")
+}
+
+tasks.register("jacocoRelatorioUsuario", JacocoReport) {
+    dependsOn("testUsuario")
+    doFirst { file("$projectDir/entrada-usuario/jacoco-relatorio").mkdirs() }
+
+    executionData fileTree(dir: "$buildDir/jacoco", include: ["*.exec"])
+
+    def fontes = files(
+        sourceSets.main.allSource.srcDirs,
+        (sourceSets.findByName("usuario")?.allSource?.srcDirs ?: [])
+    )
+    def classes = files(
         fileTree(dir: "$buildDir/classes/java/main"),
         fileTree(dir: "$buildDir/classes/java/usuario")
     )
+
+    sourceDirectories.from = fontes
+    classDirectories.from = classes
+
     reports {
         xml.required = true
+        xml.outputLocation = file("$projectDir/entrada-usuario/jacoco-relatorio/jacoco.xml")
         html.required = true
+        html.outputLocation = file("$projectDir/entrada-usuario/jacoco-relatorio/html")
         csv.required = false
-        html.outputLocation = layout.buildDirectory.dir("reports/jacoco/geral").get().asFile
     }
 }
+
 
 tasks.named("jacocoRelatorioUsuario") {
     finalizedBy("jacocoRelatorioGeral")
