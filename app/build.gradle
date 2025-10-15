@@ -9,8 +9,6 @@ plugins {
 
 import org.gradle.testing.jacoco.plugins.JacocoTaskExtension
 import java.util.regex.Pattern
-import java.nio.charset.StandardCharsets
-import java.io.ByteArrayInputStream
 
 repositories {
     mavenCentral()
@@ -157,7 +155,7 @@ def mapaImports = [
     'com.opencsv'                      : 'com.opencsv:opencsv:5.9',
 
     // === Segurança / Cripto ===
-    'org.jose4j'                       : 'org.bitbucket.b_c:jose4j:0.9.6',
+    'org.jose4j'                       : 'org.bitbucket_b_c:jose4j:0.9.6',
     'org.mindrot.jbcrypt'              : 'org.mindrot:jbcrypt:0.4',
 
     // === Mapping / Utils extras ===
@@ -909,7 +907,7 @@ def configurarSanear = { ->
 
             conteudo = injetarImportsJUnit(conteudo)
 
-            // 👇 NOVO: proteger testes que fazem new Scanner(System.in)
+            // 👇 protege testes que fazem new Scanner(System.in)
             conteudo = conteudo.replaceAll(
                 /new\s+Scanner\s*\(\s*System\.in\s*\)/,
                 'new java.util.Scanner(new java.io.ByteArrayInputStream(("0\\n0\\n0\\n0\\n0\\n").getBytes(java.nio.charset.StandardCharsets.UTF_8)))'
@@ -921,10 +919,8 @@ def configurarSanear = { ->
 
             // 2) Corrige declarações com '=;' sem valor inicial
             conteudo = conteudo
-                // casos com sinal isolado após o '='
                 .replaceAll('(?m)\\b(double|float)\\s+([A-Za-z_]\\w*)\\s*=\\s*[+-]?\\s*;', '$1 $2 = 0.0;')
                 .replaceAll('(?m)\\b(int|long|short|byte)\\s+([A-Za-z_]\\w*)\\s*=\\s*[+-]?\\s*;', '$1 $2 = 0;')
-                // casos '=;' puros
                 .replaceAll('(?m)\\b(double|float)\\s+([A-Za-z_]\\w*)\\s*=\\s*;', '$1 $2 = 0.0;')
                 .replaceAll('(?m)\\b(int|long|short|byte)\\s+([A-Za-z_]\\w*)\\s*=\\s*;', '$1 $2 = 0;')
                 .replaceAll('(?m)\\b(boolean)\\s+([A-Za-z_]\\w*)\\s*=\\s*;', '$1 $2 = false;')
@@ -932,19 +928,16 @@ def configurarSanear = { ->
                 .replaceAll('(?m)\\b(String)\\s+([A-Za-z_]\\w*)\\s*=\\s*;', '$1 $2 = "";')
                 .replaceAll('(?m)\\b([A-Za-z_][\\w<>\\[\\]]*)\\s+([A-Za-z_]\\w*)\\s*=\\s*;', '$1 $2;')
 
-            // Corrige assertThrows truncado na mesma linha (se a linha não fecha com ');')
             conteudo = conteudo.replaceAll(
                 '(?m)^\\s*(?:org\\.junit\\.jupiter\\.api\\.Assertions\\.)?assertThrows\\([^;\\n]*$',
                 'org.junit.jupiter.api.Assertions.assertThrows(ArithmeticException.class, () -> { throw new ArithmeticException(); });'
             )
 
-            // Dá corpo a métodos "void nome(...)" sem abrir bloco
             conteudo = conteudo.replaceAll(
                 '(?m)^\\s*(public|protected|private)?\\s+void\\s+[A-Za-z_]\\w*\\s*\\([^)]*\\)\\s*$',
                 '$0 { }'
             )
 
-            // --- Fallback genérico para RHS lixo ---
             def ehRhsLixo = { String rhs ->
                 if (rhs == null) return true
                 def t = rhs.trim()
@@ -964,7 +957,6 @@ def configurarSanear = { ->
                 }
             }
 
-            // 1) Tipos primitivos + String com fallback por tipo
             conteudo = conteudo.replaceAll(
                 ~/(?m)\b(double|float|int|long|short|byte|boolean|char|String)\s+([A-Za-z_]\w*)\s*=\s*([^;]*);/
             ) { all, tipo, nome, rhs ->
@@ -975,7 +967,6 @@ def configurarSanear = { ->
                 return all
             }
 
-            // 2) Qualquer outro tipo: se RHS é lixo, apenas remove a atribuição
             conteudo = conteudo.replaceAll(
                 ~/(?m)\b([A-Za-z_][\w<>\[\]]*)\s+([A-Za-z_]\w*)\s*=\s*([^;]*);/
             ) { all, tipo, nome, rhs ->
@@ -1131,10 +1122,6 @@ tasks.register("testUsuarioBestEffort", Test) {
         fileTree("$buildDir/classes/java/main"),
         sourceSets.findByName("usuarioTest")?.runtimeClasspath ?: files()
     )
-
-    // 👇 NOVO: stdin padrão p/ testes que usam Scanner(System.in)/nextLine/etc.
-    def defaultInput = ("0\n0\n0\n0\n0\n")
-    standardInput = new ByteArrayInputStream(defaultInput.getBytes(StandardCharsets.UTF_8))
 
     outputs.upToDateWhen { false }
     doFirst { file("$buildDir/jacoco").mkdirs() }
