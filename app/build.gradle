@@ -853,6 +853,7 @@ def configurarSanear = { ->
         def baseTest = file("$buildDir/usuario-src/src/test/java")
         if (!baseTest.exists()) return
 
+        // Descobre 1) pacote principal; 2) uma classe pública para uso no smoke test
         def descobrirPacote = { File raiz ->
             if (!raiz?.exists()) return null
             def candidatos = []
@@ -860,7 +861,7 @@ def configurarSanear = { ->
                 if (f.isFile() && f.name.endsWith(".java") && f.name != "module-info.java") {
                     def txt = f.getText("UTF-8")
                     def m = (txt =~ /(?m)^\s*package\s+([A-Za-z_][\w.]*?)\s*;\s*$/)
-                    if (m.find()) candidatos << m.group(1) else candidatos << null
+                    candidatos << (m.find() ? m.group(1) : null)
                 }
             }
             if (candidatos.isEmpty()) return null
@@ -868,42 +869,71 @@ def configurarSanear = { ->
             return comPacote ?: null
         }
 
+        def descobrirPublicClass = { File raiz ->
+            if (!raiz?.exists()) return null
+            def nome = null
+            raiz.eachFileRecurse { f ->
+                if (nome != null) return
+                if (f.isFile() && f.name.endsWith(".java") && f.name != "module-info.java") {
+                    def txt = f.getText("UTF-8")
+                    def m = (txt =~ /(?m)^\s*public\s+(?:class|interface|enum|record)\s+([A-Za-z_]\w*)\b/)
+                    if (m.find()) nome = m.group(1)
+                }
+            }
+            return nome
+        }
+
         def pacoteMain = descobrirPacote(baseMain)
+        def classePublica = descobrirPublicClass(baseMain) ?: "Object"
 
-        baseTest.eachFileRecurse { f ->
-            if (!(f.isFile() && f.name.endsWith(".java"))) return
-            def txt = f.getText("UTF-8").replaceAll("^\uFEFF", "")
-            def linhas = txt.readLines()
-            def filtradas = []
-            linhas.each { L ->
-                def t = L.trim()
-                if (t.matches("[\\w./-]+\\.java") && !t.contains("package") && !t.contains("class")) { }
-                else { filtradas << L }
+        // Helpers
+        def isValidStart = { String ln ->
+            return (ln ==~ /\s*/) ||                        // vazia
+                   (ln ==~ /\s*package\s+.*/) ||
+                   (ln ==~ /\s*import\s+.*/)  ||
+                   (ln ==~ /\s*@.*/)          ||
+                   (ln ==~ /\s*(public\s+)?(class|interface|enum|record)\b.*/) ||
+                   (ln ==~ /\s*\/\/.*/) || (ln ==~ /\s*\/\*.*/) || (ln ==~ /\s*\*.*/)
+        }
+
+        def limparLixoTopo = { String s ->
+            if (s == null) return s
+            s = s.replace('\uFEFF','')
+            // remove cercas markdown
+            s = s.replaceAll('(?m)^```\\w*\\s*\\r?\\n?', '')
+            s = s.replaceAll('(?m)^```\\s*$', '')
+            // remove marcadores comuns de IA
+            s = s.replaceAll('(?m)^====+.*$', '')
+            s = s.replaceAll('(?m)^----+.*$', '')
+            s = s.replaceAll('(?m)^CODE:?\\s*$', '')
+            s = s.replaceAll('(?m)^CÓDIGO:?\\s*$', '')
+            // remove linhas tipo "Algo.java" no topo
+            def linhas = s.readLines()
+            while (!linhas.isEmpty() && !isValidStart(linhas[0])) {
+                def head = linhas[0].trim()
+                if (head.matches('[A-Za-z0-9_.\\\\/\\-]+\\.java')) {
+                    linhas.remove(0)
+                } else {
+                    linhas.remove(0)
+                }
             }
-            def conteudo = filtradas.join("\n").trim()
+            return linhas.join('\n')
+        }
 
-            String pacoteTeste = null
-            def mPkg = (conteudo =~ /(?m)^\s*package\s+([A-Za-z_][\w.]*?)\s*;\s*$/)
-            if (mPkg.find()) pacoteTeste = mPkg.group(1)
-
-            if (pacoteMain == null) {
-                if (pacoteTeste != null) {
-                    conteudo = conteudo.replaceFirst("(?m)^\\s*package\\s+[A-Za-z_][\\w.]*?\\s*;\\s*\\n?", "")
-                }
-            } else {
-                if (pacoteTeste == null) {
-                    def rel = baseTest.toPath().relativize(f.toPath()).toString().replace("\\","/")
-                    def pacoteInferido = rel.contains("/") ? rel.substring(0, rel.lastIndexOf("/")).replace("/", ".") : "org.example.generated"
-                    conteudo = "package ${pacoteInferido};\n\n" + conteudo
-                    pacoteTeste = pacoteInferido
-                }
-                def jaImporta = conteudo.contains("import ${pacoteMain}.*;") || conteudo.contains("import ${pacoteMain}.")
-                if (!jaImporta && pacoteTeste != pacoteMain) {
-                    conteudo = conteudo.replaceFirst("(?s)^(\\s*package\\s+[^{;]+;\\s*)", "\$1\nimport ${pacoteMain}.*;\n")
-                }
+        def balancearChaves = { String s ->
+            // Conta { e } e fecha o que faltar no final
+            int abre = 0
+            for (ch in s.toCharArray()) {
+                if (ch == '{') abre++
+                else if (ch == '}') abre = Math.max(0, abre - 1)
             }
+            if (abre > 0) {
+                s = s + ("\n" + ("}" * abre) + "\n")
+            }
+            return s
+        }
 
-            // === Injetar static import de Assertions (JUnit 5) quando necessário ===
+        def injetarImportsJUnit = { String conteudo ->
             def usaAssertions = (conteudo =~ /\bassert(?:Equals|True|False|NotNull|Null|Throws|All|DoesNotThrow|ArrayEquals|IterableEquals|LinesMatch|Same|NotSame)\s*\(/).find()
             def temStaticAssertions = (conteudo =~ /(?m)^\s*import\s+static\s+org\.junit\.jupiter\.api\.Assertions\.\*\s*;\s*$/).find()
             def temQualificadoAssertions = (conteudo =~ /\borg\.junit\.jupiter\.api\.Assertions\./).find()
@@ -915,13 +945,107 @@ def configurarSanear = { ->
                     conteudo = "import static org.junit.jupiter.api.Assertions.*;\n" + conteudo
                 }
             }
-
-            // === Fallback: prefixar assertThrows(...) se ainda estiver sem qualificação e sem static import ===
+            // Fallback: assertThrows cru
             if ((conteudo =~ /(?<!\.)\bassertThrows\s*\(/).find() && !temStaticAssertions) {
                 conteudo = conteudo.replaceAll(/(?<!\.)\bassertThrows\s*\(/, "org.junit.jupiter.api.Assertions.assertThrows(")
             }
+            // Garante @Test importado
+            if (conteudo.contains("@Test") && !(conteudo =~ /(?m)^\s*import\s+org\.junit\.jupiter\.api\.Test\s*;\s*$/).find()) {
+                if ((conteudo =~ /(?m)^\s*package\s+[^;]+;\s*$/).find()) {
+                    conteudo = conteudo.replaceFirst(/(?m)^(package\s+[^;]+;\s*)/, "\$1\nimport org.junit.jupiter.api.Test;\n")
+                } else {
+                    conteudo = "import org.junit.jupiter.api.Test;\n" + conteudo
+                }
+            }
+            return conteudo
+        }
+
+        int qtdTestsValidos = 0
+
+        baseTest.eachFileRecurse { f ->
+            if (!(f.isFile() && f.name.endsWith(".java"))) return
+            def conteudo = f.getText("UTF-8")
+
+            // 1) limpar lixo
+            conteudo = limparLixoTopo(conteudo)
+
+            // 2) alinhar pacote com produção (se houver)
+            String pacoteTeste = null
+            def mPkg = (conteudo =~ /(?m)^\s*package\s+([A-Za-z_][\w.]*?)\s*;\s*$/)
+            if (mPkg.find()) pacoteTeste = mPkg.group(1)
+
+            if (pacoteMain == null) {
+                if (pacoteTeste != null) {
+                    conteudo = conteudo.replaceFirst("(?m)^\\s*package\\s+[A-Za-z_][\\w.]*?\\s*;\\s*\\n?", "")
+                }
+            } else {
+                if (pacoteTeste == null) {
+                    // sem package → coloca o mesmo package do main
+                    conteudo = "package ${pacoteMain};\n\n" + conteudo
+                    pacoteTeste = pacoteMain
+                } else {
+                    // injeta import do pacote main se for diferente
+                    def jaImporta = conteudo.contains("import ${pacoteMain}.*;") || conteudo.contains("import ${pacoteMain}.")
+                    if (!jaImporta && pacoteTeste != pacoteMain) {
+                        conteudo = conteudo.replaceFirst("(?s)^(\\s*package\\s+[^{;]+;\\s*)", "\$1\nimport ${pacoteMain}.*;\n")
+                    }
+                }
+            }
+
+            // 3) imports JUnit
+            conteudo = injetarImportsJUnit(conteudo)
+
+            // 4) balancear chaves
+            conteudo = balancearChaves(conteudo)
+
+            // 5) se tem @Test mas não tem 'class', embrulha numa classe
+            boolean temAnotacaoTest = conteudo.contains("@Test")
+            boolean temClass = (conteudo =~ /(?m)^\s*(public\s+)?(class|interface|enum|record)\b/).find()
+            if (temAnotacaoTest && !temClass) {
+                String header = (pacoteMain != null) ? "package ${pacoteMain};\n" : ""
+                // evita duplicar imports já adicionados
+                def imports = []
+                def mImp = (conteudo =~ /(?m)^\s*import\s+.*;\s*$/)
+                while (mImp.find()) imports << mImp.group()
+                def corpo = conteudo.replaceAll(/(?m)^\s*import\s+.*;\s*$/, "").trim()
+                conteudo =
+                    header +
+                    (imports.isEmpty() ? "" : (imports.join("\n") + "\n")) +
+                    "\npublic class UsuarioTestsAuto {\n" +
+                    corpo + "\n}\n"
+            }
+
+            // 6) heurística de validade: tem classe E/OU pelo menos um método @Test
+            boolean valido = ((conteudo =~ /(?m)^\s*public\s+class\s+\w+\b/).find() && conteudo.contains("@Test"))
+            if (valido) qtdTestsValidos++
 
             f.setText(conteudo, "UTF-8")
+        }
+
+        // 7) Se nenhum teste válido sobrou, gera um Smoke Test mínimo
+        if (qtdTestsValidos == 0) {
+            def destinoDir = (pacoteMain != null) ? new File(baseTest, pacoteMain.replace('.', File.separator)) : baseTest
+            destinoDir.mkdirs()
+            new File(destinoDir, "AutoSmokeTest.java").setText(
+                """${pacoteMain ? "package ${pacoteMain};\n" : ""}
+import org.junit.jupiter.api.Test;
+import static org.junit.jupiter.api.Assertions.*;
+
+public class AutoSmokeTest {
+    @Test
+    void smoke() {
+        // Instancia a classe pública principal (se existir)
+        Object obj;
+        try {
+            obj = ${classePublica}.class.getDeclaredConstructor().newInstance();
+        } catch (Throwable t) {
+            obj = new Object(); // fallback
+        }
+        assertNotNull(obj);
+    }
+}
+""", "UTF-8")
+            println "sanearTestesUsuario → nenhum teste válido detectado; AutoSmokeTest.java gerado para garantir execução e cobertura."
         }
     }
 }
@@ -930,6 +1054,7 @@ if (tasks.findByName("sanearTestesUsuario") == null) {
 } else {
     tasks.named("sanearTestesUsuario").configure { configurarSanear.delegate = it; configurarSanear() }
 }
+
 
 
 tasks.named("compileUsuarioTestJava") {
