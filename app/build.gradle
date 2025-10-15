@@ -1090,9 +1090,13 @@ tasks.named("testUsuario", Test).configure {
     finalizedBy("jacocoRelatorioUsuario")
 }
 
-// Relatório do usuário: gera xml/html no caminho esperado pelo CI
 tasks.register("jacocoRelatorioUsuario", JacocoReport) {
-    dependsOn("testUsuario")
+    // antes: dependsOn("testUsuario")
+    dependsOn(
+        "testUsuario",                         // garante o .exec
+        tasks.named("classes"),                // garante $buildDir/classes/java/main
+        tasks.named(sourceSets.usuario.classesTaskName) // garante $buildDir/classes/java/usuario
+    )
 
     doFirst { file("$projectDir/entrada-usuario/jacoco-relatorio/html").mkdirs() }
 
@@ -1115,6 +1119,7 @@ tasks.register("jacocoRelatorioUsuario", JacocoReport) {
         html.outputLocation = file("$projectDir/entrada-usuario/jacoco-relatorio/html")
     }
 }
+
 
 
 // Garante que o geral rode depois do de usuário (opcional)
