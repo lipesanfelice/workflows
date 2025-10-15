@@ -1,25 +1,20 @@
-public class ConversorUnidades {
+public class CalculadoraGeometrica {
     
-    public static double metroParaCentimetro(double metro) {
-        return metro * 100;
+    public static double areaCirculo(double raio) {
+        return Math.PI * raio * raio;
     }
     
-    public static double centimetroParaMetro(double centimetro) {
-        return centimetro / 100;
+    public static double areaRetangulo(double base, double altura) {
+        return base * altura;
     }
     
-    public static double kilometroParaMetro(double kilometro) {
-        return kilometro * 1000;
-    }
-    
-    public static double litroParaMililitro(double litro) {
-        return litro * 1000;
+    public static double areaTriangulo(double base, double altura) {
+        return (base * altura) / 2;
     }
     
     public static void main(String[] args) {
-        System.out.println("2 metros em centímetros: " + metroParaCentimetro(2));
-        System.out.println("150 cm em metros: " + centimetroParaMetro(150));
-        System.out.println("3.5 km em metros: " + kilometroParaMetro(3.5));
-        System.out.println("2 litros em ml: " + litroParaMililitro(2));
+        System.out.println("Área do círculo (raio 5): " + areaCirculo(5));
+        System.out.println("Área do retângulo (4x6): " + areaRetangulo(4, 6));
+        System.out.println("Área do triângulo (3x4): " + areaTriangulo(3, 4));
     }
 }

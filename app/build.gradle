@@ -921,7 +921,21 @@ def configurarSanear = { ->
 
             conteudo = injetarImportsJUnit(conteudo)
 
+            // 1) finalizar linhas double sem ';'
             conteudo = conteudo.replaceAll('(?m)^(\\s*double\\s+[^;\\n{}]+)(\\s*)$', '$1;$2')
+                            .replaceAll('(?m)\\b(char)\\s+([A-Za-z_]\\w*)\\s*=\\s*;', '$1 $2 = \'\\0\';')
+
+            // 2) Corrige declarações com '=;' sem valor inicial
+            conteudo = conteudo
+                .replaceAll('(?m)\\b(double|float)\\s+([A-Za-z_]\\w*)\\s*=\\s*;', '$1 $2 = 0.0;')
+                .replaceAll('(?m)\\b(int|long|short|byte)\\s+([A-Za-z_]\\w*)\\s*=\\s*;', '$1 $2 = 0;')
+                .replaceAll('(?m)\\b(boolean)\\s+([A-Za-z_]\\w*)\\s*=\\s*;', '$1 $2 = false;')
+                .replaceAll('(?m)\\b(char)\\s+([A-Za-z_]\\w*)\\s*=\\s*;', '$1 $2 = \'\\0\';')
+                .replaceAll('(?m)\\b(String)\\s+([A-Za-z_]\\w*)\\s*=\\s*;', '$1 $2 = "";')
+                .replaceAll('(?m)\\b([A-Za-z_][\\w<>\\[\\]]*)\\s+([A-Za-z_]\\w*)\\s*=\\s*;', '$1 $2;')
+
+
+
 
             conteudo = balancearChaves(conteudo)
 
