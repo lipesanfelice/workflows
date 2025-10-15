@@ -35,10 +35,6 @@ dependencies {
     testImplementation 'org.junit.jupiter:junit-jupiter'
 }
 
-tasks.withType(Test).configureEach {
-    useJUnitPlatform()
-}
-
 java {
     toolchain {
         languageVersion = JavaLanguageVersion.of(21)
@@ -131,7 +127,7 @@ def mapaImports = [
     // === Logging ===
     'org.slf4j'                        : 'org.slf4j:slf4j-api:2.0.13',
     'org.slf4j.simple'                 : 'org.slf4j:slf4j-simple:2.0.13',
-    'ch.qos.logback'                   : 'ch.qos.logback:logback-classic:1.5.6',
+    'ch.qos.logback'                   : 'ch.qos.logback-classic:1.5.6',
     'org.apache.logging.log4j'         : 'org.apache.logging.log4j:log4j-api:2.23.1',
     'org.apache.logging.log4j.core'    : 'org.apache.logging.log4j:log4j-core:2.23.1',
 
@@ -331,7 +327,6 @@ tasks.register('organizarUsuario') {
         def fontesUsuario = []
         def testesIA = []
         inputs.files.files.each { File origem ->
-            // boolean isTeste = origem.toPath().startsWith(dirTestsIA.toPath())
             boolean isTeste = origem.toPath().startsWith(dirTestsIA.toPath()) ||
                             origem.toPath().startsWith(dirTestsUsuario.toPath())
             String texto = origem.getText('UTF-8')
@@ -362,14 +357,11 @@ tasks.register('organizarUsuario') {
                     def caminhoPacote = pacote ? pacote.replace('.', File.separator) : ''
                     def repoDir = new File(dirEntrada, caminhoPacote)
                     repoDir.mkdirs()
-                    // grava o arquivo renomeado
                     new File(repoDir, "${nomeEsperado}.java").setText(novoTexto, 'UTF-8')
-                    // (opcional) remove o antigo, se existia
                     def antigo = new File(repoDir, "${nomePublico}.java")
                     if (antigo.exists()) {
                         antigo.delete()
                     }
-
 
                     [file: f.file, text: novoTexto]
                 } else {
@@ -385,15 +377,12 @@ tasks.register('organizarUsuario') {
             // 1) alinhar pacote
             String pkgTeste = extrairPacote(texto)
             if (pacoteUsuario == '') {
-                // Usuário no default package → remover package dos testes
                 texto = texto.replaceFirst(/(?m)^\s*package\s+[^;]+;\s*/, '')
             } else {
                 if (pkgTeste == '') {
-                    // teste sem package → coloca o MESMO package do usuário
                     texto = "package ${pacoteUsuario};\n" + texto
                     pkgTeste = pacoteUsuario
                 } else {
-                    // teste já tem package → injeta import * se ainda não tiver
                     if (!texto.contains("import ${pacoteUsuario}.")) {
                         texto = texto.replaceFirst(/(?m)^(package\s+[^;]+;\s*)/, "\$1\nimport ${pacoteUsuario}.*;\n")
                     }
@@ -401,9 +390,7 @@ tasks.register('organizarUsuario') {
             }
 
             // 2) injetar imports JDK comuns se faltarem
-            // símbolos que frequentemente aparecem nos testes gerados
             def candidatos = [
-                // --- java.util ---
                 [sym: 'Random',              fqcn: 'java.util.Random'],
                 [sym: 'Scanner',             fqcn: 'java.util.Scanner'],
                 [sym: 'Arrays',              fqcn: 'java.util.Arrays'],
@@ -433,8 +420,6 @@ tasks.register('organizarUsuario') {
                 [sym: 'IntStream',           fqcn: 'java.util.stream.IntStream'],
                 [sym: 'LongStream',          fqcn: 'java.util.stream.LongStream'],
                 [sym: 'DoubleStream',        fqcn: 'java.util.stream.DoubleStream'],
-
-                // --- java.time ---
                 [sym: 'Instant',             fqcn: 'java.time.Instant'],
                 [sym: 'Duration',            fqcn: 'java.time.Duration'],
                 [sym: 'Period',              fqcn: 'java.time.Period'],
@@ -445,16 +430,12 @@ tasks.register('organizarUsuario') {
                 [sym: 'OffsetDateTime',      fqcn: 'java.time.OffsetDateTime'],
                 [sym: 'ZoneId',              fqcn: 'java.time.ZoneId'],
                 [sym: 'DateTimeFormatter',   fqcn: 'java.time.format.DateTimeFormatter'],
-
-                // --- java.nio.file / charset ---
                 [sym: 'Path',                fqcn: 'java.nio.file.Path'],
                 [sym: 'Paths',               fqcn: 'java.nio.file.Paths'],
                 [sym: 'Files',               fqcn: 'java.nio.file.Files'],
                 [sym: 'StandardOpenOption',  fqcn: 'java.nio.file.StandardOpenOption'],
                 [sym: 'Charset',             fqcn: 'java.nio.charset.Charset'],
                 [sym: 'StandardCharsets',    fqcn: 'java.nio.charset.StandardCharsets'],
-
-                // --- java.io ---
                 [sym: 'File',                fqcn: 'java.io.File'],
                 [sym: 'IOException',         fqcn: 'java.io.IOException'],
                 [sym: 'InputStream',         fqcn: 'java.io.InputStream'],
@@ -470,17 +451,11 @@ tasks.register('organizarUsuario') {
                 [sym: 'FileReader',          fqcn: 'java.io.FileReader'],
                 [sym: 'FileWriter',          fqcn: 'java.io.FileWriter'],
                 [sym: 'PrintWriter',         fqcn: 'java.io.PrintWriter'],
-
-                // --- java.math ---
                 [sym: 'BigDecimal',          fqcn: 'java.math.BigDecimal'],
                 [sym: 'BigInteger',          fqcn: 'java.math.BigInteger'],
                 [sym: 'RoundingMode',        fqcn: 'java.math.RoundingMode'],
-
-                // --- java.util.regex ---
                 [sym: 'Pattern',             fqcn: 'java.util.regex.Pattern'],
                 [sym: 'Matcher',             fqcn: 'java.util.regex.Matcher'],
-
-                // --- java.net / http ---
                 [sym: 'URI',                 fqcn: 'java.net.URI'],
                 [sym: 'URL',                 fqcn: 'java.net.URL'],
                 [sym: 'URLEncoder',          fqcn: 'java.net.URLEncoder'],
@@ -488,29 +463,22 @@ tasks.register('organizarUsuario') {
                 [sym: 'HttpClient',          fqcn: 'java.net.http.HttpClient'],
                 [sym: 'HttpRequest',         fqcn: 'java.net.http.HttpRequest'],
                 [sym: 'HttpResponse',        fqcn: 'java.net.http.HttpResponse'],
-
-                // --- utilidades diversas ---
                 [sym: 'Objects',             fqcn: 'java.util.Objects'],
                 [sym: 'StringJoiner',        fqcn: 'java.util.StringJoiner'],
                 [sym: 'Spliterator',         fqcn: 'java.util.Spliterator'],
             ]
 
-
-            // já importados?
             def importados = [] as Set
             def impMatcher = (texto =~ /(?m)^\s*import\s+([a-zA-Z0-9_.]+)\s*;/)
             while (impMatcher.find()) {
                 importados << impMatcher.group(1)
             }
 
-
-            // montar lista de imports a inserir
             def paraInserir = []
             candidatos.each { c ->
-                // se o símbolo aparece “desqualificado” (ex.: Random em vez de java.util.Random)
                 def usaSimbolo = (texto =~ /\b${c.sym}\b/).find()
                 def jaTemImportDireto = importados.contains(c.fqcn)
-                def jaTemWildcard = importados.any { it == c.fqcn.replaceAll(/\.[^.]+$/, '.*') } // ex.: java.util.*
+                def jaTemWildcard = importados.any { it == c.fqcn.replaceAll(/\.[^.]+$/, '.*') }
                 def jaUsaQualificado = (texto =~ /\b${java.util.regex.Pattern.quote(c.fqcn)}\b/).find()
                 if (usaSimbolo && !jaTemImportDireto && !jaTemWildcard && !jaUsaQualificado) {
                     paraInserir << "import ${c.fqcn};"
@@ -520,10 +488,8 @@ tasks.register('organizarUsuario') {
 
             if (!paraInserir.isEmpty()) {
                 if ((texto =~ /(?m)^\s*package\s+[^;]+;\s*$/).find()) {
-                    // há package → insere após o package
                     texto = texto.replaceFirst(/(?m)^(package\s+[^;]+;\s*)/, "\$1\n" + paraInserir.join("\n") + "\n")
                 } else {
-                    // sem package → insere no topo
                     texto = paraInserir.join("\n") + "\n" + texto
                 }
             }
@@ -546,7 +512,6 @@ tasks.register('organizarUsuario') {
         // --- Helpers p/ testes: stub + hook por reflexão ---
 
         def injetarStubLoginAttempt = {
-            // injeta em TEST (mesmo pacote do usuário, se existir)
             String pacote = pacoteUsuario ?: ''
             String header = pacote ? "package ${pacote};\n" : ""
             def destinoDir = pacote ? new File(dirTest, pacote.replace('.', File.separator)) : dirTest
@@ -616,32 +581,10 @@ tasks.register('organizarUsuario') {
             String nomeArquivo = nomePublicoLocal ? "${nomePublicoLocal}.java" : "Arquivo_${System.nanoTime()}.java"
             new File(destinoDir, nomeArquivo).setText(texto, 'UTF-8')
 
-            // >>> espelha os fontes de PRODUÇÃO no repositório (não espelha testes gerados)
             if (!isTeste) {
                 espelharParaRepo(texto)
             }
-            // <<<
         }
-
-        // Se o teste tentar acessar .users.get(...).isActive = X; troca por TestHooks.setActive(...)
-        // testesIA = testesIA.collect { ti ->
-        //     String t = ti.text
-        //     String patched = t.replaceAll(
-        //         /(\b[A-Za-z_][A-Za-z0-9_]*)\.users\.get\(([^)]+)\)\.isActive\s*=\s*(true|false)\s*;/,
-        //         'TestHooks.setActive($1, $2, $3);'
-        //     )
-
-        //     // se o teste referir LoginAttempt, injeta stub
-        //     if (patched.contains("LoginAttempt")) {
-        //         injetarStubLoginAttempt()
-        //     }
-        //     // se precisou setActive, injeta TestHooks
-        //     if (!patched.equals(t) || patched.contains("TestHooks.setActive(")) {
-        //         injetarTestHooks()
-        //     }
-
-        //     [file: ti.file, text: patched]
-        // }
 
         testesIA = testesIA.collect { ti ->
             String t = sanitizeJavaTest(ti.text)
@@ -658,15 +601,13 @@ tasks.register('organizarUsuario') {
             [file: ti.file, text: patched]
         }
 
-        // --- SANEAMENTO DE FONTES DE PRODUÇÃO (previne " }public class ..." e classes duplicadas) ---
+        // --- SANEAMENTO DE FONTES DE PRODUÇÃO ---
         def sanitizeJavaMain = { String s ->
             if (s == null) return s
-            // remove BOM e cercas de código
             s = s.replace('\uFEFF','')
             s = s.replaceAll('(?m)^```\\w*\\s*\\r?\\n?', '')
             s = s.replaceAll('(?m)^```\\s*$', '')
 
-            // remove linhas lixo antes do primeiro package/import/declaração pública
             def lines = s.readLines()
             def inicioValido = { String ln ->
                 ln ==~ /\s*/ ||
@@ -679,10 +620,8 @@ tasks.register('organizarUsuario') {
             while (!lines.isEmpty() && !inicioValido(lines[0])) { lines.remove(0) }
             s = lines.join('\n')
 
-            // conserta padrão "}\s*public class ..."
             s = s.replaceFirst(/^\s*}\s*(public\s+(class|interface|enum|record)\s+)/, '$1')
 
-            // se houver múltiplas declarações públicas da MESMA classe, mantém só a ÚLTIMA (arquivo gerado duplicado)
             def declMatcher = (s =~ /(?m)^\s*public\s+(class|interface|enum|record)\s+([A-Za-z_]\w*)\b/)
             def decls = []
             while (declMatcher.find()) {
@@ -690,7 +629,6 @@ tasks.register('organizarUsuario') {
             }
             if (decls.size() >= 2) {
                 def ultima = decls.last()
-                // se houver outra declaração pública com o MESMO nome antes, corta tudo e mantém da última em diante
                 def existeAnteriorMesmoNome = decls[0..-2].any { it.nome == ultima.nome }
                 if (existeAnteriorMesmoNome) {
                     s = s.substring(ultima.pos)
@@ -700,29 +638,23 @@ tasks.register('organizarUsuario') {
             return s
         }
 
-        // aplica saneamento aos fontes do usuário ANTES de gravar/copiar
         fontesUsuario = fontesUsuario.collect { f ->
             [file: f.file, text: sanitizeJavaMain(f.text)]
         }
 
-
-        // Grava tudo
         fontesUsuario.each { gravar(it.text, false) }
         testesIA.each     { gravar(it.text, true)  }
 
         // --- [INÍCIO: injeção condicional de stubs do modelo] ---
         def modeloPkgPath = new File(dirMain, "org/example/model")
         def modeloJaExiste = { String nome ->
-            // existe no build?
             def f1 = new File(modeloPkgPath, "${nome}.java")
             if (f1.exists()) return true
-            // existe no código do usuário?
             return fileTree(dirEntrada) {
                 include "**/${nome}.java"
             }.any { it.text.contains("package org.example.model") }
         }
 
-        // analisamos somente se usuário/testes referem algo do modelo
         def allText = (fontesUsuario.collect{it.text} + testesIA.collect{it.text}).join("\n")
         def precisaRel   = allText.contains("RelatorioCobertura") && !modeloJaExiste("RelatorioCobertura")
         def precisaClasse= allText.contains("ClasseCoberta")      && !modeloJaExiste("ClasseCoberta")
@@ -899,15 +831,12 @@ def configurarSanear = { ->
         def limparLixoTopo = { String s ->
             if (s == null) return s
             s = s.replace('\uFEFF','')
-            // remove cercas markdown
             s = s.replaceAll('(?m)^```\\w*\\s*\\r?\\n?', '')
             s = s.replaceAll('(?m)^```\\s*$', '')
-            // remove marcadores comuns de IA
             s = s.replaceAll('(?m)^====+.*$', '')
             s = s.replaceAll('(?m)^----+.*$', '')
             s = s.replaceAll('(?m)^CODE:?\\s*$', '')
             s = s.replaceAll('(?m)^CÓDIGO:?\\s*$', '')
-            // remove linhas tipo "Algo.java" no topo
             def linhas = s.readLines()
             while (!linhas.isEmpty() && !isValidStart(linhas[0])) {
                 def head = linhas[0].trim()
@@ -921,7 +850,6 @@ def configurarSanear = { ->
         }
 
         def balancearChaves = { String s ->
-            // Conta { e } e fecha o que faltar no final
             int abre = 0
             for (ch in s.toCharArray()) {
                 if (ch == '{') abre++
@@ -945,11 +873,9 @@ def configurarSanear = { ->
                     conteudo = "import static org.junit.jupiter.api.Assertions.*;\n" + conteudo
                 }
             }
-            // Fallback: assertThrows cru
             if ((conteudo =~ /(?<!\.)\bassertThrows\s*\(/).find() && !temStaticAssertions) {
                 conteudo = conteudo.replaceAll(/(?<!\.)\bassertThrows\s*\(/, "org.junit.jupiter.api.Assertions.assertThrows(")
             }
-            // Garante @Test importado
             if (conteudo.contains("@Test") && !(conteudo =~ /(?m)^\s*import\s+org\.junit\.jupiter\.api\.Test\s*;\s*$/).find()) {
                 if ((conteudo =~ /(?m)^\s*package\s+[^;]+;\s*$/).find()) {
                     conteudo = conteudo.replaceFirst(/(?m)^(package\s+[^;]+;\s*)/, "\$1\nimport org.junit.jupiter.api.Test;\n")
@@ -966,10 +892,8 @@ def configurarSanear = { ->
             if (!(f.isFile() && f.name.endsWith(".java"))) return
             def conteudo = f.getText("UTF-8")
 
-            // 1) limpar lixo
             conteudo = limparLixoTopo(conteudo)
 
-            // 2) alinhar pacote com produção (se houver)
             String pacoteTeste = null
             def mPkg = (conteudo =~ /(?m)^\s*package\s+([A-Za-z_][\w.]*?)\s*;\s*$/)
             if (mPkg.find()) pacoteTeste = mPkg.group(1)
@@ -980,45 +904,31 @@ def configurarSanear = { ->
                 }
             } else {
                 if (pacoteTeste == null) {
-                    // sem package → coloca o mesmo package do main
                     conteudo = "package ${pacoteMain};\n\n" + conteudo
                     pacoteTeste = pacoteMain
                 } else {
-                    // injeta import do pacote main se for diferente
                     def jaImporta = conteudo.contains("import ${pacoteMain}.*;") || conteudo.contains("import ${pacoteMain}.")
                     if (!jaImporta && pacoteTeste != pacoteMain) {
                         conteudo = conteudo.replaceFirst("(?s)^(\\s*package\\s+[^{;]+;\\s*)", "\$1\nimport ${pacoteMain}.*;\n")
                     }
                 }
-
-                
             }
 
-            // [N O V O] — remove qualquer linha que seja só "algo/Algo.java" em QUALQUER lugar do arquivo
-            // [NOVO] — remove qualquer linha que seja só "algo/Algo.java" em QUALQUER lugar do arquivo
             conteudo = conteudo.replaceAll('(?m)^\\s*[A-Za-z0-9_.\\\\/\\-]+\\.java\\s*$', '')
-            // remove ruídos de logs do CI que às vezes vazam para o código de teste
             conteudo = conteudo.replaceAll('(?m)^\\s*>\\s*Task\\s*:\\S+\\s*$', '')
             conteudo = conteudo.replaceAll('(?m)^\\s*\\[?Incubating\\]?.*$', '')
             conteudo = conteudo.replaceAll('(?m)^\\s*Deprecated Gradle features.*$', '')
 
-
-            // 3) imports JUnit
             conteudo = injetarImportsJUnit(conteudo)
 
-            // [N O V O] — corrige atribuições "double ... = ..." que vieram sem ';' no fim da linha
             conteudo = conteudo.replaceAll('(?m)^(\\s*double\\s+[^;\\n{}]+)(\\s*)$', '$1;$2')
 
-
-            // 4) balancear chaves
             conteudo = balancearChaves(conteudo)
 
-            // 5) se tem @Test mas não tem 'class', embrulha numa classe
             boolean temAnotacaoTest = conteudo.contains("@Test")
             boolean temClass = (conteudo =~ /(?m)^\s*(public\s+)?(class|interface|enum|record)\b/).find()
             if (temAnotacaoTest && !temClass) {
                 String header = (pacoteMain != null) ? "package ${pacoteMain};\n" : ""
-                // evita duplicar imports já adicionados
                 def imports = []
                 def mImp = (conteudo =~ /(?m)^\s*import\s+.*;\s*$/)
                 while (mImp.find()) imports << mImp.group()
@@ -1030,14 +940,12 @@ def configurarSanear = { ->
                     corpo + "\n}\n"
             }
 
-            // 6) heurística de validade: tem classe E/OU pelo menos um método @Test
             boolean valido = ((conteudo =~ /(?m)^\s*public\s+class\s+\w+\b/).find() && conteudo.contains("@Test"))
             if (valido) qtdTestsValidos++
 
             f.setText(conteudo, "UTF-8")
         }
 
-        // 7) Se nenhum teste válido sobrou, gera um Smoke Test mínimo
         if (qtdTestsValidos == 0) {
             def destinoDir = (pacoteMain != null) ? new File(baseTest, pacoteMain.replace('.', File.separator)) : baseTest
             destinoDir.mkdirs()
@@ -1049,12 +957,11 @@ import static org.junit.jupiter.api.Assertions.*;
 public class AutoSmokeTest {
     @Test
     void smoke() {
-        // Instancia a classe pública principal (se existir)
         Object obj;
         try {
             obj = ${classePublica}.class.getDeclaredConstructor().newInstance();
         } catch (Throwable t) {
-            obj = new Object(); // fallback
+            obj = new Object();
         }
         assertNotNull(obj);
     }
@@ -1070,8 +977,6 @@ if (tasks.findByName("sanearTestesUsuario") == null) {
     tasks.named("sanearTestesUsuario").configure { configurarSanear.delegate = it; configurarSanear() }
 }
 
-
-
 tasks.named("compileUsuarioTestJava") {
     dependsOn("sanearTestesUsuario")
     options.encoding = "UTF-8"
@@ -1080,35 +985,12 @@ tasks.named("compileUsuarioTestJava") {
 // ===== JaCoCo — configuração mínima e robusta =====
 jacoco { toolVersion = "0.8.12" }
 
-// 1) Tarefa de teste do usuário (gera sempre o .exec no caminho fixo)
-tasks.register("testUsuario", Test) {
-    // se você já tem sourceSets.usuario/usuarioTest definidos, só referencie:
-    dependsOn tasks.named(sourceSets.usuario.classesTaskName),
-              tasks.named(sourceSets.usuarioTest.classesTaskName)
-
-    testClassesDirs = sourceSets.usuarioTest.output.classesDirs
-    classpath       = sourceSets.usuarioTest.runtimeClasspath
-    useJUnitPlatform()
-
-    // nunca derruba o build só porque teste falhou
-    ignoreFailures = true
-
-    // garante criação do diretório do .exec
-    outputs.upToDateWhen { false }
-    doFirst { file("$buildDir/jacoco").mkdirs() }
-
-    // .exec num caminho fixo (CI depende disso)
-    jacoco { destinationFile = file("$buildDir/jacoco/testUsuario.exec") }
-}
-
 // 2) Relatório do JaCoCo no lugar esperado (XML + HTML)
 tasks.register("jacocoRelatorioUsuario", JacocoReport) {
     dependsOn "testUsuario", "classes", tasks.named(sourceSets.usuario.classesTaskName)
 
-    // usa exatamente o .exec que o passo acima gera
     executionData.from(file("$buildDir/jacoco/testUsuario.exec"))
 
-    // fontes e classes de main + usuario
     sourceDirectories.from = files(
         sourceSets.main.allSource.srcDirs,
         (sourceSets.findByName("usuario")?.allSource?.srcDirs ?: [])
@@ -1117,7 +999,6 @@ tasks.register("jacocoRelatorioUsuario", JacocoReport) {
         fileTree(dir: "$buildDir/classes/java/main",    exclude: ['**/*$*']),
         fileTree(dir: "$buildDir/classes/java/usuario", exclude: ['**/*$*'])
     )
-
 
     reports {
         xml.required = true
@@ -1155,34 +1036,6 @@ tasks.register("jacocoXmlGarantido") {
 // 4) Alias usado no CI
 tasks.register("covUsuario") { dependsOn "jacocoXmlGarantido" }
 
-
-
-// testUsuario sempre cria o .exec no caminho esperado e chama o relatório
-tasks.named("testUsuario") {
-    useJUnitPlatform()
-    outputs.upToDateWhen { false }
-    doFirst { file("$buildDir/jacoco").mkdirs() }
-    jacoco { destinationFile = file("$buildDir/jacoco/testUsuario.exec") }
-    finalizedBy("jacocoRelatorioUsuario")
-}
-
-
-tasks.named("compileUsuarioTestJava") {
-    dependsOn("sanearTestesUsuario")
-    options.encoding = "UTF-8"
-}
-
-
-
-tasks.withType(Test).configureEach {
-    useJUnitPlatform()
-    testLogging {
-        events "passed","skipped","failed"
-        showStandardStreams = false
-        exceptionFormat "short"
-    }
-}
-
 tasks.named("testUsuario", Test).configure {
     dependsOn tasks.named(sourceSets.usuario.classesTaskName),
               tasks.named(sourceSets.usuarioTest.classesTaskName)
@@ -1192,21 +1045,14 @@ tasks.named("testUsuario", Test).configure {
 
     useJUnitPlatform()
     ignoreFailures  = true
-
-    // NÃO filtre por nome de classe — deixe o JUnit descobrir por @Test
-    // se você tinha "include ..." remova completamente
-
-    // Se (ainda assim) não houver testes, não falhe por "no matching tests"
     filter { setFailOnNoMatchingTests(false) }
 
-    // Gera o .exec sempre nesse caminho
     outputs.upToDateWhen { false }
     doFirst { file("$buildDir/jacoco").mkdirs() }
     jacoco { destinationFile = file("$buildDir/jacoco/testUsuario.exec") }
 
     finalizedBy("jacocoRelatorioUsuario")
 }
-
 
 def _configJacocoRelatorioGeral = { JacocoReport t ->
     t.dependsOn(tasks.findByName("test"), tasks.findByName("testUsuario"))
@@ -1233,21 +1079,20 @@ if (tasks.findByName("jacocoRelatorioGeral") != null) {
     tasks.register("jacocoRelatorioGeral", JacocoReport) { _configJacocoRelatorioGeral(it) }
 }
 
-
 tasks.named("jacocoRelatorioUsuario") {
     finalizedBy("jacocoRelatorioGeral")
 }
-
 
 tasks.register('usuarioCobertura') {
     dependsOn 'testUsuario'
 }
 
 tasks.withType(Test).configureEach {
+    useJUnitPlatform()
     testLogging {
-        events "FAILED", "SKIPPED"
-        exceptionFormat "full"
+        events "passed","skipped","failed"
         showStandardStreams = false
+        exceptionFormat "short"
     }
 }
 
