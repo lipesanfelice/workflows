@@ -166,7 +166,7 @@ jobs:
 
     - name: Testes + Cobertura (covUsuario garante jacoco.xml)
       run: |
-        ./gradlew --no-daemon -Dorg.gradle.configuration-cache=false -p app clean covUsuario
+        ./gradlew --no-daemon -Dorg.gradle.configuration-cache=false -p app clean covUsuario --info
         echo "JACOCO_XML=${{ github.workspace }}/app/entrada-usuario/jacoco-relatorio/jacoco.xml" >> $GITHUB_ENV
         echo "JACOCO_EXEC=${{ github.workspace }}/app/build/jacoco/testUsuario.exec" >> $GITHUB_ENV
 
