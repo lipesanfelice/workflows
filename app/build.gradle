@@ -658,8 +658,52 @@ tasks.register('organizarUsuario') {
             [file: ti.file, text: patched]
         }
 
+        // --- SANEAMENTO DE FONTES DE PRODUÇÃO (previne " }public class ..." e classes duplicadas) ---
+        def sanitizeJavaMain = { String s ->
+            if (s == null) return s
+            // remove BOM e cercas de código
+            s = s.replace('\uFEFF','')
+            s = s.replaceAll('(?m)^```\\w*\\s*\\r?\\n?', '')
+            s = s.replaceAll('(?m)^```\\s*$', '')
 
+            // remove linhas lixo antes do primeiro package/import/declaração pública
+            def lines = s.readLines()
+            def inicioValido = { String ln ->
+                ln ==~ /\s*/ ||
+                ln ==~ /\s*package\s+.*/ ||
+                ln ==~ /\s*import\s+.*/  ||
+                ln ==~ /\s*@.*/          ||
+                ln ==~ /\s*(public\s+)?(class|interface|enum|record)\b.*/ ||
+                ln ==~ /\s*\/\/.*/ || ln ==~ /\s*\/\*.*/ || ln ==~ /\s*\*.*/
+            }
+            while (!lines.isEmpty() && !inicioValido(lines[0])) { lines.remove(0) }
+            s = lines.join('\n')
 
+            // conserta padrão "}\s*public class ..."
+            s = s.replaceFirst(/^\s*}\s*(public\s+(class|interface|enum|record)\s+)/, '$1')
+
+            // se houver múltiplas declarações públicas da MESMA classe, mantém só a ÚLTIMA (arquivo gerado duplicado)
+            def declMatcher = (s =~ /(?m)^\s*public\s+(class|interface|enum|record)\s+([A-Za-z_]\w*)\b/)
+            def decls = []
+            while (declMatcher.find()) {
+                decls << [pos: declMatcher.start(), nome: declMatcher.group(2)]
+            }
+            if (decls.size() >= 2) {
+                def ultima = decls.last()
+                // se houver outra declaração pública com o MESMO nome antes, corta tudo e mantém da última em diante
+                def existeAnteriorMesmoNome = decls[0..-2].any { it.nome == ultima.nome }
+                if (existeAnteriorMesmoNome) {
+                    s = s.substring(ultima.pos)
+                }
+            }
+
+            return s
+        }
+
+        // aplica saneamento aos fontes do usuário ANTES de gravar/copiar
+        fontesUsuario = fontesUsuario.collect { f ->
+            [file: f.file, text: sanitizeJavaMain(f.text)]
+        }
 
 
         // Grava tudo
