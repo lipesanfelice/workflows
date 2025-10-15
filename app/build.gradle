@@ -934,9 +934,9 @@ def configurarSanear = { ->
             conteudo = balancearChaves(conteudo)
 
             boolean temAnotacaoTest = conteudo.contains("@Test")
-            boolean temClass = (conteudo =~ /(?m)^\\s*(public\\s+)?(class|interface|enum|record)\\b/).find()
+            boolean temClass = (conteudo =~ /(?m)^\s*(public\s+)?(class|interface|enum|record)\b/).find()
             // Depois dos fixes que adicionam "{ }" em métodos void, já dá para detectar método com "{"
-            boolean temMetodo = (conteudo =~ /(?m)^\\s*(public|protected|private)?\\s+void\\s+[A-Za-z_]\\w*\\s*\\([^)]*\\)\\s*\\{/).find()
+            boolean temMetodo = (conteudo =~ /(?m)^\s*(public|protected|private)?\s+void\s+[A-Za-z_]\w*\s*\([^)]*\)\s*\{/).find()
 
             if (!temClass && (temAnotacaoTest || temMetodo)) {
                 String header = (pacoteMain != null) ? "package ${pacoteMain};\n" : ""
