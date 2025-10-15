@@ -874,18 +874,14 @@ tasks.named("compileUsuarioTestJava") {
     options.encoding = "UTF-8"
 }
 
-// jacocoRelatorioUsuario — registra se não existir; senão, configura
-jacoco { toolVersion = "0.8.12" }
-
 tasks.named("testUsuario", Test).configure {
     useJUnitPlatform()
     outputs.upToDateWhen { false }
     doFirst { file("$buildDir/jacoco").mkdirs() }
     jacoco { destinationFile = file("$buildDir/jacoco/testUsuario.exec") }
-    finalizedBy("jacocoRelatorioUsuario")
 }
 
-def configurarJacocoRelUsuario = { ->
+def cfgRel = { ->
     dependsOn("testUsuario")
     onlyIf { true }
     doFirst { file("$projectDir/entrada-usuario/jacoco-relatorio/html").mkdirs() }
@@ -908,7 +904,16 @@ def configurarJacocoRelUsuario = { ->
         xml.outputLocation = file("$projectDir/entrada-usuario/jacoco-relatorio/jacoco.xml")
         html.outputLocation = file("$projectDir/entrada-usuario/jacoco-relatorio/html")
     }
+}
 
+if (tasks.findByName("jacocoRelatorioUsuario") == null) {
+    tasks.register("jacocoRelatorioUsuario", JacocoReport) { cfgRel.delegate = it; cfgRel() }
+} else {
+    tasks.named("jacocoRelatorioUsuario", JacocoReport).configure { cfgRel.delegate = it; cfgRel() }
+}
+
+tasks.register("covUsuario") {
+    dependsOn("jacocoRelatorioUsuario")
     doLast {
         def xml = file("$projectDir/entrada-usuario/jacoco-relatorio/jacoco.xml")
         if (!xml.exists() || xml.length() == 0) {

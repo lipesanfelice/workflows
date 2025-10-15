@@ -158,11 +158,26 @@ jobs:
           echo "tem=false" >> "$GITHUB_OUTPUT"
         fi
 
-    - name: Testes + Cobertura (testUsuario + jacocoRelatorioUsuario)
+    # - name: Testes + Cobertura (testUsuario + jacocoRelatorioUsuario)
+    #   run: |
+    #     ./gradlew --no-daemon -Dorg.gradle.configuration-cache=false -p app clean testUsuario jacocoRelatorioUsuario --info
+    #     echo "JACOCO_XML=${{ github.workspace }}/app/entrada-usuario/jacoco-relatorio/jacoco.xml" >> $GITHUB_ENV
+    #     echo "JACOCO_EXEC=${{ github.workspace }}/app/build/jacoco/testUsuario.exec" >> $GITHUB_ENV
+
+    - name: Testes + Cobertura (covUsuario garante jacoco.xml)
       run: |
-        ./gradlew --no-daemon -Dorg.gradle.configuration-cache=false -p app clean testUsuario jacocoRelatorioUsuario --info
+        ./gradlew --no-daemon -Dorg.gradle.configuration-cache=false -p app clean covUsuario
         echo "JACOCO_XML=${{ github.workspace }}/app/entrada-usuario/jacoco-relatorio/jacoco.xml" >> $GITHUB_ENV
         echo "JACOCO_EXEC=${{ github.workspace }}/app/build/jacoco/testUsuario.exec" >> $GITHUB_ENV
+    
+    - name: Debug cobertura
+      run: |
+        set -xe
+        ls -la $GITHUB_WORKSPACE/app/build/jacoco || true
+        ls -la $GITHUB_WORKSPACE/app/entrada-usuario/jacoco-relatorio || true
+        head -n 20 $JACOCO_XML || true
+
+
 
     - name: Inspecionar artefatos de cobertura
       if: always()
