@@ -1023,6 +1023,49 @@ tasks.register("jacocoRelatorioUsuario", JacocoReport) {
     doFirst { file("$projectDir/entrada-usuario/jacoco-relatorio/html").mkdirs() }
 }
 
+// ---> COLE ESTE BLOCO depois da task jacocoRelatorioUsuario <---
+tasks.register("coberturaMinimaUsuario") {
+    // roda depois que o relatório do usuário foi gerado
+    dependsOn "jacocoRelatorioUsuario"
+    doLast {
+        // threshold configurável: -PcoverageMinUsuario=0.7 ou env MIN_COVERAGE=0.7
+        def thr = (project.findProperty("coverageMinUsuario") ?: System.getenv("MIN_COVERAGE") ?: "0.60") as BigDecimal
+
+        def xml = file("$projectDir/entrada-usuario/jacoco-relatorio/jacoco.xml")
+        if (!xml.exists() || xml.length() == 0) {
+            logger.warn("coberturaMinimaUsuario → jacoco.xml não encontrado; pulando verificação (mantendo a ordem da pipeline).")
+            return
+        }
+
+        // Lê counters LINE (mais estável que INSTRUCTION)
+        def sl = new groovy.xml.XmlSlurper().parse(xml)
+        long missed = 0
+        long covered = 0
+
+        // Somamos somente os COUNTERs type="LINE" do relatório todo
+        sl.'**'.findAll { it.name() == 'counter' && it.@type?.text() == 'LINE' }.each { c ->
+            missed += (c.@missed.text() as long)
+            covered += (c.@covered.text() as long)
+        }
+
+        long total = missed + covered
+        if (total == 0) {
+            logger.warn("coberturaMinimaUsuario → relatório sem linhas contadas; pulando verificação.")
+            return
+        }
+
+        BigDecimal pct = total ? (covered as BigDecimal) / (total as BigDecimal) : 0
+        def pctFmt = String.format(java.util.Locale.US, "%.2f", pct * 100)
+
+        println "coberturaMinimaUsuario → Cobertura de linhas: ${pctFmt}%  (threshold: ${(thr*100).setScale(0, BigDecimal.ROUND_HALF_UP)}%)"
+
+        if (pct < thr) {
+            throw new GradleException("Cobertura (${pctFmt}%) abaixo do mínimo (${(thr*100).setScale(0, BigDecimal.ROUND_HALF_UP)}%).")
+        }
+    }
+}
+
+
 // 3) Garantia: se por qualquer motivo o XML não sair, criamos um vazio (para o Codecov/CI)
 tasks.register("jacocoXmlGarantido") {
     dependsOn "jacocoRelatorioUsuario"
@@ -1094,6 +1137,11 @@ if (tasks.findByName("jacocoRelatorioGeral") != null) {
 tasks.named("jacocoRelatorioUsuario") {
     finalizedBy("jacocoRelatorioGeral")
 }
+
+tasks.named("jacocoRelatorioUsuario") {
+    finalizedBy("coberturaMinimaUsuario")   // roda a verificação após gerar o relatório do usuário
+}
+
 
 tasks.register('usuarioCobertura') {
     dependsOn 'testUsuario'
