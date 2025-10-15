@@ -169,6 +169,7 @@ jobs:
         ./gradlew --no-daemon -Dorg.gradle.configuration-cache=false -p app clean covUsuario
         echo "JACOCO_XML=${{ github.workspace }}/app/entrada-usuario/jacoco-relatorio/jacoco.xml" >> $GITHUB_ENV
         echo "JACOCO_EXEC=${{ github.workspace }}/app/build/jacoco/testUsuario.exec" >> $GITHUB_ENV
+
     
     - name: Debug cobertura
       run: |
