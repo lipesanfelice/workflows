@@ -874,6 +874,8 @@ tasks.named("compileUsuarioTestJava") {
     options.encoding = "UTF-8"
 }
 
+jacoco { toolVersion = "0.8.12" }
+
 tasks.named("testUsuario", Test).configure {
     useJUnitPlatform()
     outputs.upToDateWhen { false }
@@ -881,44 +883,60 @@ tasks.named("testUsuario", Test).configure {
     jacoco { destinationFile = file("$buildDir/jacoco/testUsuario.exec") }
 }
 
-def cfgRel = { ->
-    dependsOn("testUsuario")
-    onlyIf { true }
-    doFirst { file("$projectDir/entrada-usuario/jacoco-relatorio/html").mkdirs() }
-
-    executionData fileTree(dir: "$buildDir/jacoco", include: ["*.exec"])
-
-    sourceDirectories.from = files(
-        sourceSets.main.allSource.srcDirs,
-        (sourceSets.findByName("usuario")?.allSource?.srcDirs ?: [])
-    )
-    classDirectories.from = files(
-        fileTree(dir: "$buildDir/classes/java/main"),
-        fileTree(dir: "$buildDir/classes/java/usuario")
-    )
-
-    reports {
-        xml.required = true
-        html.required = true
-        csv.required = false
-        xml.outputLocation = file("$projectDir/entrada-usuario/jacoco-relatorio/jacoco.xml")
-        html.outputLocation = file("$projectDir/entrada-usuario/jacoco-relatorio/html")
+if (tasks.findByName("jacocoRelatorioUsuario") != null) {
+    tasks.named("jacocoRelatorioUsuario", JacocoReport) {
+        dependsOn("testUsuario")
+        onlyIf { true }
+        doFirst { file("$projectDir/entrada-usuario/jacoco-relatorio/html").mkdirs() }
+        executionData fileTree(dir: "$buildDir/jacoco", include: ["*.exec"])
+        sourceDirectories.from = files(
+            sourceSets.main.allSource.srcDirs,
+            (sourceSets.findByName("usuario")?.allSource?.srcDirs ?: [])
+        )
+        classDirectories.from = files(
+            fileTree(dir: "$buildDir/classes/java/main"),
+            fileTree(dir: "$buildDir/classes/java/usuario")
+        )
+        reports {
+            xml.required = true
+            html.required = true
+            csv.required = false
+            xml.outputLocation = file("$projectDir/entrada-usuario/jacoco-relatorio/jacoco.xml")
+            html.outputLocation = file("$projectDir/entrada-usuario/jacoco-relatorio/html")
+        }
+    }
+} else {
+    tasks.register("jacocoRelatorioUsuario", JacocoReport) {
+        dependsOn("testUsuario")
+        onlyIf { true }
+        doFirst { file("$projectDir/entrada-usuario/jacoco-relatorio/html").mkdirs() }
+        executionData fileTree(dir: "$buildDir/jacoco", include: ["*.exec"])
+        sourceDirectories.from = files(
+            sourceSets.main.allSource.srcDirs,
+            (sourceSets.findByName("usuario")?.allSource?.srcDirs ?: [])
+        )
+        classDirectories.from = files(
+            fileTree(dir: "$buildDir/classes/java/main"),
+            fileTree(dir: "$buildDir/classes/java/usuario")
+        )
+        reports {
+            xml.required = true
+            html.required = true
+            csv.required = false
+            xml.outputLocation = file("$projectDir/entrada-usuario/jacoco-relatorio/jacoco.xml")
+            html.outputLocation = file("$projectDir/entrada-usuario/jacoco-relatorio/html")
+        }
     }
 }
 
-if (tasks.findByName("jacocoRelatorioUsuario") == null) {
-    tasks.register("jacocoRelatorioUsuario", JacocoReport) { cfgRel.delegate = it; cfgRel() }
-} else {
-    tasks.named("jacocoRelatorioUsuario", JacocoReport).configure { cfgRel.delegate = it; cfgRel() }
-}
-
-tasks.register("covUsuario") {
-    dependsOn("jacocoRelatorioUsuario")
-    doLast {
-        def xml = file("$projectDir/entrada-usuario/jacoco-relatorio/jacoco.xml")
-        if (!xml.exists() || xml.length() == 0) {
-            xml.parentFile.mkdirs()
-            xml.text = """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+if (tasks.findByName("covUsuario") != null) {
+    tasks.named("covUsuario") {
+        dependsOn("jacocoRelatorioUsuario")
+        doLast {
+            def xml = file("$projectDir/entrada-usuario/jacoco-relatorio/jacoco.xml")
+            if (!xml.exists() || xml.length() == 0) {
+                xml.parentFile.mkdirs()
+                xml.text = """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <report name="empty">
   <sessioninfo id="none" start="0" dump="0"/>
   <counter type="INSTRUCTION" missed="0" covered="0"/>
@@ -928,9 +946,31 @@ tasks.register("covUsuario") {
   <counter type="CLASS" missed="0" covered="0"/>
 </report>
 """
+            }
+        }
+    }
+} else {
+    tasks.register("covUsuario") {
+        dependsOn("jacocoRelatorioUsuario")
+        doLast {
+            def xml = file("$projectDir/entrada-usuario/jacoco-relatorio/jacoco.xml")
+            if (!xml.exists() || xml.length() == 0) {
+                xml.parentFile.mkdirs()
+                xml.text = """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<report name="empty">
+  <sessioninfo id="none" start="0" dump="0"/>
+  <counter type="INSTRUCTION" missed="0" covered="0"/>
+  <counter type="LINE" missed="0" covered="0"/>
+  <counter type="COMPLEXITY" missed="0" covered="0"/>
+  <counter type="METHOD" missed="0" covered="0"/>
+  <counter type="CLASS" missed="0" covered="0"/>
+</report>
+"""
+            }
         }
     }
 }
+
 
 if (tasks.findByName("jacocoRelatorioUsuario") == null) {
     tasks.register("jacocoRelatorioUsuario", JacocoReport) { configurarJacocoRelUsuario.delegate = it; configurarJacocoRelUsuario() }
