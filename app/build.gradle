@@ -932,6 +932,7 @@ tasks.register("covUsuario") {
 }
 
 
+
 if (tasks.findByName("jacocoRelatorioUsuario") == null) {
     tasks.register("jacocoRelatorioUsuario", JacocoReport) { configurarJacocoRelUsuario.delegate = it; configurarJacocoRelUsuario() }
 } else {
