@@ -9,6 +9,9 @@ plugins {
 
 import org.gradle.testing.jacoco.plugins.JacocoTaskExtension
 import java.util.regex.Pattern
+import java.nio.charset.StandardCharsets
+import java.io.ByteArrayInputStream
+
 repositories {
     mavenCentral()
 }
@@ -906,12 +909,17 @@ def configurarSanear = { ->
 
             conteudo = injetarImportsJUnit(conteudo)
 
+            // 👇 NOVO: proteger testes que fazem new Scanner(System.in)
+            conteudo = conteudo.replaceAll(
+                /new\s+Scanner\s*\(\s*System\.in\s*\)/,
+                'new java.util.Scanner(new java.io.ByteArrayInputStream(("0\\n0\\n0\\n0\\n0\\n").getBytes(java.nio.charset.StandardCharsets.UTF_8)))'
+            )
+
             // 1) finalizar linhas double sem ';'
             conteudo = conteudo.replaceAll('(?m)^(\\s*double\\s+[^;\\n{}]+)(\\s*)$', '$1;$2')
                                .replaceAll('(?m)\\b(char)\\s+([A-Za-z_]\\w*)\\s*=\\s*;', '$1 $2 = \'\\0\';')
 
             // 2) Corrige declarações com '=;' sem valor inicial
-            // 2) Corrige declarações com '= +;' ou '= -;' (sem valor) e depois '=;' sem valor
             conteudo = conteudo
                 // casos com sinal isolado após o '='
                 .replaceAll('(?m)\\b(double|float)\\s+([A-Za-z_]\\w*)\\s*=\\s*[+-]?\\s*;', '$1 $2 = 0.0;')
@@ -936,13 +944,11 @@ def configurarSanear = { ->
                 '$0 { }'
             )
 
-            // --- Fallback genérico: se o RHS (depois do '=') não tem letras/dígitos/aspas, troca por default ---
-            // (cobre casos como "= -;", "= + ;", "= /**/ ;", "= ??? ;" e similares)
+            // --- Fallback genérico para RHS lixo ---
             def ehRhsLixo = { String rhs ->
                 if (rhs == null) return true
                 def t = rhs.trim()
                 if (t.isEmpty()) return true
-                // Se NÃO houver nenhuma letra, dígito ou aspas simples/duplas, consideramos lixo
                 return !((t =~ /[A-Za-z0-9'"]/).find())
             }
 
@@ -980,13 +986,11 @@ def configurarSanear = { ->
 
             boolean temAnotacaoTest = conteudo.contains("@Test")
             boolean temClass = (conteudo =~ /(?m)^\s*(public\s+)?(class|interface|enum|record)\b/).find()
-            // Depois dos fixes que adicionam "{ }" em métodos void, já dá para detectar método com "{"
             boolean temMetodo = (conteudo =~ /(?m)^\s*(public|protected|private)?\s+void\s+[A-Za-z_]\w*\s*\([^)]*\)\s*\{/).find()
 
             if (!temClass && (temAnotacaoTest || temMetodo)) {
                 String header = (pacoteMain != null) ? "package ${pacoteMain};\n" : ""
                 def imports = []
-                // (corrigido: usar \s, não \\s, dentro de slashy regex)
                 def mImp = (conteudo =~ /(?m)^\s*import\s+.*;\s*$/)
                 while (mImp.find()) imports << mImp.group()
                 def corpo = conteudo.replaceAll(/(?m)^\s*import\s+.*;\s*$/, "").trim()
@@ -997,7 +1001,6 @@ def configurarSanear = { ->
                     corpo + "\n}\n"
             }
 
-            // (corrigido: usar \s,\w,\b — não \\s,\\w,\\b — dentro de slashy regex)
             boolean valido = ((conteudo =~ /(?m)^\s*public\s+class\s+\w+\b/).find() && conteudo.contains("@Test"))
             if (valido) qtdTestsValidos++
 
@@ -1128,6 +1131,10 @@ tasks.register("testUsuarioBestEffort", Test) {
         fileTree("$buildDir/classes/java/main"),
         sourceSets.findByName("usuarioTest")?.runtimeClasspath ?: files()
     )
+
+    // 👇 NOVO: stdin padrão p/ testes que usam Scanner(System.in)/nextLine/etc.
+    def defaultInput = ("0\n0\n0\n0\n0\n")
+    standardInput = new ByteArrayInputStream(defaultInput.getBytes(StandardCharsets.UTF_8))
 
     outputs.upToDateWhen { false }
     doFirst { file("$buildDir/jacoco").mkdirs() }
