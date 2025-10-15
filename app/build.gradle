@@ -911,7 +911,12 @@ def configurarSanear = { ->
                                .replaceAll('(?m)\\b(char)\\s+([A-Za-z_]\\w*)\\s*=\\s*;', '$1 $2 = \'\\0\';')
 
             // 2) Corrige declarações com '=;' sem valor inicial
+            // 2) Corrige declarações com '= +;' ou '= -;' (sem valor) e depois '=;' sem valor
             conteudo = conteudo
+                // casos com sinal isolado após o '='
+                .replaceAll('(?m)\\b(double|float)\\s+([A-Za-z_]\\w*)\\s*=\\s*[+-]?\\s*;', '$1 $2 = 0.0;')
+                .replaceAll('(?m)\\b(int|long|short|byte)\\s+([A-Za-z_]\\w*)\\s*=\\s*[+-]?\\s*;', '$1 $2 = 0;')
+                // casos '=;' puros
                 .replaceAll('(?m)\\b(double|float)\\s+([A-Za-z_]\\w*)\\s*=\\s*;', '$1 $2 = 0.0;')
                 .replaceAll('(?m)\\b(int|long|short|byte)\\s+([A-Za-z_]\\w*)\\s*=\\s*;', '$1 $2 = 0;')
                 .replaceAll('(?m)\\b(boolean)\\s+([A-Za-z_]\\w*)\\s*=\\s*;', '$1 $2 = false;')
@@ -931,6 +936,46 @@ def configurarSanear = { ->
                 '$0 { }'
             )
 
+            // --- Fallback genérico: se o RHS (depois do '=') não tem letras/dígitos/aspas, troca por default ---
+            // (cobre casos como "= -;", "= + ;", "= /**/ ;", "= ??? ;" e similares)
+            def ehRhsLixo = { String rhs ->
+                if (rhs == null) return true
+                def t = rhs.trim()
+                if (t.isEmpty()) return true
+                // Se NÃO houver nenhuma letra, dígito ou aspas simples/duplas, consideramos lixo
+                return !((t =~ /[A-Za-z0-9'"]/).find())
+            }
+
+            def defaultDe = { String tipo ->
+                switch (tipo) {
+                    case 'float'  : return '0.0f'
+                    case 'double' : return '0.0'
+                    case ['int','long','short','byte']: return '0'
+                    case 'boolean': return 'false'
+                    case 'char'   : return "'\\0'"
+                    case 'String' : return '""'
+                    default       : return null
+                }
+            }
+
+            // 1) Tipos primitivos + String com fallback por tipo
+            conteudo = conteudo.replaceAll(
+                ~/(?m)\b(double|float|int|long|short|byte|boolean|char|String)\s+([A-Za-z_]\w*)\s*=\s*([^;]*);/
+            ) { all, tipo, nome, rhs ->
+                if (ehRhsLixo(rhs)) {
+                    def d = defaultDe(tipo)
+                    return d != null ? "${tipo} ${nome} = ${d};" : "${tipo} ${nome};"
+                }
+                return all
+            }
+
+            // 2) Qualquer outro tipo: se RHS é lixo, apenas remove a atribuição
+            conteudo = conteudo.replaceAll(
+                ~/(?m)\b([A-Za-z_][\w<>\[\]]*)\s+([A-Za-z_]\w*)\s*=\s*([^;]*);/
+            ) { all, tipo, nome, rhs ->
+                ehRhsLixo(rhs) ? "${tipo} ${nome};" : all
+            }
+
             conteudo = balancearChaves(conteudo)
 
             boolean temAnotacaoTest = conteudo.contains("@Test")
@@ -941,9 +986,10 @@ def configurarSanear = { ->
             if (!temClass && (temAnotacaoTest || temMetodo)) {
                 String header = (pacoteMain != null) ? "package ${pacoteMain};\n" : ""
                 def imports = []
-                def mImp = (conteudo =~ /(?m)^\\s*import\\s+.*;\\s*$/)
+                // (corrigido: usar \s, não \\s, dentro de slashy regex)
+                def mImp = (conteudo =~ /(?m)^\s*import\s+.*;\s*$/)
                 while (mImp.find()) imports << mImp.group()
-                def corpo = conteudo.replaceAll(/(?m)^\\s*import\\s+.*;\\s*$/, "").trim()
+                def corpo = conteudo.replaceAll(/(?m)^\s*import\s+.*;\s*$/, "").trim()
                 conteudo =
                     header +
                     (imports.isEmpty() ? "" : (imports.join("\n") + "\n")) +
@@ -951,7 +997,8 @@ def configurarSanear = { ->
                     corpo + "\n}\n"
             }
 
-            boolean valido = ((conteudo =~ /(?m)^\\s*public\\s+class\\s+\\w+\\b/).find() && conteudo.contains("@Test"))
+            // (corrigido: usar \s,\w,\b — não \\s,\\w,\\b — dentro de slashy regex)
+            boolean valido = ((conteudo =~ /(?m)^\s*public\s+class\s+\w+\b/).find() && conteudo.contains("@Test"))
             if (valido) qtdTestsValidos++
 
             f.setText(conteudo, "UTF-8")
