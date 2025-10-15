@@ -990,10 +990,27 @@ def configurarSanear = { ->
                         conteudo = conteudo.replaceFirst("(?s)^(\\s*package\\s+[^{;]+;\\s*)", "\$1\nimport ${pacoteMain}.*;\n")
                     }
                 }
+
+                
             }
+
+            // [N O V O] — remove qualquer linha que seja só "algo/Algo.java" em QUALQUER lugar do arquivo
+            // [NOVO] — remove qualquer linha que seja só "algo/Algo.java" em QUALQUER lugar do arquivo
+            conteudo = conteudo.replaceAll('(?m)^\\s*[A-Za-z0-9_.\\\\/\\-]+\\.java\\s*$', '')
+            // remove ruídos de logs do CI que às vezes vazam para o código de teste
+            conteudo = conteudo.replaceAll('(?m)^\\s*>\\s*Task\\s*:\\S+\\s*$', '')
+            conteudo = conteudo.replaceAll('(?m)^\\s*\\[?Incubating\\]?.*$', '')
+            conteudo = conteudo.replaceAll('(?m)^\\s*Deprecated Gradle features.*$', '')
+
+
+
 
             // 3) imports JUnit
             conteudo = injetarImportsJUnit(conteudo)
+
+            // [N O V O] — corrige atribuições "double ... = ..." que vieram sem ';' no fim da linha
+            conteudo = conteudo.replaceAll('(?m)^(\\s*double\\s+[^;\\n{}]+)(\\s*)$', '$1;$2')
+
 
             // 4) balancear chaves
             conteudo = balancearChaves(conteudo)
@@ -1072,22 +1089,6 @@ tasks.withType(Test).configureEach {
         exceptionFormat "full"
         showStandardStreams = false
     }
-}
-
-// testUsuario: garante o .exec fixo e não derruba o build por falha
-tasks.named("testUsuario", Test).configure {
-    dependsOn tasks.named(sourceSets.usuario.classesTaskName),
-              tasks.named(sourceSets.usuarioTest.classesTaskName)
-
-    testClassesDirs = sourceSets.usuarioTest.output.classesDirs
-    classpath       = sourceSets.usuarioTest.runtimeClasspath
-    ignoreFailures  = true
-
-    outputs.upToDateWhen { false }
-    doFirst { file("$buildDir/jacoco").mkdirs() }
-    jacoco { destinationFile = file("$buildDir/jacoco/testUsuario.exec") }
-
-    finalizedBy("jacocoRelatorioUsuario")
 }
 
 tasks.register("jacocoRelatorioUsuario", JacocoReport) {
