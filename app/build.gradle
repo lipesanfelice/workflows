@@ -928,24 +928,6 @@ tasks.register("jacocoRelatorioUsuario", JacocoReport) {
     }
 }
 
-// Relatório consolidado opcional (se quiser manter)
-tasks.register("jacocoRelatorioGeral", JacocoReport) {
-    dependsOn(tasks.findByName("test"), tasks.findByName("testUsuario"))
-    executionData fileTree(projectDir) {
-        include "**/build/jacoco/*.exec", "**/jacoco/*.exec"
-    }
-    sourceDirectories.from = files(sourceSets.main.allSource.srcDirs, sourceSets.findByName("usuario")?.allSource?.srcDirs ?: [])
-    classDirectories.from = files(
-        fileTree(dir: "$buildDir/classes/java/main"),
-        fileTree(dir: "$buildDir/classes/java/usuario")
-    )
-    reports {
-        xml.required = true
-        html.required = true
-        csv.required = false
-        html.outputLocation = layout.buildDirectory.dir("reports/jacoco/geral").get().asFile
-    }
-}
 
 // Garante que o geral rode depois do de usuário (opcional)
 tasks.named("jacocoRelatorioUsuario") {
@@ -1007,23 +989,31 @@ tasks.named("testUsuario") {
     failFast = false
 }
 
-tasks.register("jacocoRelatorioGeral", JacocoReport) {
-    dependsOn(tasks.findByName("test"), tasks.findByName("testUsuario"))
-    executionData fileTree(projectDir) {
-        include "**/build/jacoco/*.exec", "**/jacoco/*.exec"
-    }
-    sourceDirectories.from = files(sourceSets.main.allSource.srcDirs, sourceSets.findByName("usuario")?.allSource?.srcDirs ?: [])
-    classDirectories.from = files(
+def _configJacocoRelatorioGeral = { JacocoReport t ->
+    t.dependsOn(tasks.findByName("test"), tasks.findByName("testUsuario"))
+    t.executionData fileTree(projectDir) { include "**/build/jacoco/*.exec", "**/jacoco/*.exec" }
+    t.sourceDirectories.from = files(
+        sourceSets.main.allSource.srcDirs,
+        (sourceSets.findByName("usuario")?.allSource?.srcDirs ?: [])
+    )
+    t.classDirectories.from = files(
         fileTree(dir: "$buildDir/classes/java/main"),
         fileTree(dir: "$buildDir/classes/java/usuario")
     )
-    reports {
+    t.reports {
         xml.required = true
         html.required = true
         csv.required = false
         html.outputLocation = layout.buildDirectory.dir("reports/jacoco/geral").get().asFile
     }
 }
+
+if (tasks.findByName("jacocoRelatorioGeral") != null) {
+    tasks.named("jacocoRelatorioGeral", JacocoReport).configure { _configJacocoRelatorioGeral(it) }
+} else {
+    tasks.register("jacocoRelatorioGeral", JacocoReport) { _configJacocoRelatorioGeral(it) }
+}
+
 
 tasks.named("jacocoRelatorioUsuario") {
     finalizedBy("jacocoRelatorioGeral")
