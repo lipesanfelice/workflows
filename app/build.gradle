@@ -859,6 +859,24 @@ def configurarSanear = { ->
                 }
             }
 
+            // === Injetar static import de Assertions (JUnit 5) quando necessário ===
+            def usaAssertions = (conteudo =~ /\bassert(?:Equals|True|False|NotNull|Null|Throws|All|DoesNotThrow|ArrayEquals|IterableEquals|LinesMatch|Same|NotSame)\s*\(/).find()
+            def temStaticAssertions = (conteudo =~ /(?m)^\s*import\s+static\s+org\.junit\.jupiter\.api\.Assertions\.\*\s*;\s*$/).find()
+            def temQualificadoAssertions = (conteudo =~ /\borg\.junit\.jupiter\.api\.Assertions\./).find()
+
+            if (usaAssertions && !temStaticAssertions && !temQualificadoAssertions) {
+                if ((conteudo =~ /(?m)^\s*package\s+[^;]+;\s*$/).find()) {
+                    conteudo = conteudo.replaceFirst(/(?m)^(package\s+[^;]+;\s*)/, "\$1\nimport static org.junit.jupiter.api.Assertions.*;\n")
+                } else {
+                    conteudo = "import static org.junit.jupiter.api.Assertions.*;\n" + conteudo
+                }
+            }
+
+            // === Fallback: prefixar assertThrows(...) se ainda estiver sem qualificação e sem static import ===
+            if ((conteudo =~ /(?<!\.)\bassertThrows\s*\(/).find() && !temStaticAssertions) {
+                conteudo = conteudo.replaceAll(/(?<!\.)\bassertThrows\s*\(/, "org.junit.jupiter.api.Assertions.assertThrows(")
+            }
+
             f.setText(conteudo, "UTF-8")
         }
     }
@@ -868,6 +886,7 @@ if (tasks.findByName("sanearTestesUsuario") == null) {
 } else {
     tasks.named("sanearTestesUsuario").configure { configurarSanear.delegate = it; configurarSanear() }
 }
+
 
 tasks.named("compileUsuarioTestJava") {
     dependsOn("sanearTestesUsuario")
