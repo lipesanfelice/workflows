@@ -935,8 +935,6 @@ def configurarSanear = { ->
                 .replaceAll('(?m)\\b([A-Za-z_][\\w<>\\[\\]]*)\\s+([A-Za-z_]\\w*)\\s*=\\s*;', '$1 $2;')
 
 
-
-
             conteudo = balancearChaves(conteudo)
 
             boolean temAnotacaoTest = conteudo.contains("@Test")
