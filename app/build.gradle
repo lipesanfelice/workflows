@@ -916,14 +916,31 @@ def configurarSanear = { ->
             return linhas.join('\n')
         }
 
-        def balancearChaves = { String s ->
-            int abre = 0
-            for (ch in s.toCharArray()) {
-                if (ch == '{') abre++
-                else if (ch == '}') abre = Math.max(0, abre - 1)
+        // Pelo NOVO ajuste (remove '}' a mais e depois completa '{' a menos):
+        def ajustarChaves = { String s ->
+            if (s == null) return s
+            int opens = 0, closes = 0
+            s.each { ch -> if (ch == '{') opens++; else if (ch == '}') closes++; }
+
+            // Se há mais '}' do que '{', remove as excedentes do final (linhas só com '}')
+            if (closes > opens) {
+                int excesso = closes - opens
+                def linhas = s.readLines()
+                for (int i = linhas.size() - 1; i >= 0 && excesso > 0; i--) {
+                    if (linhas[i].trim() == '}') {
+                        linhas.remove(i)
+                        excesso--
+                    }
+                }
+                s = linhas.join('\n')
+                // recalcula após a remoção
+                opens = 0; closes = 0
+                s.each { ch -> if (ch == '{') opens++; else if (ch == '}') closes++; }
             }
-            if (abre > 0) {
-                s = s + ("\n" + ("}" * abre) + "\n")
+
+            // Se ainda faltarem '}', completa no final
+            if (opens > closes) {
+                s = s + ("\n" + ("}" * (opens - closes)) + "\n")
             }
             return s
         }
@@ -1056,7 +1073,7 @@ def configurarSanear = { ->
                 ehRhsLixo(rhs) ? "${tipo} ${nome};" : all
             }
 
-            conteudo = balancearChaves(conteudo)
+            conteudo = ajustarChaves(conteudo)
 
             boolean temAnotacaoTest = conteudo.contains("@Test")
             boolean temClass = (conteudo =~ /(?m)^\s*(public\s+)?(class|interface|enum|record)\b/).find()
@@ -1323,6 +1340,20 @@ tasks.register("covUsuario") {
     dependsOn "jacocoAntReport"
     finalizedBy "jacocoXmlGarantido"
 }
+
+// Desabilita qualquer jacocoAntReport herdado/registrado acidentalmente
+gradle.taskGraph.whenReady {
+    def t = tasks.findByName("jacocoAntReport")
+    if (t != null) {
+        t.enabled = false
+        t.onlyIf { false }
+    }
+}
+// E também garanta que 'covUsuario' não dependa dela
+tasks.named("covUsuario").configure {
+    dependsOn.removeIf { it instanceof Task && it.name == "jacocoAntReport" }
+}
+
 
 // --- Demais integrações que você já tinha ---
 
