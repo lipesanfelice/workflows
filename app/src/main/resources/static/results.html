@@ -65,7 +65,6 @@
               <i data-feather="file-text" class="mr-2"></i> Arquivos de Teste Gerados
             </h2>
             <div class="flex gap-2">
-              <button id="btnReload" class="px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-md text-sm">Recarregar</button>
               <a href="index.html" class="px-3 py-2 bg-white border border-gray-300 hover:bg-gray-50 rounded-md text-sm text-gray-700">Nova análise</a>
             </div>
           </div>
@@ -270,13 +269,11 @@ function renderCodecov(){
   aProject.href = `https://app.codecov.io/gh/${OWNER}/${REPO}/tree/${BRANCH}`;
   aProject.target = '_blank';
   aProject.className = 'px-3 py-2 bg-white border border-gray-300 hover:bg-gray-50 rounded-md text-sm text-gray-700';
-  aProject.textContent = 'Abrir projeto no Codecov';
 
   const aCommits = document.createElement('a');
   aCommits.href = `https://app.codecov.io/gh/${OWNER}/${REPO}/commits`;
   aCommits.target = '_blank';
   aCommits.className = 'px-3 py-2 bg-white border border-gray-300 hover:bg-gray-50 rounded-md text-sm text-gray-700';
-  aCommits.textContent = 'Histórico de commits no Codecov';
 
   links.appendChild(aProject);
   links.appendChild(aCommits);

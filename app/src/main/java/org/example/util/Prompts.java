@@ -34,7 +34,7 @@ public class Prompts {
         Regras:
         - Se uma métrica tiver valor > 0, criar testes para ela antes de passar para a próxima.
         - Se todas forem 0, gerar testes prescritivos para maximizar cobertura.
-        - Crie o teste para a parte do código que a métrica aponta.
+        - Crie testes que possam ser executados pelo Jacoco sem qualquer erro.
         - Mesmo após tratar as métricas, criar testes extras para elevar a cobertura.
         - Variar caminhos, ramos, exceções, entradas inválidas e limites quando aplicável.
         - Gere UM ÚNICO arquivo de teste JUnit 5 para o arquivo alvo.
