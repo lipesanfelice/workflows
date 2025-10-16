@@ -9,7 +9,6 @@ plugins {
 
 import org.gradle.testing.jacoco.plugins.JacocoTaskExtension
 import java.util.regex.Pattern
-
 repositories {
     mavenCentral()
 }
@@ -155,7 +154,7 @@ def mapaImports = [
     'com.opencsv'                      : 'com.opencsv:opencsv:5.9',
 
     // === Segurança / Cripto ===
-    'org.jose4j'                       : 'org.bitbucket_b_c:jose4j:0.9.6',
+    'org.jose4j'                       : 'org.bitbucket.b_c:jose4j:0.9.6',
     'org.mindrot.jbcrypt'              : 'org.mindrot:jbcrypt:0.4',
 
     // === Mapping / Utils extras ===
@@ -928,11 +927,13 @@ def configurarSanear = { ->
                 .replaceAll('(?m)\\b(String)\\s+([A-Za-z_]\\w*)\\s*=\\s*;', '$1 $2 = "";')
                 .replaceAll('(?m)\\b([A-Za-z_][\\w<>\\[\\]]*)\\s+([A-Za-z_]\\w*)\\s*=\\s*;', '$1 $2;')
 
+            // Corrige linhas assertThrows truncadas
             conteudo = conteudo.replaceAll(
                 '(?m)^\\s*(?:org\\.junit\\.jupiter\\.api\\.Assertions\\.)?assertThrows\\([^;\\n]*$',
                 'org.junit.jupiter.api.Assertions.assertThrows(ArithmeticException.class, () -> { throw new ArithmeticException(); });'
             )
 
+            // Dá corpo a métodos void sem bloco
             conteudo = conteudo.replaceAll(
                 '(?m)^\\s*(public|protected|private)?\\s+void\\s+[A-Za-z_]\\w*\\s*\\([^)]*\\)\\s*$',
                 '$0 { }'
@@ -1128,12 +1129,17 @@ tasks.register("testUsuarioBestEffort", Test) {
     jacoco { destinationFile = file("$buildDir/jacoco/testUsuario.exec") }
 }
 
-// Relatório best-effort: só roda se existir .exec
+// Relatório best-effort: agora roda *depois* dos testes e pega o .exec em tempo de execução
 tasks.register("jacocoRelatorioUsuarioBestEffort", JacocoReport) {
-    def execFile = file("$buildDir/jacoco/testUsuario.exec")
+    dependsOn "testUsuarioBestEffort"
+    mustRunAfter "testUsuarioBestEffort"
 
-    onlyIf { execFile.exists() }
-    executionData.setFrom(execFile.exists() ? files(execFile) : files())
+    onlyIf { file("$buildDir/jacoco/testUsuario.exec").exists() }
+
+    doFirst {
+        executionData.from(file("$buildDir/jacoco/testUsuario.exec"))
+        file("$projectDir/entrada-usuario/jacoco-relatorio/html").mkdirs()
+    }
 
     sourceDirectories.from = files(
         sourceSets.main.allSource.srcDirs,
@@ -1151,8 +1157,6 @@ tasks.register("jacocoRelatorioUsuarioBestEffort", JacocoReport) {
         xml.outputLocation = file("$projectDir/entrada-usuario/jacoco-relatorio/jacoco.xml")
         html.outputLocation = file("$projectDir/entrada-usuario/jacoco-relatorio/html")
     }
-
-    doFirst { file("$projectDir/entrada-usuario/jacoco-relatorio/html").mkdirs() }
 }
 
 // Garantia: se o XML não sair (porque não houve exec), cria vazio para Codecov
@@ -1176,7 +1180,7 @@ tasks.register("jacocoXmlGarantido") {
     }
 }
 
-// Alias do CI: tenta executar e reportar; se não conseguir, cai no XML vazio
+// Alias do CI: tenta executar e reportar; agora o relatório depende do teste
 tasks.register("covUsuario") {
     dependsOn "testUsuarioBestEffort"
     dependsOn "jacocoRelatorioUsuarioBestEffort"
