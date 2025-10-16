@@ -106,7 +106,7 @@ def mapaImports = [
     'org.apache.commons.compress'      : 'org.apache.commons:commons-compress:1.26.2',
     'org.apache.commons.math3'         : 'org.apache.commons:commons-math3:3.6.1',
     'org.apache.commons.beanutils'     : 'commons-beanutils:commons-beanutils:1.9.4',
-    'org.apache.commons.validator'     : 'commons-validator:commons-validator:1.9.0',
+    'org.apache.commons.validator'     : 'commons-validator:1.9.0',
 
     // === Google / JSON / Utils ===
     'com.google.common'                : 'com.google.guava:guava:33.2.1-jre',
@@ -1040,17 +1040,23 @@ jacoco { toolVersion = "0.8.12" }
 
 // 2) Relatório do JaCoCo "completo" (para rodadas normais)
 tasks.register("jacocoRelatorioUsuario", JacocoReport) {
-    dependsOn "testUsuario", "classes", tasks.named(sourceSets.usuario.classesTaskName)
+    dependsOn "testUsuario", tasks.named(sourceSets.usuario.classesTaskName)
 
-    executionData.from(file("$buildDir/jacoco/testUsuario.exec"))
+    // ⚠️ não dependa de "classes" (main) aqui pra não poluir o fluxo
+    // executionData: doFirst (garante que o arquivo já exista)
+    doFirst {
+        executionData.from(file("$buildDir/jacoco/testUsuario.exec"))
+    }
 
+    // 👉 incluir também a pasta espelhada no repo p/ mapear no Codecov
     sourceDirectories.from = files(
         sourceSets.main.allSource.srcDirs,
-        (sourceSets.findByName("usuario")?.allSource?.srcDirs ?: [])
+        (sourceSets.findByName("usuario")?.allSource?.srcDirs ?: []),
+        file("$projectDir/entrada-usuario")
     )
     classDirectories.from = files(
-        fileTree(dir: "$buildDir/classes/java/main",    exclude: ['**/*$*']),
-        fileTree(dir: "$buildDir/classes/java/usuario", exclude: ['**/*$*'])
+        fileTree(dir: "$buildDir/classes/java/usuario", exclude: ['**/*$*']),
+        fileTree(dir: "$buildDir/classes/java/main",    exclude: ['**/*$*'])
     )
 
     reports {
@@ -1110,14 +1116,17 @@ tasks.register("coberturaMinimaUsuario") {
 
 // === Caminho BEST-EFFORT para o CI/Codecov ===
 
-// Teste best-effort: não depende de compilar os testes agora; usa o que existir e não falha
+// Teste best-effort: agora garante compilação de usuario/usuarioTest antes de rodar
 tasks.register("testUsuarioBestEffort", Test) {
+    // 🔧 garante que as classes existem
+    dependsOn 'organizarUsuario', 'resolverDepsUsuario',
+              tasks.named(sourceSets.usuario.classesTaskName),
+              tasks.named(sourceSets.usuarioTest.classesTaskName)
+
     ignoreFailures = true
     useJUnitPlatform()
 
-    testClassesDirs = files(
-        file("$buildDir/classes/java/usuarioTest")
-    )
+    testClassesDirs = files(file("$buildDir/classes/java/usuarioTest"))
     classpath = files(
         fileTree("$buildDir/classes/java/usuario"),
         fileTree("$buildDir/classes/java/main"),
@@ -1129,11 +1138,12 @@ tasks.register("testUsuarioBestEffort", Test) {
     jacoco { destinationFile = file("$buildDir/jacoco/testUsuario.exec") }
 }
 
-// Relatório best-effort: agora roda *depois* dos testes e pega o .exec em tempo de execução
+// Relatório best-effort: roda *depois* dos testes e carrega executionData no doFirst
 tasks.register("jacocoRelatorioUsuarioBestEffort", JacocoReport) {
     dependsOn "testUsuarioBestEffort"
     mustRunAfter "testUsuarioBestEffort"
 
+    // só pula se REALMENTE não existir no momento da execução
     onlyIf { file("$buildDir/jacoco/testUsuario.exec").exists() }
 
     doFirst {
@@ -1141,13 +1151,15 @@ tasks.register("jacocoRelatorioUsuarioBestEffort", JacocoReport) {
         file("$projectDir/entrada-usuario/jacoco-relatorio/html").mkdirs()
     }
 
+    // incluir também entrada-usuario p/ mapeamento no Codecov
     sourceDirectories.from = files(
         sourceSets.main.allSource.srcDirs,
-        (sourceSets.findByName("usuario")?.allSource?.srcDirs ?: [])
+        (sourceSets.findByName("usuario")?.allSource?.srcDirs ?: []),
+        file("$projectDir/entrada-usuario")
     )
     classDirectories.from = files(
-        fileTree(dir: "$buildDir/classes/java/main",    exclude: ['**/*$*']),
-        fileTree(dir: "$buildDir/classes/java/usuario", exclude: ['**/*$*'])
+        fileTree(dir: "$buildDir/classes/java/usuario", exclude: ['**/*$*']),
+        fileTree(dir: "$buildDir/classes/java/main",    exclude: ['**/*$*'])
     )
 
     reports {
@@ -1194,7 +1206,8 @@ def _configJacocoRelatorioGeral = { JacocoReport t ->
     t.executionData fileTree(projectDir) { include "**/build/jacoco/*.exec", "**/jacoco/*.exec" }
     t.sourceDirectories.from = files(
         sourceSets.main.allSource.srcDirs,
-        (sourceSets.findByName("usuario")?.allSource?.srcDirs ?: [])
+        (sourceSets.findByName("usuario")?.allSource?.srcDirs ?: []),
+        file("$projectDir/entrada-usuario")
     )
     t.classDirectories.from = files(
         fileTree(dir: "$buildDir/classes/java/main"),
