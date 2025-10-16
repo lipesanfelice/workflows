@@ -22,6 +22,12 @@ configurations {
     usuarioTestRuntimeOnly.extendsFrom testRuntimeOnly
 }
 
+// Para injetar o agente no JavaExec
+configurations {
+    jacocoRuntime
+}
+
+
 dependencies {
     // Testes (JUnit)
     testImplementation libs.junit.jupiter
@@ -45,6 +51,10 @@ dependencies {
 
     testImplementation platform('org.junit:junit-bom:5.10.2')
     testImplementation 'org.junit.jupiter:junit-jupiter'
+
+    // Agente do JaCoCo (para -javaagent)
+    jacocoRuntime 'org.jacoco:org.jacoco.agent:0.8.12'
+
 }
 
 
@@ -923,7 +933,6 @@ tasks.register("coberturaMinimaUsuario") {
 
 /* ===================== NOVO FLUXO: ConsoleLauncher + JaCoCo ===================== */
 
-// 1) Executa os testes via JUnit ConsoleLauncher, instrumentado pelo JaCoCo
 tasks.register("testUsuarioConsole", JavaExec) {
     group = "verification"
     description = "Roda os testes do sourceSet usuarioTest usando o JUnit ConsoleLauncher (instrumentado pelo JaCoCo)."
@@ -937,22 +946,26 @@ tasks.register("testUsuarioConsole", JavaExec) {
 
     // Varre todo o classpath por testes
     args '--scan-class-path'
-    // Sumário
+    // Sumário legível
     args '--details', 'summary'
-
-    // JaCoCo agent para esta execução
-    jacoco {
-        destinationFile = file("$buildDir/jacoco/testUsuarioConsole.exec")
-        includeNoLocationClasses = true
-        excludes = ['jdk.internal.*']
-    }
 
     // Não falhar o build se testes falharem (para ainda gerar cobertura)
     ignoreExitValue = true
+
+    // Charset consistente
     jvmArgs '-Dfile.encoding=UTF-8'
+
+    doFirst {
+        file("$buildDir/jacoco").mkdirs()
+        // ⚠️ INJEÇÃO DO AGENTE AQUI (substitui o antigo bloco 'jacoco { ... }')
+        def agent = configurations.jacocoRuntime.singleFile
+        def dest  = file("$buildDir/jacoco/testUsuarioConsole.exec").absolutePath
+        jvmArgs "-javaagent:${agent}=destfile=${dest},append=true,output=file,inclnolocationclasses=false,includes=*"
+    }
+
     standardInput = System.in
-    doFirst { file("$buildDir/jacoco").mkdirs() }
 }
+
 
 // 2) Relatório JaCoCo a partir do .exec do ConsoleLauncher
 tasks.register("jacocoRelatorioUsuarioConsole", JacocoReport) {
@@ -962,7 +975,14 @@ tasks.register("jacocoRelatorioUsuarioConsole", JacocoReport) {
     dependsOn "testUsuarioConsole"
     mustRunAfter "testUsuarioConsole"
 
-    executionData.from(file("$buildDir/jacoco/testUsuarioConsole.exec"))
+    doFirst {
+        def exec = file("$buildDir/jacoco/testUsuarioConsole.exec")
+        if (!exec.exists()) {
+            logger.lifecycle("jacocoRelatorioUsuarioConsole → sem execution data; relatório ficará vazio.")
+        }
+        executionData.from(exec)
+        file("$projectDir/entrada-usuario/jacoco-relatorio/html").mkdirs()
+    }
 
     sourceDirectories.from = files(
         sourceSets.main.allSource.srcDirs,
@@ -981,8 +1001,6 @@ tasks.register("jacocoRelatorioUsuarioConsole", JacocoReport) {
         xml.outputLocation = file("$projectDir/entrada-usuario/jacoco-relatorio/jacoco.xml")
         html.outputLocation = file("$projectDir/entrada-usuario/jacoco-relatorio/html")
     }
-
-    doFirst { file("$projectDir/entrada-usuario/jacoco-relatorio/html").mkdirs() }
 }
 
 // 3) Garantia: se o XML não sair (porque não houve exec), cria vazio para Codecov
