@@ -14,14 +14,21 @@ repositories {
     mavenCentral()
 }
 
+/* ✅ garanta que as configs existem antes de usá-las */
+configurations {
+    usuarioImplementation.extendsFrom implementation
+    usuarioRuntimeOnly.extendsFrom runtimeOnly
+    usuarioTestImplementation.extendsFrom testImplementation
+    usuarioTestRuntimeOnly.extendsFrom testRuntimeOnly
+}
+
 dependencies {
-    // Testes
+    // Testes (JUnit)
     testImplementation libs.junit.jupiter
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
-
-    // ConsoleLauncher (rodaremos os testes por aqui)
+    // ConsoleLauncher – fica só no testRuntime; usuarioTest herda via extendsFrom
     testRuntimeOnly 'org.junit.platform:junit-platform-console-standalone:1.10.2'
-    usuarioTestRuntimeOnly 'org.junit.platform:junit-platform-console-standalone:1.10.2'
+    // ❌ REMOVIDO: usuarioTestRuntimeOnly 'org.junit.platform:junit-platform-console-standalone:1.10.2'
 
     // Utilitários
     implementation libs.guava
@@ -39,6 +46,7 @@ dependencies {
     testImplementation platform('org.junit:junit-bom:5.10.2')
     testImplementation 'org.junit.jupiter:junit-jupiter'
 }
+
 
 java {
     toolchain {
