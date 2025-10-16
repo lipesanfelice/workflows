@@ -213,37 +213,6 @@ jobs:
         else
           echo "tem_cov=false" >> "$GITHUB_OUTPUT"
         fi
-
-    - name: Validar jacoco.xml (estrutura mínima) e mapear 1 arquivo
-      if: steps.check_cov.outputs.tem_cov == 'true'
-      run: |
-        set -euo pipefail
-        XML="${{ env.JACOCO_XML }}"
-        # estrutura mínima
-        grep -q "<sourcefile " "$XML"
-        grep -q "<counter " "$XML"
-
-        PKG=$(grep -m1 -oP '(?<=<package name=")[^"]*' "$XML" || true)
-        SRC=$(grep -m1 -oP '(?<=<sourcefile name=")[^"]+' "$XML" || true)
-        echo "Do relatório: package='${PKG}'  sourcefile='${SRC}'"
-
-        ROOT="app/entrada-usuario"
-        if [ -z "${PKG}" ]; then
-          CAND="${ROOT}/${SRC}"
-        else
-          PKG_PATH=$(printf "%s" "$PKG" | sed 's|\.+|/|g')
-          CAND="${ROOT}/${PKG_PATH}/${SRC}"
-        fi
-        echo "Tentando mapear: ${CAND}"
-
-        if [ -f "$CAND" ]; then
-          echo "OK: mapeou ${SRC} -> ${CAND}"
-        else
-          echo "::warning::Não achei ${CAND}. Tentando busca por nome…"
-          find "${ROOT}" -type f -name "${SRC}" -print | sed -n '1,50p' || true
-          echo "::warning::Seguirei com upload, mas isso pode causar 'path mismatch' no Codecov."
-        fi
-
     
     - name: Commit e push dos arquivos gerados (na main)
       if: ${{ github.event_name != 'pull_request' }}
