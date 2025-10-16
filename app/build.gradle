@@ -19,6 +19,10 @@ dependencies {
     testImplementation libs.junit.jupiter
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 
+    // ConsoleLauncher (rodaremos os testes por aqui)
+    testRuntimeOnly 'org.junit.platform:junit-platform-console-standalone:1.10.2'
+    usuarioTestRuntimeOnly 'org.junit.platform:junit-platform-console-standalone:1.10.2'
+
     // Utilitários
     implementation libs.guava
     implementation 'org.json:json:20240303'
@@ -155,7 +159,8 @@ def mapaImports = [
     'com.opencsv'                      : 'com.opencsv:opencsv:5.9',
 
     // === Segurança / Cripto ===
-    'org.jose4j'                       : 'org.bitbucket_b_c:jose4j:0.9.6',
+    'org.jose4j'                       : 'org.bitbucket.b_c:jose4j:0.9.6', // <- corrigido
+
     'org.mindrot.jbcrypt'              : 'org.mindrot:jbcrypt:0.4',
 
     // === Mapping / Utils extras ===
@@ -184,8 +189,6 @@ tasks.withType(JavaCompile).configureEach {
 }
 tasks.withType(Test).configureEach {
     systemProperty "file.encoding", "UTF-8"
-    // se quiser logs de classes carregadas:
-    // jvmArgs += ['-XX:+TraceClassLoading']
 }
 // =======================================================================
 
@@ -339,7 +342,6 @@ tasks.register('organizarUsuario') {
         }
 
         // =============== AUTOCORREÇÃO DE CHAMADAS ESTÁTICAS NOS TESTES ===============
-        // (evita "cannot find symbol" por typos e garante que os testes rodem -> gera .exec)
         def extrairMetodosPublicosEstaticos = { String src ->
             def met = [] as Set
             def m = (src =~ /(?m)^\s*public\s+static\s+[A-Za-z0-9_<>\[\]\.?]+\s+([A-Za-z_]\w*)\s*\(/)
@@ -811,6 +813,7 @@ tasks.named(sourceSets.usuarioTest.compileJavaTaskName) {
     dependsOn 'organizarUsuario', 'resolverDepsUsuario', tasks.named(sourceSets.usuario.classesTaskName)
 }
 
+// ===== Runner padrão do Gradle (mantido, mas não é o caminho do covUsuario) =====
 tasks.register('testUsuario', Test) {
     dependsOn tasks.named(sourceSets.usuario.classesTaskName),
               tasks.named(sourceSets.usuarioTest.classesTaskName)
@@ -819,15 +822,12 @@ tasks.register('testUsuario', Test) {
     classpath       = sourceSets.usuarioTest.runtimeClasspath
     useJUnitPlatform()
 
-    // NÃO derrubar o build se testes falharem (para o JaCoCo rodar)
     ignoreFailures = true
 
-    // .exec fixo
     jacoco {
         destinationFile = layout.buildDirectory.file("jacoco/testUsuario.exec").get().asFile
     }
 
-    // log resumido
     afterSuite { desc, result ->
         if (!desc.parent) {
             println "Resumo testUsuario -> total: ${result.testCount}, " +
@@ -837,317 +837,17 @@ tasks.register('testUsuario', Test) {
         }
     }
 
-    finalizedBy('jacocoRelatorioUsuario') // execução "completa"
+    finalizedBy('jacocoRelatorioUsuario')
 }
 
 // === JaCoCo (relatório para o Codecov) ===
-jacoco {
-    toolVersion = '0.8.12'
-}
-
-// sanearTestesUsuario — registra se não existir; senão, apenas configura
-def configurarSanear = { ->
-    doLast {
-        def baseMain = file("$buildDir/usuario-src/src/main/java")
-        def baseTest = file("$buildDir/usuario-src/src/test/java")
-        if (!baseTest.exists()) return
-
-        // Descobre 1) pacote principal; 2) uma classe pública para uso no smoke test
-        def descobrirPacote = { File raiz ->
-            if (!raiz?.exists()) return null
-            def candidatos = []
-            raiz.eachFileRecurse { f ->
-                if (f.isFile() && f.name.endsWith(".java") && f.name != "module-info.java") {
-                    def txt = f.getText("UTF-8")
-                    def m = (txt =~ /(?m)^\s*package\s+([A-Za-z_][\w.]*?)\s*;\s*$/)
-                    candidatos << (m.find() ? m.group(1) : null)
-                }
-            }
-            if (candidatos.isEmpty()) return null
-            def comPacote = candidatos.find { it != null }
-            return comPacote ?: null
-        }
-
-        def descobrirPublicClass = { File raiz ->
-            if (!raiz?.exists()) return null
-            def nome = null
-            raiz.eachFileRecurse { f ->
-                if (nome != null) return
-                if (f.isFile() && f.name.endsWith(".java") && f.name != "module-info.java") {
-                    def txt = f.getText("UTF-8")
-                    def m = (txt =~ /(?m)^\s*public\s+(?:class|interface|enum|record)\s+([A-Za-z_]\w*)\b/)
-                    if (m.find()) nome = m.group(1)
-                }
-            }
-            return nome
-        }
-
-        def pacoteMain = descobrirPacote(baseMain)
-        def classePublica = descobrirPublicClass(baseMain) ?: "Object"
-
-        // Helpers
-        def isValidStart = { String ln ->
-            return (ln ==~ /\s*/) ||                        // vazia
-                   (ln ==~ /\s*package\s+.*/) ||
-                   (ln ==~ /\s*import\s+.*/)  ||
-                   (ln ==~ /\s*@.*/)          ||
-                   (ln ==~ /\s*(public\s+)?(class|interface|enum|record)\b.*/) ||
-                   (ln ==~ /\s*\/\/.*/) || (ln ==~ /\s*\/\*.*/) || (ln ==~ /\s*\*.*/)
-        }
-
-        def limparLixoTopo = { String s ->
-            if (s == null) return s
-            s = s.replace('\uFEFF','')
-            s = s.replaceAll('(?m)^```\\w*\\s*\\r?\\n?', '')
-            s = s.replaceAll('(?m)^```\\s*$', '')
-            s = s.replaceAll('(?m)^====+.*$', '')
-            s = s.replaceAll('(?m)^----+.*$', '')
-            s = s.replaceAll('(?m)^CODE:?\\s*$', '')
-            s = s.replaceAll('(?m)^CÓDIGO:?\\s*$', '')
-            def linhas = s.readLines()
-            while (!linhas.isEmpty() && !isValidStart(linhas[0])) {
-                def head = linhas[0].trim()
-                if (head.matches('[A-Za-z0-9_.\\\\/\\-]+\\.java')) {
-                    linhas.remove(0)
-                } else {
-                    linhas.remove(0)
-                }
-            }
-            return linhas.join('\n')
-        }
-
-        // Pelo NOVO ajuste (remove '}' a mais e depois completa '{' a menos):
-        def ajustarChaves = { String s ->
-            if (s == null) return s
-            int opens = 0, closes = 0
-            s.each { ch -> if (ch == '{') opens++; else if (ch == '}') closes++; }
-
-            // Se há mais '}' do que '{', remove as excedentes do final (linhas só com '}')
-            if (closes > opens) {
-                int excesso = closes - opens
-                def linhas = s.readLines()
-                for (int i = linhas.size() - 1; i >= 0 && excesso > 0; i--) {
-                    if (linhas[i].trim() == '}') {
-                        linhas.remove(i)
-                        excesso--
-                    }
-                }
-                s = linhas.join('\n')
-                // recalcula após a remoção
-                opens = 0; closes = 0
-                s.each { ch -> if (ch == '{') opens++; else if (ch == '}') closes++; }
-            }
-
-            // Se ainda faltarem '}', completa no final
-            if (opens > closes) {
-                s = s + ("\n" + ("}" * (opens - closes)) + "\n")
-            }
-            return s
-        }
-
-        def injetarImportsJUnit = { String conteudo ->
-            def usaAssertions = (conteudo =~ /\bassert(?:Equals|True|False|NotNull|Null|Throws|All|DoesNotThrow|ArrayEquals|IterableEquals|LinesMatch|Same|NotSame)\s*\(/).find()
-            def temStaticAssertions = (conteudo =~ /(?m)^\s*import\s+static\s+org\.junit\.jupiter\.api\.Assertions\.\*\s*;\s*$/).find()
-            def temQualificadoAssertions = (conteudo =~ /\borg\.junit\.jupiter\.api\.Assertions\./).find()
-
-            if (usaAssertions && !temStaticAssertions && !temQualificadoAssertions) {
-                if ((conteudo =~ /(?m)^\s*package\s+[^;]+;\s*$/).find()) {
-                    conteudo = conteudo.replaceFirst(/(?m)^(package\s+[^;]+;\s*)/, "\$1\nimport static org.junit.jupiter.api.Assertions.*;\n")
-                } else {
-                    conteudo = "import static org.junit.jupiter.api.Assertions.*;\n" + conteudo
-                }
-            }
-            if ((conteudo =~ /(?<!\.)\bassertThrows\s*\(/).find() && !temStaticAssertions) {
-                conteudo = conteudo.replaceAll(/(?<!\.)\bassertThrows\s*\(/, "org.junit.jupiter.api.Assertions.assertThrows(")
-            }
-            if (conteudo.contains("@Test") && !(conteudo =~ /(?m)^\s*import\s+org\.junit\.jupiter\.api\.Test\s*;\s*$/).find()) {
-                if ((conteudo =~ /(?m)^\s*package\s+[^;]+;\s*$/).find()) {
-                    conteudo = conteudo.replaceFirst(/(?m)^(package\s+[^;]+;\s*)/, "\$1\nimport org.junit.jupiter.api.Test;\n")
-                } else {
-                    conteudo = "import org.junit.jupiter.api.Test;\n" + conteudo
-                }
-            }
-            return conteudo
-        }
-
-        int qtdTestsValidos = 0
-
-        baseTest.eachFileRecurse { f ->
-            if (!(f.isFile() && f.name.endsWith(".java"))) return
-            def conteudo = f.getText("UTF-8")
-
-            conteudo = limparLixoTopo(conteudo)
-
-            String pacoteTeste = null
-            def mPkg = (conteudo =~ /(?m)^\s*package\s+([A-Za-z_][\w.]*?)\s*;\s*$/)
-            if (mPkg.find()) pacoteTeste = mPkg.group(1)
-
-            if (pacoteMain == null) {
-                if (pacoteTeste != null) {
-                    conteudo = conteudo.replaceFirst("(?m)^\\s*package\\s+[A-Za-z_][\\w.]*?\\s*;\\s*\\n?", "")
-                }
-            } else {
-                if (pacoteTeste == null) {
-                    conteudo = "package ${pacoteMain};\n\n" + conteudo
-                    pacoteTeste = pacoteMain
-                } else {
-                    def jaImporta = conteudo.contains("import ${pacoteMain}.*;") || conteudo.contains("import ${pacoteMain}.")
-                    if (!jaImporta && pacoteTeste != pacoteMain) {
-                        conteudo = conteudo.replaceFirst("(?s)^(\\s*package\\s+[^{;]+;\\s*)", "\$1\nimport ${pacoteMain}.*;\n")
-                    }
-                }
-            }
-
-            conteudo = conteudo.replaceAll('(?m)^\\s*[A-Za-z0-9_.\\\\/\\-]+\\.java\\s*$', '')
-            conteudo = conteudo.replaceAll('(?m)^\\s*>\\s*Task\\s*:\\S+\\s*$', '')
-            conteudo = conteudo.replaceAll('(?m)^\\s*\\[?Incubating\\]?.*$', '')
-            conteudo = conteudo.replaceAll('(?m)^\\s*Deprecated Gradle features.*$', '')
-
-            conteudo = injetarImportsJUnit(conteudo)
-
-            // 👇 protege testes que fazem new Scanner(System.in)
-            conteudo = conteudo.replaceAll(
-                /new\s+Scanner\s*\(\s*System\.in\s*\)/,
-                'new java.util.Scanner(new java.io.ByteArrayInputStream(("0\\n0\\n0\\n0\\n0\\n").getBytes(java.nio.charset.StandardCharsets.UTF_8)))'
-            )
-
-            // 1) finalizar linhas double sem ';'
-            conteudo = conteudo.replaceAll('(?m)^(\\s*double\\s+[^;\\n{}]+)(\\s*)$', '$1;$2')
-                               .replaceAll('(?m)\\b(char)\\s+([A-Za-z_]\\w*)\\s*=\\s*;', '$1 $2 = \'\\0\';')
-
-            // 2) Corrige declarações com '=;' sem valor inicial
-            conteudo = conteudo
-                .replaceAll('(?m)\\b(double|float)\\s+([A-Za-z_]\\w*)\\s*=\\s*[+-]?\\s*;', '$1 $2 = 0.0;')
-                .replaceAll('(?m)\\b(int|long|short|byte)\\s+([A-Za-z_]\\w*)\\s*=\\s*[+-]?\\s*;', '$1 $2 = 0;')
-                .replaceAll('(?m)\\b(double|float)\\s+([A-Za-z_]\\w*)\\s*=\\s*;', '$1 $2 = 0.0;')
-                .replaceAll('(?m)\\b(int|long|short|byte)\\s+([A-Za-z_]\\w*)\\s*=\\s*;', '$1 $2 = 0;')
-                .replaceAll('(?m)\\b(boolean)\\s+([A-Za-z_]\\w*)\\s*=\\s*;', '$1 $2 = false;')
-                .replaceAll('(?m)\\b(char)\\s+([A-Za-z_]\\w*)\\s*=\\s*;', '$1 $2 = \'\\0\';')
-                .replaceAll('(?m)\\b(String)\\s+([A-Za-z_]\\w*)\\s*=\\s*;', '$1 $2 = "";')
-                .replaceAll('(?m)\\b([A-Za-z_][\\w<>\\[\\]]*)\\s+([A-Za-z_]\\w*)\\s*=\\s*;', '$1 $2;')
-
-            // Corrige linhas assertThrows truncadas
-            conteudo = conteudo.replaceAll(
-                '(?m)^\\s*(?:org\\.junit\\.jupiter\\.api\\.Assertions\\.)?assertThrows\\([^;\\n]*$',
-                'org.junit.jupiter.api.Assertions.assertThrows(ArithmeticException.class, () -> { throw new ArithmeticException(); });'
-            )
-
-            // Dá corpo a métodos void sem bloco
-            conteudo = conteudo.replaceAll(
-                '(?m)^\\s*(public|protected|private)?\\s+void\\s+[A-Za-z_]\\w*\\s*\\([^)]*\\)\\s*$',
-                '$0 { }'
-            )
-
-            def ehRhsLixo = { String rhs ->
-                if (rhs == null) return true
-                def t = rhs.trim()
-                if (t.isEmpty()) return true
-                return !((t =~ /[A-Za-z0-9'"]/).find())
-            }
-
-            def defaultDe = { String tipo ->
-                switch (tipo) {
-                    case 'float'  : return '0.0f'
-                    case 'double' : return '0.0'
-                    case ['int','long','short','byte']: return '0'
-                    case 'boolean': return 'false'
-                    case 'char'   : return "'\\0'"
-                    case 'String' : return '""'
-                    default       : return null
-                }
-            }
-
-            conteudo = conteudo.replaceAll(
-                ~/(?m)\b(double|float|int|long|short|byte|boolean|char|String)\s+([A-Za-z_]\w*)\s*=\s*([^;]*);/
-            ) { all, tipo, nome, rhs ->
-                if (ehRhsLixo(rhs)) {
-                    def d = defaultDe(tipo)
-                    return d != null ? "${tipo} ${nome} = ${d};" : "${tipo} ${nome};"
-                }
-                return all
-            }
-
-            conteudo = conteudo.replaceAll(
-                ~/(?m)\b([A-Za-z_][\w<>\[\]]*)\s+([A-Za-z_]\w*)\s*=\s*([^;]*);/
-            ) { all, tipo, nome, rhs ->
-                ehRhsLixo(rhs) ? "${tipo} ${nome};" : all
-            }
-
-            conteudo = ajustarChaves(conteudo)
-
-            boolean temAnotacaoTest = conteudo.contains("@Test")
-            boolean temClass = (conteudo =~ /(?m)^\s*(public\s+)?(class|interface|enum|record)\b/).find()
-            boolean temMetodo = (conteudo =~ /(?m)^\s*(public|protected|private)?\s+void\s+[A-Za-z_]\w*\s*\([^)]*\)\s*\{/).find()
-
-            if (!temClass && (temAnotacaoTest || temMetodo)) {
-                String header = (pacoteMain != null) ? "package ${pacoteMain};\n" : ""
-                def imports = []
-                def mImp = (conteudo =~ /(?m)^\s*import\s+.*;\s*$/)
-                while (mImp.find()) imports << mImp.group()
-                def corpo = conteudo.replaceAll(/(?m)^\s*import\s+.*;\s*$/, "").trim()
-                conteudo =
-                    header +
-                    (imports.isEmpty() ? "" : (imports.join("\n") + "\n")) +
-                    "\npublic class UsuarioTestsAuto {\n" +
-                    corpo + "\n}\n"
-            }
-
-            boolean valido = ((conteudo =~ /(?m)^\s*public\s+class\s+\w+\b/).find() && conteudo.contains("@Test"))
-            if (valido) qtdTestsValidos++
-
-            f.setText(conteudo, "UTF-8")
-        }
-
-        if (qtdTestsValidos == 0) {
-            def destinoDir = (pacoteMain != null) ? new File(baseTest, pacoteMain.replace('.', File.separator)) : baseTest
-            destinoDir.mkdirs()
-            new File(destinoDir, "AutoSmokeTest.java").setText(
-                """${pacoteMain ? "package ${pacoteMain};\n" : ""}
-import org.junit.jupiter.api.Test;
-import static org.junit.jupiter.api.Assertions.*;
-
-public class AutoSmokeTest {
-    @Test
-    void smoke() {
-        Object obj;
-        try {
-            obj = ${classePublica}.class.getDeclaredConstructor().newInstance();
-        } catch (Throwable t) {
-            obj = new Object();
-        }
-        assertNotNull(obj);
-    }
-}
-""", "UTF-8")
-            println "sanearTestesUsuario → nenhum teste válido detectado; AutoSmokeTest.java gerado para garantir execução e cobertura."
-        }
-    }
-}
-if (tasks.findByName("sanearTestesUsuario") == null) {
-    tasks.register("sanearTestesUsuario") { configurarSanear.delegate = it; configurarSanear() }
-} else {
-    tasks.named("sanearTestesUsuario").configure { configurarSanear.delegate = it; configurarSanear() }
-}
-
-tasks.named("compileUsuarioTestJava") {
-    dependsOn("sanearTestesUsuario")
-    options.encoding = "UTF-8"
-}
-
-// ===== JaCoCo — configuração mínima e robusta =====
 jacoco { toolVersion = "0.8.12" }
 
-// 2) Relatório do JaCoCo "completo" (para rodadas normais)
+// Relatório para o runner padrão (não é o caminho do covUsuario)
 tasks.register("jacocoRelatorioUsuario", JacocoReport) {
     dependsOn "testUsuario", tasks.named(sourceSets.usuario.classesTaskName)
+    doFirst { executionData.from(file("$buildDir/jacoco/testUsuario.exec")) }
 
-    // ⚠️ não dependa de "classes" (main) aqui pra não poluir o fluxo
-    // executionData: doFirst (garante que o arquivo já exista)
-    doFirst {
-        executionData.from(file("$buildDir/jacoco/testUsuario.exec"))
-    }
-
-    // 👉 incluir também a pasta espelhada no repo p/ mapear no Codecov
     sourceDirectories.from = files(
         sourceSets.main.allSource.srcDirs,
         (sourceSets.findByName("usuario")?.allSource?.srcDirs ?: []),
@@ -1171,7 +871,7 @@ tasks.register("jacocoRelatorioUsuario", JacocoReport) {
 
 // ---> Verificação de cobertura (não-fatal por padrão; fatal só com -PenforceCoverage=true ou ENFORCE_COVERAGE=true)
 tasks.register("coberturaMinimaUsuario") {
-    dependsOn "jacocoRelatorioUsuario"
+    dependsOn "jacocoRelatorioUsuarioConsole" // usar o relatório do Console por default
     doLast {
         def thr = (project.findProperty("coverageMinUsuario") ?: System.getenv("MIN_COVERAGE") ?: "0.60") as BigDecimal
         def enforce = (project.findProperty("enforceCoverage") ?: System.getenv("ENFORCE_COVERAGE") ?: "false").toString().equalsIgnoreCase("true")
@@ -1213,44 +913,49 @@ tasks.register("coberturaMinimaUsuario") {
     }
 }
 
-// === Caminho BEST-EFFORT para o CI/Codecov ===
+/* ===================== NOVO FLUXO: ConsoleLauncher + JaCoCo ===================== */
 
-// Teste best-effort: agora garante compilação de usuario/usuarioTest antes de rodar
-tasks.register("testUsuarioBestEffort", Test) {
-    // 🔧 garante que as classes existem
+// 1) Executa os testes via JUnit ConsoleLauncher, instrumentado pelo JaCoCo
+tasks.register("testUsuarioConsole", JavaExec) {
+    group = "verification"
+    description = "Roda os testes do sourceSet usuarioTest usando o JUnit ConsoleLauncher (instrumentado pelo JaCoCo)."
+
     dependsOn 'organizarUsuario', 'resolverDepsUsuario',
               tasks.named(sourceSets.usuario.classesTaskName),
               tasks.named(sourceSets.usuarioTest.classesTaskName)
 
-    ignoreFailures = true
-    useJUnitPlatform()
+    mainClass = 'org.junit.platform.console.ConsoleLauncher'
+    classpath = sourceSets.usuarioTest.runtimeClasspath
 
-    testClassesDirs = files(file("$buildDir/classes/java/usuarioTest"))
-    classpath = files(
-        fileTree("$buildDir/classes/java/usuario"),
-        fileTree("$buildDir/classes/java/main"),
-        sourceSets.findByName("usuarioTest")?.runtimeClasspath ?: files()
-    )
+    // Varre todo o classpath por testes
+    args '--scan-class-path'
+    // Sumário
+    args '--details', 'summary'
 
-    outputs.upToDateWhen { false }
-    doFirst { file("$buildDir/jacoco").mkdirs() }
-    jacoco { destinationFile = file("$buildDir/jacoco/testUsuario.exec") }
-}
-
-// Relatório best-effort: roda *depois* dos testes e carrega executionData no doFirst
-tasks.register("jacocoRelatorioUsuarioBestEffort", JacocoReport) {
-    dependsOn "testUsuarioBestEffort"
-    mustRunAfter "testUsuarioBestEffort"
-
-    // só pula se REALMENTE não existir no momento da execução
-    onlyIf { file("$buildDir/jacoco/testUsuario.exec").exists() }
-
-    doFirst {
-        executionData.from(file("$buildDir/jacoco/testUsuario.exec"))
-        file("$projectDir/entrada-usuario/jacoco-relatorio/html").mkdirs()
+    // JaCoCo agent para esta execução
+    jacoco {
+        destinationFile = file("$buildDir/jacoco/testUsuarioConsole.exec")
+        includeNoLocationClasses = true
+        excludes = ['jdk.internal.*']
     }
 
-    // incluir também entrada-usuario p/ mapeamento no Codecov
+    // Não falhar o build se testes falharem (para ainda gerar cobertura)
+    ignoreExitValue = true
+    jvmArgs '-Dfile.encoding=UTF-8'
+    standardInput = System.in
+    doFirst { file("$buildDir/jacoco").mkdirs() }
+}
+
+// 2) Relatório JaCoCo a partir do .exec do ConsoleLauncher
+tasks.register("jacocoRelatorioUsuarioConsole", JacocoReport) {
+    group = "verification"
+    description = "Gera relatório JaCoCo para a execução do ConsoleLauncher."
+
+    dependsOn "testUsuarioConsole"
+    mustRunAfter "testUsuarioConsole"
+
+    executionData.from(file("$buildDir/jacoco/testUsuarioConsole.exec"))
+
     sourceDirectories.from = files(
         sourceSets.main.allSource.srcDirs,
         (sourceSets.findByName("usuario")?.allSource?.srcDirs ?: []),
@@ -1268,50 +973,11 @@ tasks.register("jacocoRelatorioUsuarioBestEffort", JacocoReport) {
         xml.outputLocation = file("$projectDir/entrada-usuario/jacoco-relatorio/jacoco.xml")
         html.outputLocation = file("$projectDir/entrada-usuario/jacoco-relatorio/html")
     }
+
+    doFirst { file("$projectDir/entrada-usuario/jacoco-relatorio/html").mkdirs() }
 }
 
-// === Fallback Ant com encoding UTF-8 para blindar símbolos/charset ===
-tasks.register("jacocoAntReport") {
-    dependsOn "testUsuarioBestEffort"
-    doLast {
-        def execFile = file("$buildDir/jacoco/testUsuario.exec")
-        if (!execFile.exists()) {
-            println "jacocoAntReport → sem execution data (.exec); nada a fazer."
-            return
-        }
-        file("$projectDir/entrada-usuario/jacoco-relatorio/html").mkdirs()
-
-        // ⚠️ Define o namespace 'jacoco' corretamente
-        ant.taskdef(
-            uri: 'jacoco',
-            resource: 'org/jacoco/ant/antlib.xml',
-            classpath: configurations.jacocoAnt.asPath
-        )
-
-        ant.'jacoco:report'() {
-            executiondata {
-                ant.file(file: execFile)
-            }
-            structure(name: project.name) {
-                classfiles {
-                    fileset(dir: "$buildDir/classes/java/usuario")
-                    fileset(dir: "$buildDir/classes/java/main")
-                }
-                // força leitura de fontes como UTF-8 (imune a acentuação/símbolos)
-                sourcefiles(encoding: "UTF-8") {
-                    fileset(dir: "src/main/java")
-                    fileset(dir: "entrada-usuario")
-                }
-            }
-            xml(destfile: "$projectDir/entrada-usuario/jacoco-relatorio/jacoco.xml")
-            html(destdir: "$projectDir/entrada-usuario/jacoco-relatorio/html")
-        }
-        println "jacocoAntReport → relatório gerado via Ant com UTF-8."
-    }
-}
-
-
-// Garantia: se o XML não sair (porque não houve exec), cria vazio para Codecov
+// 3) Garantia: se o XML não sair (porque não houve exec), cria vazio para Codecov
 tasks.register("jacocoXmlGarantido") {
     doLast {
         def xml = file("$projectDir/entrada-usuario/jacoco-relatorio/jacoco.xml")
@@ -1332,31 +998,16 @@ tasks.register("jacocoXmlGarantido") {
     }
 }
 
-// Alias do CI: tenta executar e reportar; agora o relatório depende do teste
+// 4) Alias do CI: agora usa o ConsoleLauncher
 tasks.register("covUsuario") {
-    dependsOn "testUsuarioBestEffort"
-    dependsOn "jacocoRelatorioUsuarioBestEffort"
-    // roda também o fallback Ant (com UTF-8) para blindar símbolos
-    dependsOn "jacocoAntReport"
+    dependsOn "testUsuarioConsole"
+    dependsOn "jacocoRelatorioUsuarioConsole"
     finalizedBy "jacocoXmlGarantido"
 }
 
-// Desabilita qualquer jacocoAntReport herdado/registrado acidentalmente
-gradle.taskGraph.whenReady {
-    def t = tasks.findByName("jacocoAntReport")
-    if (t != null) {
-        t.enabled = false
-        t.onlyIf { false }
-    }
-}
-// E também garanta que 'covUsuario' não dependa dela
-tasks.named("covUsuario").configure {
-    dependsOn.removeIf { it instanceof Task && it.name == "jacocoAntReport" }
-}
-
+/* ===================== FIM: NOVO FLUXO ===================== */
 
 // --- Demais integrações que você já tinha ---
-
 def _configJacocoRelatorioGeral = { JacocoReport t ->
     t.dependsOn(tasks.findByName("test"), tasks.findByName("testUsuario"))
     t.executionData fileTree(projectDir) { include "**/build/jacoco/*.exec", "**/jacoco/*.exec" }
@@ -1386,9 +1037,8 @@ if (tasks.findByName("jacocoRelatorioGeral") != null) {
 tasks.named("jacocoRelatorioUsuario") {
     finalizedBy("jacocoRelatorioGeral")
 }
-
-tasks.named("jacocoRelatorioUsuario") {
-    finalizedBy("coberturaMinimaUsuario")   // verificação após o relatório "completo"
+tasks.named("jacocoRelatorioUsuarioConsole") {
+    finalizedBy("coberturaMinimaUsuario")
 }
 
 tasks.register('usuarioCobertura') {
