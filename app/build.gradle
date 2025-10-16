@@ -9,6 +9,7 @@ plugins {
 
 import org.gradle.testing.jacoco.plugins.JacocoTaskExtension
 import java.util.regex.Pattern
+
 repositories {
     mavenCentral()
 }
@@ -154,7 +155,7 @@ def mapaImports = [
     'com.opencsv'                      : 'com.opencsv:opencsv:5.9',
 
     // === Segurança / Cripto ===
-    'org.jose4j'                       : 'org.bitbucket.b_c:jose4j:0.9.6',
+    'org.jose4j'                       : 'org.bitbucket_b_c:jose4j:0.9.6',
     'org.mindrot.jbcrypt'              : 'org.mindrot:jbcrypt:0.4',
 
     // === Mapping / Utils extras ===
@@ -174,6 +175,19 @@ def mapaImports = [
     'org.joda.time'                    : 'joda-time:joda-time:2.12.7',
     'javax.annotation'                 : 'com.google.code.findbugs:jsr305:3.0.2',
 ]
+
+// ================== JACOCO “IMUNE” A SÍMBOLOS/CHARSET ==================
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+    options.debug = true
+    options.debugOptions.debugLevel = 'source,lines,vars'
+}
+tasks.withType(Test).configureEach {
+    systemProperty "file.encoding", "UTF-8"
+    // se quiser logs de classes carregadas:
+    // jvmArgs += ['-XX:+TraceClassLoading']
+}
+// =======================================================================
 
 tasks.register('resolverDepsUsuario') {
     // varre fontes do usuário
@@ -323,6 +337,74 @@ tasks.register('organizarUsuario') {
             String texto = origem.getText('UTF-8')
             (isTeste ? testesIA : fontesUsuario) << [file: origem, text: texto]
         }
+
+        // =============== AUTOCORREÇÃO DE CHAMADAS ESTÁTICAS NOS TESTES ===============
+        // (evita "cannot find symbol" por typos e garante que os testes rodem -> gera .exec)
+        def extrairMetodosPublicosEstaticos = { String src ->
+            def met = [] as Set
+            def m = (src =~ /(?m)^\s*public\s+static\s+[A-Za-z0-9_<>\[\]\.?]+\s+([A-Za-z_]\w*)\s*\(/)
+            while (m.find()) met << m.group(1)
+            return met
+        }
+        def extrairNomeClassePublica = { String src ->
+            def m = (src =~ /(?m)^\s*public\s+(?:class|record|interface)\s+([A-Za-z_]\w*)\b/)
+            m.find() ? m.group(1) : null
+        }
+        def chamadasEstaticas = ~/([A-Z][A-Za-z0-9_]*)\s*\.\s*([A-Za-z_]\w*)\s*\(/
+        def mapaClasseMetodos = [:].withDefault { [] as Set }
+        fontesUsuario.each { f ->
+            def cls = extrairNomeClassePublica(f.text)
+            if (cls) {
+                mapaClasseMetodos[cls] += extrairMetodosPublicosEstaticos(f.text)
+            }
+        }
+        def lev = { String a, String b ->
+            if (a == b) return 0
+            if (!a?.length()) return b.length()
+            if (!b?.length()) return a.length()
+            def d = new int[a.length()+1][b.length()+1]
+            for (int i=0;i<=a.length();i++) d[i][0]=i
+            for (int j=0;j<=b.length();j++) d[0][j]=j
+            for (int i=1;i<=a.length();i++) {
+                for (int j=1;j<=b.length();j++) {
+                    int cost = (a.charAt(i-1)==b.charAt(j-1)) ? 0 : 1
+                    d[i][j] = Math.min(Math.min(d[i-1][j]+1, d[i][j-1]+1), d[i-1][j-1]+cost)
+                }
+            }
+            return d[a.length()][b.length()]
+        }
+        def substituicoesConhecidas = [
+            'kilmetroParaMetro':'kilometroParaMetro',
+            'quilometroParaMetro':'kilometroParaMetro'
+        ]
+        testesIA = testesIA.collect { ti ->
+            String t = ti.text
+            substituicoesConhecidas.each { de, para ->
+                t = t.replaceAll("\\b" + java.util.regex.Pattern.quote(de) + "\\b", para)
+            }
+            def m = chamadasEstaticas.matcher(t)
+            def sb = new StringBuffer()
+            while (m.find()) {
+                def cls = m.group(1)
+                def met = m.group(2)
+                def candidatos = (mapaClasseMetodos[cls] as Set) ?: [] as Set
+                if (candidatos && !candidatos.contains(met)) {
+                    def melhor = null; def dist = Integer.MAX_VALUE
+                    candidatos.each { c ->
+                        def d = lev(met, c)
+                        if (d < dist) { dist = d; melhor = c }
+                    }
+                    if (melhor != null && dist <= 2) {
+                        m.appendReplacement(sb, java.util.regex.Matcher.quoteReplacement("${cls}.${melhor}("))
+                        continue
+                    }
+                }
+                m.appendReplacement(sb, java.util.regex.Matcher.quoteReplacement(m.group(0)))
+            }
+            m.appendTail(sb)
+            [file: ti.file, text: sb.toString()]
+        }
+        // ==============================================================================
 
         // Detecta pacote(s) do usuário
         def pacotesUsuario = fontesUsuario.collect { extrairPacote(it.text) }.toSet()
@@ -1171,6 +1253,39 @@ tasks.register("jacocoRelatorioUsuarioBestEffort", JacocoReport) {
     }
 }
 
+// === Fallback Ant com encoding UTF-8 para blindar símbolos/charset ===
+tasks.register("jacocoAntReport") {
+    dependsOn "testUsuarioBestEffort"
+    doLast {
+        def execFile = file("$buildDir/jacoco/testUsuario.exec")
+        if (!execFile.exists()) {
+            println "jacocoAntReport → sem execution data (.exec); nada a fazer."
+            return
+        }
+        file("$projectDir/entrada-usuario/jacoco-relatorio/html").mkdirs()
+        ant.taskdef(resource: 'org/jacoco/ant/antlib.xml',
+                    classpath: configurations.jacocoAnt.asPath)
+        ant.'jacoco:report'() {
+            executiondata {
+                ant.file(file: execFile)
+            }
+            structure(name: project.name) {
+                classfiles {
+                    fileset(dir: "$buildDir/classes/java/usuario")
+                    fileset(dir: "$buildDir/classes/java/main")
+                }
+                sourcefiles(encoding: "UTF-8") {
+                    fileset(dir: "src/main/java")
+                    fileset(dir: "entrada-usuario")
+                }
+            }
+            xml(destfile: "$projectDir/entrada-usuario/jacoco-relatorio/jacoco.xml")
+            html(destdir: "$projectDir/entrada-usuario/jacoco-relatorio/html")
+        }
+        println "jacocoAntReport → relatório gerado via Ant com UTF-8."
+    }
+}
+
 // Garantia: se o XML não sair (porque não houve exec), cria vazio para Codecov
 tasks.register("jacocoXmlGarantido") {
     doLast {
@@ -1196,6 +1311,8 @@ tasks.register("jacocoXmlGarantido") {
 tasks.register("covUsuario") {
     dependsOn "testUsuarioBestEffort"
     dependsOn "jacocoRelatorioUsuarioBestEffort"
+    // roda também o fallback Ant (com UTF-8) para blindar símbolos
+    dependsOn "jacocoAntReport"
     finalizedBy "jacocoXmlGarantido"
 }
 
