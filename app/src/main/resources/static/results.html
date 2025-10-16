@@ -133,25 +133,30 @@ let REPO   = 'workflows';
 let BRANCH = 'main';
 
 const qs = new URLSearchParams(location.search);
-const PENDING   = qs.get('pending') === '1';
-const STARTED_AT= Number(qs.get('startedAt') || Date.now());
+const PENDING    = ['1','true','yes'].includes((qs.get('pending')||'').toLowerCase());
+const STARTED_AT = Number(qs.get('startedAt')) || Date.now();
+
 
 OWNER  = qs.get('owner')  || OWNER;
 REPO   = qs.get('repo')   || REPO;
 BRANCH = qs.get('branch') || BRANCH;
 
-const STATUS_PARAM = (qs.get('status') || '').toLowerCase(); // success|failure|cancelled|timeout
-document.getElementById('chipRepo').textContent   = `repo: ${OWNER}/${REPO}`;
-document.getElementById('chipBranch').textContent = `branch: ${BRANCH}`;
+const STATUS_PARAM = (qs.get('status') || '').toLowerCase();
+
+const chipRepoEl   = document.getElementById('chipRepo');
+const chipBranchEl = document.getElementById('chipBranch');
+if (chipRepoEl)   chipRepoEl.textContent   = `repo: ${OWNER}/${REPO}`;
+if (chipBranchEl) chipBranchEl.textContent = `branch: ${BRANCH}`;
 
 const chipStatus = document.getElementById('chipStatus');
-if (STATUS_PARAM) {
+if (STATUS_PARAM && chipStatus) {
   chipStatus.textContent = 'status: ' + STATUS_PARAM;
   chipStatus.className = 'badge bg-yellow-50 text-yellow-700 border border-yellow-200';
   if (STATUS_PARAM === 'success') chipStatus.className = 'badge bg-green-100 text-green-700 border border-green-200';
-  if (STATUS_PARAM === 'failure' || STATUS_PARAM === 'cancelled' || STATUS_PARAM === 'timeout')
+  if (['failure','cancelled','timeout'].includes(STATUS_PARAM))
     chipStatus.className = 'badge bg-red-100 text-red-700 border border-red-200';
 }
+
 
 /** ====== CONSTANTES DOS DIRETÓRIOS ====== */
 const TESTS_DIR  = 'app/entrada-usuario/testes_explicações/tests';
@@ -399,6 +404,9 @@ async function ciclo(){
 document.addEventListener('DOMContentLoaded', async ()=>{
   feather.replace();
   renderCodecov();
+
+  const btnReload = document.getElementById('btnReload');
+  if (btnReload) btnReload.addEventListener('click', carregarResultados);
 
   if (PENDING) {
     banner.classList.remove('hidden');
