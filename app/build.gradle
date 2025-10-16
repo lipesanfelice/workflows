@@ -1263,8 +1263,14 @@ tasks.register("jacocoAntReport") {
             return
         }
         file("$projectDir/entrada-usuario/jacoco-relatorio/html").mkdirs()
-        ant.taskdef(resource: 'org/jacoco/ant/antlib.xml',
-                    classpath: configurations.jacocoAnt.asPath)
+
+        // ⚠️ Define o namespace 'jacoco' corretamente
+        ant.taskdef(
+            uri: 'jacoco',
+            resource: 'org/jacoco/ant/antlib.xml',
+            classpath: configurations.jacocoAnt.asPath
+        )
+
         ant.'jacoco:report'() {
             executiondata {
                 ant.file(file: execFile)
@@ -1274,6 +1280,7 @@ tasks.register("jacocoAntReport") {
                     fileset(dir: "$buildDir/classes/java/usuario")
                     fileset(dir: "$buildDir/classes/java/main")
                 }
+                // força leitura de fontes como UTF-8 (imune a acentuação/símbolos)
                 sourcefiles(encoding: "UTF-8") {
                     fileset(dir: "src/main/java")
                     fileset(dir: "entrada-usuario")
@@ -1285,6 +1292,7 @@ tasks.register("jacocoAntReport") {
         println "jacocoAntReport → relatório gerado via Ant com UTF-8."
     }
 }
+
 
 // Garantia: se o XML não sair (porque não houve exec), cria vazio para Codecov
 tasks.register("jacocoXmlGarantido") {
