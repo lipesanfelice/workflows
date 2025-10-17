@@ -800,21 +800,28 @@ tasks.register('organizarUsuario') {
     }
 }
 
-// === Sanear testes do usuário (roda SEMPRE antes de compilar os testes) ===
+// === Sanear testes do usuário (corrigido: padrões pré-compilados) ===
 tasks.register('sanearTestesUsuario') {
     group = 'verification'
     description = 'Limpa testes: remove marcas ====CODIGO====, ajusta imports JUnit e fecha chaves faltantes'
 
-    // ⚠️ trabalha sobre a saída de organizarUsuario
+    // trabalha sobre a saída de organizarUsuario
     dependsOn 'organizarUsuario'
-    inputs.dir(dirTest)               // usa diretório consolidado de testes
-    outputs.dir(dirTest)              // escreve no mesmo diretório (in-place)
-    outputs.upToDateWhen { false }    // força execução (evita cache)
+    inputs.dir(dirTest)            // usa diretório consolidado de testes
+    outputs.dir(dirTest)           // escreve no mesmo diretório (in-place)
+    outputs.upToDateWhen { false } // força execução (evita cache)
     mustRunAfter 'organizarUsuario'
 
     doLast {
         File baseTest = dirTest
         if (!baseTest.exists()) return
+
+        // ✅ Padrões JDK (evita problemas de escape em strings Groovy)
+        final Pattern PAT_FILEHEADER     = Pattern.compile('(?m)^[A-Za-z0-9_.\\\\/\\-]+\\.java$')
+        final Pattern PAT_IMPORT_TEST    = Pattern.compile('(?m)^\\s*import\\s+org\\.junit\\.jupiter\\.api\\.Test\\s*;')
+        final Pattern PAT_IMPORT_ASSERT  = Pattern.compile('(?m)^\\s*import\\s+static\\s+org\\.junit\\.jupiter\\.api\\.Assertions\\.\\*\\s*;')
+        final Pattern PAT_HAS_TEST_ANN   = Pattern.compile('@Test')
+        final Pattern PAT_HAS_ASSERTCALL = Pattern.compile('\\bassert\\w*\\s*\\(')
 
         baseTest.eachFileRecurse { File f ->
             if (!(f.isFile() && f.name.endsWith('.java'))) return
@@ -826,33 +833,34 @@ tasks.register('sanearTestesUsuario') {
                 .replace('\uFEFF','')
                 .replaceAll('(?m)^```\\w*\\s*\\r?\\n?', '')
                 .replaceAll('(?m)^```\\s*$', '')
-                .replaceAll('(?m)^====+.*$', '')                  // remove "====CODIGO===="
-                .replaceAll('(?m)^[A-Za-z0-9_.\\\\/\\-]+\\.java$', '')
+                .replaceAll('(?m)^====+.*$', '')
+                .replaceAll(PAT_FILEHEADER, '')
                 .trim()
 
-            // 2) Garante imports básicos do JUnit 5 se houver @Test/assert*
-            def temTest = (src =~ /@Test/).find()
-            def usaAssertions = (src =~ /\\bassert\\w*\\s*\\(/).find()
+            // 2) Imports básicos do JUnit 5 se houver @Test/assert*
+            boolean temTest       = PAT_HAS_TEST_ANN.matcher(src).find()
+            boolean usaAssertions = PAT_HAS_ASSERTCALL.matcher(src).find()
 
-            if (temTest && !(src =~ /(?m)^\\s*import\\s+org\\.junit\\.jupiter\\.api\\.Test\\s*;/).find()) {
-                if ((src =~ /(?m)^\\s*package\\s+[^;]+;\\s*$/).find()) {
-                    src = src.replaceFirst(/(?m)^(\\s*package\\s+[^;]+;\\s*)/, "\$1\nimport org.junit.jupiter.api.Test;\n")
+            if (temTest && !PAT_IMPORT_TEST.matcher(src).find()) {
+                if ((src =~ /(?m)^\s*package\s+[^;]+;\s*$/).find()) {
+                    src = src.replaceFirst(/(?m)^(\s*package\s+[^;]+;\s*)/, "\$1\nimport org.junit.jupiter.api.Test;\n")
                 } else {
                     src = "import org.junit.jupiter.api.Test;\n" + src
                 }
             }
-            if (usaAssertions && !(src =~ /(?m)^\\s*import\\s+static\\s+org\\.junit\\.jupiter\\.api\\.Assertions\\.\\*\\s*;/).find()) {
-                if ((src =~ /(?m)^\\s*package\\s+[^;]+;\\s*$/).find()) {
-                    src = src.replaceFirst(/(?m)^(\\s*package\\s+[^;]+;\\s*)/, "\$1\nimport static org.junit.jupiter.api.Assertions.*;\n")
+
+            if (usaAssertions && !PAT_IMPORT_ASSERT.matcher(src).find()) {
+                if ((src =~ /(?m)^\s*package\s+[^;]+;\s*$/).find()) {
+                    src = src.replaceFirst(/(?m)^(\s*package\s+[^;]+;\s*)/, "\$1\nimport static org.junit.jupiter.api.Assertions.*;\n")
                 } else {
                     src = "import static org.junit.jupiter.api.Assertions.*;\n" + src
                 }
             }
 
-            // 3) Corrige declarações truncadas sem ';' (ex.: "double capital" → "double capital;")
+            // 3) Declarações sem ';' no fim (padrão simples)
             src = src.replaceAll('(?m)^(\\s*(?:byte|short|int|long|float|double|boolean|char|String)\\s+[A-Za-z_]\\w*)(\\s*)$', '\$1;')
 
-            // 4) Balanceia chaves simples (completa '}' faltando no final)
+            // 4) Fecha chaves faltantes
             int abre = 0, fecha = 0
             for (int i = 0; i < src.length(); i++) {
                 char c = src.charAt(i)
@@ -871,15 +879,11 @@ tasks.register('sanearTestesUsuario') {
 
 sourceSets {
     usuario {
-        java {
-            srcDirs = [dirMain]
-        }
+        java { srcDirs = [dirMain] }
         resources.srcDirs = []
     }
     usuarioTest {
-        java {
-            srcDirs = [dirTest]
-        }
+        java { srcDirs = [dirTest] }
         resources.srcDirs = []
         compileClasspath += sourceSets.usuario.output
         runtimeClasspath  += sourceSets.usuario.output
