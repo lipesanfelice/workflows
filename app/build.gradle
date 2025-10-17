@@ -894,6 +894,7 @@ tasks.register('sanearTestesUsuario') {
 }
 
 
+
 sourceSets {
     usuario {
         java { srcDirs = [dirMain] }
