@@ -1,20 +1,21 @@
-public class CalculadoraGeometrica {
-    
-    public static double areaCirculo(double raio) {
-        return Math.PI * raio * raio;
-    }
-    
-    public static double areaRetangulo(double base, double altura) {
-        return base * altura;
-    }
-    
-    public static double areaTriangulo(double base, double altura) {
-        return (base * altura) / 2;
-    }
-    
+import java.util.Scanner;
+
+public class ContadorVogais {
     public static void main(String[] args) {
-        System.out.println("Área do círculo (raio 5): " + areaCirculo(5));
-        System.out.println("Área do retângulo (4x6): " + areaRetangulo(4, 6));
-        System.out.println("Área do triângulo (3x4): " + areaTriangulo(3, 4));
+        Scanner scanner = new Scanner(System.in);
+        
+        System.out.print("Digite uma palavra: ");
+        String palavra = scanner.nextLine().toLowerCase();
+        
+        int vogais = 0;
+        for (int i = 0; i < palavra.length(); i++) {
+            char letra = palavra.charAt(i);
+            if (letra == 'a' || letra == 'e' || letra == 'i' || letra == 'o' || letra == 'u') {
+                vogais++;
+            }
+        }
+        
+        System.out.println("A palavra '" + palavra + "' tem " + vogais + " vogais");
+        scanner.close();
     }
 }

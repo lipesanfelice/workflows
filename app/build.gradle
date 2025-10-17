@@ -804,6 +804,72 @@ tasks.register('organizarUsuario') {
     }
 }
 
+// Saneador leve para testes gerados/colados com lixo e chaves quebradas
+tasks.register('sanearTestesUsuario') {
+    group = 'verification'
+    description = 'Limpas testes: remove marcas tipo ====CODIGO====, ajusta imports JUnit e fecha chaves faltantes'
+
+    inputs.dir("$buildDir/usuario-src/src/test/java")
+    outputs.upToDateWhen { false }
+
+    doLast {
+        File baseTest = file("$buildDir/usuario-src/src/test/java")
+        if (!baseTest.exists()) return
+
+        baseTest.eachFileRecurse { File f ->
+            if (!(f.isFile() && f.name.endsWith('.java'))) return
+
+            String src = f.getText('UTF-8')
+
+            // 1) Remove lixo comum de cabeçalho
+            src = src
+                .replace('\uFEFF','')
+                .replaceAll('(?m)^```\\w*\\s*\\r?\\n?', '')
+                .replaceAll('(?m)^```\\s*$', '')
+                .replaceAll('(?m)^====+.*$', '')                  // <== resolve seu "====CODIGO===="
+                .replaceAll('(?m)^[A-Za-z0-9_.\\\\/\\-]+\\.java$', '')
+                .trim()
+
+            // 2) Garante imports básicos do JUnit 5 se houver @Test/assert*
+            def temTest = (src =~ /@Test/).find()
+            def usaAssertions = (src =~ /\\bassert\\w*\\s*\\(/).find()
+            if (temTest && !(src =~ /(?m)^\\s*import\\s+org\\.junit\\.jupiter\\.api\\.Test\\s*;/).find()) {
+                if ((src =~ /(?m)^\\s*package\\s+[^;]+;\\s*$/).find()) {
+                    src = src.replaceFirst(/(?m)^(\\s*package\\s+[^;]+;\\s*)/, "\$1\nimport org.junit.jupiter.api.Test;\n")
+                } else {
+                    src = "import org.junit.jupiter.api.Test;\n" + src
+                }
+            }
+            if (usaAssertions && !(src =~ /(?m)^\\s*import\\s+static\\s+org\\.junit\\.jupiter\\.api\\.Assertions\\.\\*\\s*;/).find()) {
+                if ((src =~ /(?m)^\\s*package\\s+[^;]+;\\s*$/).find()) {
+                    src = src.replaceFirst(/(?m)^(\\s*package\\s+[^;]+;\\s*)/, "\$1\nimport static org.junit.jupiter.api.Assertions.*;\n")
+                } else {
+                    src = "import static org.junit.jupiter.api.Assertions.*;\n" + src
+                }
+            }
+
+            // 3) Corrige linhas óbvias truncadas de declaração sem ';'
+            //    (ex.: "double capital" → "double capital;")
+            src = src.replaceAll('(?m)^(\\s*(?:byte|short|int|long|float|double|boolean|char|String)\\s+[A-Za-z_]\\w*)(\\s*)$', '\$1;')
+
+            // 4) Balanceia chaves simples (adiciona '}' faltando ao final)
+            int abre = 0, fecha = 0
+            for (int i = 0; i < src.length(); i++) {
+                char c = src.charAt(i)
+                if (c == '{') abre++
+                else if (c == '}') fecha++
+            }
+            if (abre > fecha) {
+                src = src + "\n" + ("}" * (abre - fecha)) + "\n"
+            }
+
+            f.setText(src, 'UTF-8')
+        }
+        println "sanearTestesUsuario → testes higienizados."
+    }
+}
+
+
 sourceSets {
     usuario {
         java {
@@ -829,7 +895,11 @@ tasks.named(sourceSets.usuario.compileJavaTaskName) {
 // compila testes só depois de organizar, resolver libs e compilar main
 tasks.named(sourceSets.usuarioTest.compileJavaTaskName) {
     dependsOn 'organizarUsuario', 'resolverDepsUsuario', tasks.named(sourceSets.usuario.classesTaskName)
+    // 👇 **ESSENCIAL**: saneia os testes antes de compilar
+    dependsOn 'sanearTestesUsuario'
+    options.encoding = 'UTF-8'
 }
+
 
 // ===== Runner padrão do Gradle (mantido, mas não é o caminho do covUsuario) =====
 tasks.register('testUsuario', Test) {

@@ -50,9 +50,19 @@
         <div>
           <h1 class="text-3xl font-bold text-gray-800">Resultados da análise</h1>
           <p class="text-gray-600">Testes e explicações gerados a partir da análise</p>
+
+          <!-- Chips de Repo/Branch (usados pelo JS) -->
+          <div class="mt-2 flex gap-2">
+            <span id="chipRepo" class="badge bg-gray-100 text-gray-700 border border-gray-200">repo: —</span>
+            <span id="chipBranch" class="badge bg-gray-100 text-gray-700 border border-gray-200">branch: —</span>
+          </div>
         </div>
+
         <div class="flex gap-2 items-center">
           <span id="chipStatus" class="badge bg-yellow-50 text-yellow-700 border border-yellow-200">status: —</span>
+          <button id="btnReload" class="px-3 py-2 bg-white border border-gray-300 hover:bg-gray-50 rounded-md text-sm text-gray-700">
+            Recarregar
+          </button>
         </div>
       </div>
 
@@ -136,13 +146,13 @@ const qs = new URLSearchParams(location.search);
 const PENDING    = ['1','true','yes'].includes((qs.get('pending')||'').toLowerCase());
 const STARTED_AT = Number(qs.get('startedAt')) || Date.now();
 
-
 OWNER  = qs.get('owner')  || OWNER;
 REPO   = qs.get('repo')   || REPO;
 BRANCH = qs.get('branch') || BRANCH;
 
 const STATUS_PARAM = (qs.get('status') || '').toLowerCase();
 
+/** Chips do topo */
 const chipRepoEl   = document.getElementById('chipRepo');
 const chipBranchEl = document.getElementById('chipBranch');
 if (chipRepoEl)   chipRepoEl.textContent   = `repo: ${OWNER}/${REPO}`;
@@ -157,11 +167,9 @@ if (STATUS_PARAM && chipStatus) {
     chipStatus.className = 'badge bg-red-100 text-red-700 border border-red-200';
 }
 
-
 /** ====== CONSTANTES DOS DIRETÓRIOS ====== */
 const TESTS_DIR  = 'app/entrada-usuario/testes_explicações/tests';
 const EXPL_DIR   = 'app/entrada-usuario/testes_explicações/explicacoes';
-const SONAR_JSON = 'app/entrada-usuario/relatorio-sonar.json';
 const MARKER     = 'app/entrada-usuario/done.json'; // marcador sem token
 
 /** ====== HELPERS ====== */
@@ -184,9 +192,9 @@ function tempoFmt(ms){
 }
 function diagLog(s){ const d=document.getElementById('diag'); d.textContent += (d.textContent?'\n':'') + s; }
 
-/** ====== GITHUB RAW (sem token) ====== */
+/** ====== GITHUB: listar e abrir RAW ====== */
 async function listGithubPath(path){
-  // Usa Contents API pública (funciona para repo público). Se o repo for privado, adapte para /gh proxy + token.
+  // Contents API (repo público). Se privado, adapte para um proxy + token.
   const url = `https://api.github.com/repos/${OWNER}/${REPO}/contents/${path}?ref=${encodeURIComponent(BRANCH)}&t=${Date.now()}`;
   const r = await fetch(url, { cache:'no-store' });
   if (r.status === 404) return [];
@@ -207,13 +215,6 @@ async function listGithubPath(path){
     return [j];
   }
   return [];
-}
-
-async function fetchRawJson(path){
-  const url = `https://raw.githubusercontent.com/${OWNER}/${REPO}/${BRANCH}/${path}?t=${Date.now()}`;
-  const r = await fetch(url, { cache:'no-store' });
-  if (!r.ok) throw new Error('HTTP '+r.status+' em '+path);
-  try { return JSON.parse(await r.text()); } catch { return null; }
 }
 
 /** ====== UI builders ====== */
@@ -255,8 +256,20 @@ function expCard(name, text){
   return el;
 }
 
-/** ====== Codecov ====== */
-function renderCodecov(){
+/** ====== Codecov (badge + links + KPI cobertura) ====== */
+async function fetchCodecovPct(){
+  try{
+    const url = `https://codecov.io/gh/${OWNER}/${REPO}/branch/${BRANCH}/graph/badge.svg?t=${Date.now()}`;
+    const r = await fetch(url, {cache:'no-store'});
+    if(!r.ok) return null;
+    const svg = await r.text();
+    // procura algo tipo ">85%<"
+    const m = svg.match(/>(\d+(?:\.\d+)?)%<\//);
+    return m ? `${m[1]}%` : null;
+  }catch{ return null; }
+}
+
+async function renderCodecov(){
   const area = document.getElementById('areaCodecov');
   limpar(area);
 
@@ -267,20 +280,28 @@ function renderCodecov(){
 
   const links = document.createElement('div');
   links.className = 'grid gap-2';
+
   const aProject = document.createElement('a');
   aProject.href = `https://app.codecov.io/gh/${OWNER}/${REPO}/tree/${BRANCH}`;
   aProject.target = '_blank';
   aProject.className = 'px-3 py-2 bg-white border border-gray-300 hover:bg-gray-50 rounded-md text-sm text-gray-700';
+  aProject.textContent = 'Abrir projeto no Codecov';
 
   const aCommits = document.createElement('a');
   aCommits.href = `https://app.codecov.io/gh/${OWNER}/${REPO}/commits`;
   aCommits.target = '_blank';
   aCommits.className = 'px-3 py-2 bg-white border border-gray-300 hover:bg-gray-50 rounded-md text-sm text-gray-700';
+  aCommits.textContent = 'Commits / Histórico';
 
   links.appendChild(aProject);
   links.appendChild(aCommits);
   area.appendChild(badge);
   area.appendChild(links);
+
+  // atualiza KPI cobertura
+  const pct = await fetchCodecovPct();
+  const kpiCobertura = document.getElementById('kpiCobertura');
+  if (pct) kpiCobertura.textContent = pct;
 }
 
 /** ====== Carregar resultados (modo final) ====== */
@@ -337,13 +358,17 @@ async function carregarResultados(){
       }
     }
 
+    // Cobertura (se ainda não veio do renderCodecov)
+    if (kpiCobertura.textContent === '—') {
+      const pct = await fetchCodecovPct();
+      if (pct) kpiCobertura.textContent = pct;
+    }
+
     escreveStatus('Resultados atualizados', 'ok');
   } catch (e) {
     escreveStatus('Erro ao carregar resultados: ' + e.message, 'err');
   }
 }
-
-document.getElementById('btnReload').addEventListener('click', carregarResultados);
 
 /** ====== Modo pendente: polling do marcador ====== */
 const banner    = document.getElementById('banner');
