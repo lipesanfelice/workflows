@@ -1,27 +1,34 @@
-import java.util.Random;
+import java.util.ArrayList;
+import java.util.List;
 
-public class SimuladorDados {
-    private static final Random random = new Random();
+public class GerenciadorTarefas {
+    private List<String> tarefas = new ArrayList<>();
     
-    public static int lancarDado(int faces) {
-        return random.nextInt(faces) + 1;
+    public void adicionarTarefa(String tarefa) {
+        tarefas.add(tarefa);
+        System.out.println("Tarefa adicionada: " + tarefa);
     }
     
-    public static int[] lancarVariosDados(int quantidade, int faces) {
-        int[] resultados = new int[quantidade];
-        for (int i = 0; i < quantidade; i++) {
-            resultados[i] = lancarDado(faces);
+    public void removerTarefa(int indice) {
+        if (indice >= 0 && indice < tarefas.size()) {
+            String removida = tarefas.remove(indice);
+            System.out.println("Tarefa removida: " + removida);
         }
-        return resultados;
+    }
+    
+    public void listarTarefas() {
+        System.out.println("\n--- LISTA DE TAREFAS ---");
+        for (int i = 0; i < tarefas.size(); i++) {
+            System.out.println((i + 1) + ". " + tarefas.get(i));
+        }
     }
     
     public static void main(String[] args) {
-        System.out.println("Dado de 6 faces: " + lancarDado(6));
-        
-        int[] dados = lancarVariosDados(4, 20);
-        System.out.print("4 dados de 20 faces: ");
-        for (int resultado : dados) {
-            System.out.print(resultado + " ");
-        }
+        GerenciadorTarefas gerenciador = new GerenciadorTarefas();
+        gerenciador.adicionarTarefa("Estudar Java");
+        gerenciador.adicionarTarefa("Fazer exercícios");
+        gerenciador.listarTarefas();
+        gerenciador.removerTarefa(0);
+        gerenciador.listarTarefas();
     }
 }

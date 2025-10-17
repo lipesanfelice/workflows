@@ -800,35 +800,34 @@ tasks.register('organizarUsuario') {
     }
 }
 
-// === Sanear testes do usuário (corrigido: padrões pré-compilados) ===
+// === Sanear testes do usuário (corrigido p/ também pôr ';' em tipos de referência) ===
 tasks.register('sanearTestesUsuario') {
     group = 'verification'
     description = 'Limpa testes: remove marcas ====CODIGO====, ajusta imports JUnit e fecha chaves faltantes'
 
-    // trabalha sobre a saída de organizarUsuario
     dependsOn 'organizarUsuario'
-    inputs.dir(dirTest)            // usa diretório consolidado de testes
-    outputs.dir(dirTest)           // escreve no mesmo diretório (in-place)
-    outputs.upToDateWhen { false } // força execução (evita cache)
+    inputs.dir("$buildDir/usuario-src/src/test/java")
+    outputs.dir("$buildDir/usuario-src/src/test/java")
+    outputs.upToDateWhen { false }
     mustRunAfter 'organizarUsuario'
 
     doLast {
-        File baseTest = dirTest
+        File baseTest = file("$buildDir/usuario-src/src/test/java")
         if (!baseTest.exists()) return
 
-        // ✅ Padrões JDK (evita problemas de escape em strings Groovy)
-        final Pattern PAT_FILEHEADER     = Pattern.compile('(?m)^[A-Za-z0-9_.\\\\/\\-]+\\.java$')
-        final Pattern PAT_IMPORT_TEST    = Pattern.compile('(?m)^\\s*import\\s+org\\.junit\\.jupiter\\.api\\.Test\\s*;')
-        final Pattern PAT_IMPORT_ASSERT  = Pattern.compile('(?m)^\\s*import\\s+static\\s+org\\.junit\\.jupiter\\.api\\.Assertions\\.\\*\\s*;')
-        final Pattern PAT_HAS_TEST_ANN   = Pattern.compile('@Test')
-        final Pattern PAT_HAS_ASSERTCALL = Pattern.compile('\\bassert\\w*\\s*\\(')
+        // Padrões pré-compilados (seguros)
+        final java.util.regex.Pattern PAT_FILEHEADER     = java.util.regex.Pattern.compile('(?m)^[A-Za-z0-9_.\\\\/\\-]+\\.java$')
+        final java.util.regex.Pattern PAT_IMPORT_TEST    = java.util.regex.Pattern.compile('(?m)^\\s*import\\s+org\\.junit\\.jupiter\\.api\\.Test\\s*;')
+        final java.util.regex.Pattern PAT_IMPORT_ASSERT  = java.util.regex.Pattern.compile('(?m)^\\s*import\\s+static\\s+org\\.junit\\.jupiter\\.api\\.Assertions\\.\\*\\s*;')
+        final java.util.regex.Pattern PAT_HAS_TEST_ANN   = java.util.regex.Pattern.compile('@Test')
+        final java.util.regex.Pattern PAT_HAS_ASSERTCALL = java.util.regex.Pattern.compile('\\bassert\\w*\\s*\\(')
 
         baseTest.eachFileRecurse { File f ->
             if (!(f.isFile() && f.name.endsWith('.java'))) return
 
             String src = f.getText('UTF-8')
 
-            // 1) Remove lixo comum de cabeçalho
+            // 1) Lixo de cabeçalho
             src = src
                 .replace('\uFEFF','')
                 .replaceAll('(?m)^```\\w*\\s*\\r?\\n?', '')
@@ -837,10 +836,9 @@ tasks.register('sanearTestesUsuario') {
                 .replaceAll(PAT_FILEHEADER, '')
                 .trim()
 
-            // 2) Imports básicos do JUnit 5 se houver @Test/assert*
+            // 2) Imports JUnit 5, se necessário
             boolean temTest       = PAT_HAS_TEST_ANN.matcher(src).find()
             boolean usaAssertions = PAT_HAS_ASSERTCALL.matcher(src).find()
-
             if (temTest && !PAT_IMPORT_TEST.matcher(src).find()) {
                 if ((src =~ /(?m)^\s*package\s+[^;]+;\s*$/).find()) {
                     src = src.replaceFirst(/(?m)^(\s*package\s+[^;]+;\s*)/, "\$1\nimport org.junit.jupiter.api.Test;\n")
@@ -848,7 +846,6 @@ tasks.register('sanearTestesUsuario') {
                     src = "import org.junit.jupiter.api.Test;\n" + src
                 }
             }
-
             if (usaAssertions && !PAT_IMPORT_ASSERT.matcher(src).find()) {
                 if ((src =~ /(?m)^\s*package\s+[^;]+;\s*$/).find()) {
                     src = src.replaceFirst(/(?m)^(\s*package\s+[^;]+;\s*)/, "\$1\nimport static org.junit.jupiter.api.Assertions.*;\n")
@@ -857,10 +854,29 @@ tasks.register('sanearTestesUsuario') {
                 }
             }
 
-            // 3) Declarações sem ';' no fim (padrão simples)
+            // 3) Declarações primitivas sem ';'
             src = src.replaceAll('(?m)^(\\s*(?:byte|short|int|long|float|double|boolean|char|String)\\s+[A-Za-z_]\\w*)(\\s*)$', '\$1;')
 
-            // 4) Fecha chaves faltantes
+            // 3b) Declarações de referência sem ';' (ex.: "GerenciadorTarefas gerenciador")
+            def out = new StringBuilder()
+            src.readLines().each { ln ->
+                def t = ln.trim()
+                boolean ehComentario = t.startsWith("//") || t.startsWith("/*") || t.startsWith("*")
+                boolean ehAssinaturaMetodo = t.contains("(") || t.endsWith("{")
+                boolean precisaPontoEVirgula =
+                    t &&
+                    !ehComentario &&
+                    !ehAssinaturaMetodo &&
+                    !t.endsWith(";") &&
+                    !t.endsWith("}") &&
+                    // padrão: Tipo<...>[]?  nomeVar
+                    (t ==~ /[A-Za-z_][\w\.<>\[\]]*\s+[A-Za-z_]\w*/)
+
+                out.append(precisaPontoEVirgula ? (ln + ";") : ln).append("\n")
+            }
+            src = out.toString()
+
+            // 4) Fecha chaves faltantes no fim
             int abre = 0, fecha = 0
             for (int i = 0; i < src.length(); i++) {
                 char c = src.charAt(i)
@@ -868,7 +884,7 @@ tasks.register('sanearTestesUsuario') {
                 else if (c == '}') fecha++
             }
             if (abre > fecha) {
-                src = src + "\n" + ("}" * (abre - fecha)) + "\n"
+                src = src + ("\n" + ("}" * (abre - fecha)) + "\n")
             }
 
             f.setText(src, 'UTF-8')
@@ -876,6 +892,7 @@ tasks.register('sanearTestesUsuario') {
         println "sanearTestesUsuario → testes higienizados."
     }
 }
+
 
 sourceSets {
     usuario {
