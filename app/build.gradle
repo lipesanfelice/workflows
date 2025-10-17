@@ -27,7 +27,6 @@ configurations {
     jacocoRuntime
 }
 
-
 dependencies {
     // Testes (JUnit)
     testImplementation libs.junit.jupiter
@@ -54,9 +53,7 @@ dependencies {
 
     // Agente do JaCoCo (para -javaagent)
     jacocoRuntime 'org.jacoco:org.jacoco.agent:0.8.12'
-
 }
-
 
 java {
     toolchain {
@@ -177,8 +174,7 @@ def mapaImports = [
     'com.opencsv'                      : 'com.opencsv:opencsv:5.9',
 
     // === Segurança / Cripto ===
-    'org.jose4j'                       : 'org.bitbucket.b_c:jose4j:0.9.6', // <- corrigido
-
+    'org.jose4j'                       : 'org.bitbucket_b_c:jose4j:0.9.6', // <- corrigido
     'org.mindrot.jbcrypt'              : 'org.mindrot:jbcrypt:0.4',
 
     // === Mapping / Utils extras ===
@@ -804,16 +800,20 @@ tasks.register('organizarUsuario') {
     }
 }
 
-// Saneador leve para testes gerados/colados com lixo e chaves quebradas
+// === Sanear testes do usuário (roda SEMPRE antes de compilar os testes) ===
 tasks.register('sanearTestesUsuario') {
     group = 'verification'
-    description = 'Limpas testes: remove marcas tipo ====CODIGO====, ajusta imports JUnit e fecha chaves faltantes'
+    description = 'Limpa testes: remove marcas ====CODIGO====, ajusta imports JUnit e fecha chaves faltantes'
 
-    inputs.dir("$buildDir/usuario-src/src/test/java")
-    outputs.upToDateWhen { false }
+    // ⚠️ trabalha sobre a saída de organizarUsuario
+    dependsOn 'organizarUsuario'
+    inputs.dir(dirTest)               // usa diretório consolidado de testes
+    outputs.dir(dirTest)              // escreve no mesmo diretório (in-place)
+    outputs.upToDateWhen { false }    // força execução (evita cache)
+    mustRunAfter 'organizarUsuario'
 
     doLast {
-        File baseTest = file("$buildDir/usuario-src/src/test/java")
+        File baseTest = dirTest
         if (!baseTest.exists()) return
 
         baseTest.eachFileRecurse { File f ->
@@ -826,13 +826,14 @@ tasks.register('sanearTestesUsuario') {
                 .replace('\uFEFF','')
                 .replaceAll('(?m)^```\\w*\\s*\\r?\\n?', '')
                 .replaceAll('(?m)^```\\s*$', '')
-                .replaceAll('(?m)^====+.*$', '')                  // <== resolve seu "====CODIGO===="
+                .replaceAll('(?m)^====+.*$', '')                  // remove "====CODIGO===="
                 .replaceAll('(?m)^[A-Za-z0-9_.\\\\/\\-]+\\.java$', '')
                 .trim()
 
             // 2) Garante imports básicos do JUnit 5 se houver @Test/assert*
             def temTest = (src =~ /@Test/).find()
             def usaAssertions = (src =~ /\\bassert\\w*\\s*\\(/).find()
+
             if (temTest && !(src =~ /(?m)^\\s*import\\s+org\\.junit\\.jupiter\\.api\\.Test\\s*;/).find()) {
                 if ((src =~ /(?m)^\\s*package\\s+[^;]+;\\s*$/).find()) {
                     src = src.replaceFirst(/(?m)^(\\s*package\\s+[^;]+;\\s*)/, "\$1\nimport org.junit.jupiter.api.Test;\n")
@@ -848,11 +849,10 @@ tasks.register('sanearTestesUsuario') {
                 }
             }
 
-            // 3) Corrige linhas óbvias truncadas de declaração sem ';'
-            //    (ex.: "double capital" → "double capital;")
+            // 3) Corrige declarações truncadas sem ';' (ex.: "double capital" → "double capital;")
             src = src.replaceAll('(?m)^(\\s*(?:byte|short|int|long|float|double|boolean|char|String)\\s+[A-Za-z_]\\w*)(\\s*)$', '\$1;')
 
-            // 4) Balanceia chaves simples (adiciona '}' faltando ao final)
+            // 4) Balanceia chaves simples (completa '}' faltando no final)
             int abre = 0, fecha = 0
             for (int i = 0; i < src.length(); i++) {
                 char c = src.charAt(i)
@@ -868,7 +868,6 @@ tasks.register('sanearTestesUsuario') {
         println "sanearTestesUsuario → testes higienizados."
     }
 }
-
 
 sourceSets {
     usuario {
@@ -892,14 +891,11 @@ tasks.named(sourceSets.usuario.compileJavaTaskName) {
     dependsOn 'organizarUsuario', 'resolverDepsUsuario'
 }
 
-// compila testes só depois de organizar, resolver libs e compilar main
+// compila testes só depois de organizar, sanear, resolver libs e compilar main
 tasks.named(sourceSets.usuarioTest.compileJavaTaskName) {
-    dependsOn 'organizarUsuario', 'resolverDepsUsuario', tasks.named(sourceSets.usuario.classesTaskName)
-    // 👇 **ESSENCIAL**: saneia os testes antes de compilar
-    dependsOn 'sanearTestesUsuario'
+    dependsOn 'organizarUsuario', 'sanearTestesUsuario', 'resolverDepsUsuario', tasks.named(sourceSets.usuario.classesTaskName)
     options.encoding = 'UTF-8'
 }
-
 
 // ===== Runner padrão do Gradle (mantido, mas não é o caminho do covUsuario) =====
 tasks.register('testUsuario', Test) {
@@ -1035,7 +1031,6 @@ tasks.register("testUsuarioConsole", JavaExec) {
 
     standardInput = System.in
 }
-
 
 // 2) Relatório JaCoCo a partir do .exec do ConsoleLauncher
 tasks.register("jacocoRelatorioUsuarioConsole", JacocoReport) {

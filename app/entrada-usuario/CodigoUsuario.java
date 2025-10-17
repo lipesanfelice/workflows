@@ -1,21 +1,34 @@
-import java.util.Scanner;
+import java.util.ArrayList;
+import java.util.List;
 
-public class ContadorVogais {
-    public static void main(String[] args) {
-        Scanner scanner = new Scanner(System.in);
-        
-        System.out.print("Digite uma palavra: ");
-        String palavra = scanner.nextLine().toLowerCase();
-        
-        int vogais = 0;
-        for (int i = 0; i < palavra.length(); i++) {
-            char letra = palavra.charAt(i);
-            if (letra == 'a' || letra == 'e' || letra == 'i' || letra == 'o' || letra == 'u') {
-                vogais++;
-            }
+public class GerenciadorTarefas {
+    private List<String> tarefas = new ArrayList<>();
+    
+    public void adicionarTarefa(String tarefa) {
+        tarefas.add(tarefa);
+        System.out.println("Tarefa adicionada: " + tarefa);
+    }
+    
+    public void removerTarefa(int indice) {
+        if (indice >= 0 && indice < tarefas.size()) {
+            String removida = tarefas.remove(indice);
+            System.out.println("Tarefa removida: " + removida);
         }
-        
-        System.out.println("A palavra '" + palavra + "' tem " + vogais + " vogais");
-        scanner.close();
+    }
+    
+    public void listarTarefas() {
+        System.out.println("\n--- LISTA DE TAREFAS ---");
+        for (int i = 0; i < tarefas.size(); i++) {
+            System.out.println((i + 1) + ". " + tarefas.get(i));
+        }
+    }
+    
+    public static void main(String[] args) {
+        GerenciadorTarefas gerenciador = new GerenciadorTarefas();
+        gerenciador.adicionarTarefa("Estudar Java");
+        gerenciador.adicionarTarefa("Fazer exercícios");
+        gerenciador.listarTarefas();
+        gerenciador.removerTarefa(0);
+        gerenciador.listarTarefas();
     }
 }
