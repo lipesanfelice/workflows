@@ -1,68 +1,35 @@
-import java.util.ArrayList;
+import java.util.Random;
 import java.util.Scanner;
 
-public class GerenciadorTarefas {
+public class JogoAdivinhacao {
     public static void main(String[] args) {
         Scanner scanner = new Scanner(System.in);
-        ArrayList<String> tarefas = new ArrayList<>();
-        int opcao;
+        Random random = new Random();
         
-        System.out.println("=== GERENCIADOR DE TAREFAS ===");
+        int numeroSecreto = random.nextInt(100) + 1;
+        int tentativas = 0;
+        int palpite;
+        
+        System.out.println("=== JOGO DE ADIVINHAÇÃO ===");
+        System.out.println("Estou pensando em um número entre 1 e 100.");
+        System.out.println("Tente adivinhar!");
         
         do {
-            System.out.println("\nMenu:");
-            System.out.println("1 - Adicionar tarefa");
-            System.out.println("2 - Listar tarefas");
-            System.out.println("3 - Remover tarefa");
-            System.out.println("4 - Sair");
-            System.out.print("Escolha uma opção: ");
+            System.out.print("\nDigite seu palpite: ");
+            palpite = scanner.nextInt();
+            tentativas++;
             
-            opcao = scanner.nextInt();
-            scanner.nextLine(); // Limpar buffer
-            
-            switch (opcao) {
-                case 1:
-                    System.out.print("Digite a tarefa: ");
-                    String tarefa = scanner.nextLine();
-                    tarefas.add(tarefa);
-                    System.out.println("Tarefa adicionada!");
-                    break;
-                    
-                case 2:
-                    if (tarefas.isEmpty()) {
-                        System.out.println("Nenhuma tarefa cadastrada.");
-                    } else {
-                        System.out.println("\n=== LISTA DE TAREFAS ===");
-                        for (int i = 0; i < tarefas.size(); i++) {
-                            System.out.println((i + 1) + ". " + tarefas.get(i));
-                        }
-                    }
-                    break;
-                    
-                case 3:
-                    if (tarefas.isEmpty()) {
-                        System.out.println("Nenhuma tarefa para remover.");
-                    } else {
-                        System.out.print("Digite o número da tarefa a remover: ");
-                        int numero = scanner.nextInt();
-                        if (numero >= 1 && numero <= tarefas.size()) {
-                            tarefas.remove(numero - 1);
-                            System.out.println("Tarefa removida!");
-                        } else {
-                            System.out.println("Número inválido!");
-                        }
-                    }
-                    break;
-                    
-                case 4:
-                    System.out.println("Saindo... Até logo!");
-                    break;
-                    
-                default:
-                    System.out.println("Opção inválida!");
+            if (palpite < numeroSecreto) {
+                System.out.println("Muito baixo! Tente um número maior.");
+            } else if (palpite > numeroSecreto) {
+                System.out.println("Muito alto! Tente um número menor.");
+            } else {
+                System.out.println("🎉 Parabéns! Você acertou!");
+                System.out.println("O número era: " + numeroSecreto);
+                System.out.println("Tentativas: " + tentativas);
             }
             
-        } while (opcao != 4);
+        } while (palpite != numeroSecreto);
         
         scanner.close();
     }

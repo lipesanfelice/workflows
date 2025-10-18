@@ -1,6 +1,5 @@
 name: Java CI with Gradle
 
-# no topo do workflow ou do job:
 permissions:
   contents: write
   pull-requests: write
@@ -21,12 +20,21 @@ jobs:
   build:
     runs-on: ubuntu-latest
 
+    env:
+      # Ajustes do loop de autofix:
+      MAX_LOOPS: "3"            # máximo de iterações
+      MIN_COVERAGE: "0.60"      # 60%
+      ENFORCE_COVERAGE: "false" # gradle não falha; o loop decide
+      # Provedor IA (Groq) e modelo padrão:
+      IA_PROVEDOR: "groq"
+      GROQ_MODEL: "llama-3.1-8b-instant"
+
     steps:
     - name: Checkout do código
       uses: actions/checkout@v4
       with:
-        fetch-depth: 0            
-        persist-credentials: true # mantém o token para o git push
+        fetch-depth: 0
+        persist-credentials: true
 
     - name: Configurar Java
       uses: actions/setup-java@v4
@@ -49,11 +57,11 @@ jobs:
 
     - name: SonarQube
       env:
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
       run: |
         ./gradlew clean build
         ./gradlew -p app -Dsonar.token=$SONAR_TOKEN sonar
-    
+
     - name: Extrair métricas Sonar → relatorio-sonar.json
       working-directory: app
       env:
@@ -116,7 +124,7 @@ jobs:
       run: |
         test -f "${{ github.workspace }}/app/entrada-usuario/relatorio-sonar.json" || (echo "faltando relatorio-sonar.json" && exit 1)
         test -d "${{ github.workspace }}/app/entrada-usuario" || (echo "faltando pasta de código entrada-usuario/java" && exit 1)
-    
+
     - name: Garantir e limpar pasta de testes gerados
       run: |
         TESTS_DIR="${{ github.workspace }}/app/entrada-usuario/testes_explicações"
@@ -131,12 +139,11 @@ jobs:
         GROQ_MODELO: llama-3.1-8b-instant
         SONAR_RELATORIO_JSON: ${{ github.workspace }}/app/entrada-usuario/relatorio-sonar.json
         CODIGO_FONTE_DIR: ${{ github.workspace }}/app/entrada-usuario
-        IA_SLEEP_MS: '8000'          
-        IA_CODE_MAX_CHARS: '3000'    
+        IA_SLEEP_MS: '8000'
+        IA_CODE_MAX_CHARS: '3000'
         IA_SONAR_MAX_CHARS: '2000'
       run: |
         ./gradlew -p app bootRun --args='--acao=gerar-testes --spring.main.web-application-type=none --app.entrada.diretorio=${{ github.workspace }}/app/entrada-usuario'
-
 
     - name: Conferir testes gerados
       run: |
@@ -158,25 +165,57 @@ jobs:
           echo "tem=false" >> "$GITHUB_OUTPUT"
         fi
 
-    # - name: Testes + Cobertura (testUsuario + jacocoRelatorioUsuario)
-    #   run: |
-    #     ./gradlew --no-daemon -Dorg.gradle.configuration-cache=false -p app clean testUsuario jacocoRelatorioUsuario --info
-    #     echo "JACOCO_XML=${{ github.workspace }}/app/entrada-usuario/jacoco-relatorio/jacoco.xml" >> $GITHUB_ENV
-    #     echo "JACOCO_EXEC=${{ github.workspace }}/app/build/jacoco/testUsuario.exec" >> $GITHUB_ENV
-
-    - name: Testes + Cobertura (covUsuario garante jacoco.xml)
+    - name: 'Loop: testes + cobertura + auto-ajuste (Groq)'
+      env:
+        GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+        GROQ_MODELO: llama-3.1-8b-instant
+        MAX_TRIES: '3'
       run: |
-        ./gradlew --no-daemon -Dorg.gradle.configuration-cache=false -p app clean covUsuario --info
+        set -euo pipefail
+        tries=1
+        while [ $tries -le ${MAX_TRIES} ]; do
+          echo "== Tentativa $tries/${MAX_TRIES} =="
+          if ./gradlew --no-daemon -Dorg.gradle.configuration-cache=false -p app clean covUsuario --info; then
+            ok_exec=1
+          else
+            ok_exec=0
+          fi
+
+          XML="${{ github.workspace }}/app/entrada-usuario/jacoco-relatorio/jacoco.xml"
+          EXEC="${{ github.workspace }}/app/build/jacoco/testUsuarioConsole.exec"
+
+          have_exec=0; have_xml=0
+          [ -s "$EXEC" ] && have_exec=1
+          [ -s "$XML"  ] && have_xml=1
+
+          if [ $ok_exec -eq 1 ] && [ $have_exec -eq 1 ] && [ $have_xml -eq 1 ]; then
+            echo "✅ cobertura e artefatos presentes"
+            break
+          fi
+
+          echo "❌ Falha/sem cobertura; gerando payload e pedindo patches à IA…"
+          ./gradlew --no-daemon -p app gerarPacoteParaIA --info || true
+          ./gradlew --no-daemon -p app ajustarTestesIa --info || true
+
+          if ! ls "${{ github.workspace }}/app/entrada-usuario/testes_ai_patches"/*.java >/dev/null 2>&1; then
+            echo "⚠️ IA não produziu patches; encerrando loop."
+            break
+          fi
+
+          tries=$((tries+1))
+        done
+
         echo "JACOCO_XML=${{ github.workspace }}/app/entrada-usuario/jacoco-relatorio/jacoco.xml" >> $GITHUB_ENV
         echo "JACOCO_EXEC=${{ github.workspace }}/app/build/jacoco/testUsuarioConsole.exec" >> $GITHUB_ENV
 
-    
+    # ==================== FIM LOOP DE AUTOFIX COM GROQ ====================
+
     - name: Debug cobertura
       run: |
         set -xe
         ls -la $GITHUB_WORKSPACE/app/build/jacoco || true
         ls -la $GITHUB_WORKSPACE/app/entrada-usuario/jacoco-relatorio || true
-        head -n 20 $JACOCO_XML || true
+        head -n 20 "$JACOCO_XML" || true
 
     - name: Publicar cobertura (artefatos)
       if: always()
@@ -188,7 +227,6 @@ jobs:
           app/entrada-usuario/jacoco-relatorio/jacoco.xml
           app/entrada-usuario/jacoco-relatorio/html
         retention-days: 7
-
 
     - name: Inspecionar artefatos de cobertura
       if: always()
@@ -204,18 +242,15 @@ jobs:
         set -euo pipefail
         XML="${{ env.JACOCO_XML }}"
         EXEC="${{ env.JACOCO_EXEC }}"
-
         ok=1
         if [ ! -s "$EXEC" ]; then
-          echo "::warning::testUsuario.exec ausente ou vazio: $EXEC"
+          echo "::warning::testUsuarioConsole.exec ausente ou vazio: $EXEC"
           ok=0
         fi
-
         if [ ! -s "$XML" ]; then
           echo "::warning::jacoco.xml ausente ou vazio: $XML"
           ok=0
         fi
-
         if [ "$ok" = "1" ]; then
           echo "tem_cov=true" >> "$GITHUB_OUTPUT"
           echo "Primeiras linhas do jacoco.xml:"
@@ -223,7 +258,7 @@ jobs:
         else
           echo "tem_cov=false" >> "$GITHUB_OUTPUT"
         fi
-    
+
     - name: Commit e push dos arquivos gerados (na main)
       if: ${{ github.event_name != 'pull_request' }}
       env:
@@ -244,31 +279,28 @@ jobs:
         git reset --hard "origin/$BRANCH"
         git stash pop || true
 
-        # Se houve conflitos, aceite o lado do stash (as mudanças geradas nesta execução)
+        # Preferir o que foi gerado nesta execução
         if git diff --name-only --diff-filter=U | grep -q .; then
           echo "Resolvendo conflitos preferindo as alterações geradas (stash/theirs)…"
           git checkout --theirs -- .
           git add -A
         fi
 
-        # Adiciona o que interessa: fontes do usuário + relatorios/gerados
         git add -A app/entrada-usuario
 
         if git diff --cached --quiet; then
           echo "Sem mudanças para commit."
         else
-          msg="chore: atualizar entrada-usuario e testes gerados [skip ci] - run ${{ github.run_number }} @ ${{ github.sha }}"
+          msg="chore: atualizar entrada-usuario e testes gerados (incl. patches IA Groq) [skip ci] - run ${{ github.run_number }} @ ${{ github.sha }}"
           git commit -m "$msg"
-          # tenta push com rebase; se precisar, usa --force-with-lease
           if ! git push origin HEAD:"$BRANCH"; then
             git pull --rebase --autostash origin "$BRANCH" || true
             git push --force-with-lease origin HEAD:"$BRANCH"
           fi
         fi
 
-        # Exporta o SHA ATUAL (após push) para usar no Codecov
         echo "COV_SHA=$(git rev-parse HEAD)" >> $GITHUB_ENV
-      
+
     - name: Upload para Codecov (uploader CLI)
       if: steps.check_cov.outputs.tem_cov == 'true'
       run: |
@@ -284,22 +316,24 @@ jobs:
           -v
       env:
         CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
-    
+
     - name: Escreve marcador de sucesso
       if: ${{ success() }}
       run: |
-          mkdir -p app/entrada-usuario
-          node -e "const fs=require('fs'); const now=Date.now(); const j={done:true,status:'success',endedAt:now}; fs.writeFileSync('app/entrada-usuario/done.json', JSON.stringify(j,null,2));"
+        mkdir -p app/entrada-usuario
+        node -e "const fs=require('fs'); const now=Date.now(); const j={done:true,status:'success',endedAt:now}; fs.writeFileSync('app/entrada-usuario/done.json', JSON.stringify(j,null,2));"
+
     - name: Escreve marcador de falha
       if: ${{ failure() }}
       run: |
-          mkdir -p app/entrada-usuario
-          node -e "const fs=require('fs'); const now=Date.now(); const j={done:true,status:'failure',endedAt:now}; fs.writeFileSync('app/entrada-usuario/done.json', JSON.stringify(j,null,2));"
+        mkdir -p app/entrada-usuario
+        node -e "const fs=require('fs'); const now=Date.now(); const j={done:true,status:'failure',endedAt:now}; fs.writeFileSync('app/entrada-usuario/done.json', JSON.stringify(j,null,2));"
+
     - name: Commit do marcador
       if: ${{ success() || failure() || cancelled() }}
       run: |
-          git config user.name  "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add app/entrada-usuario/done.json
-          git commit -m "mark: done [skip ci]" || echo "nada a commitar"
-          git push
+        git config user.name  "github-actions[bot]"
+        git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+        git add app/entrada-usuario/done.json
+        git commit -m "mark: done [skip ci]" || echo "nada a commitar"
+        git push

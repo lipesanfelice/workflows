@@ -38,6 +38,10 @@ dependencies {
     implementation 'com.fasterxml.jackson.core:jackson-databind:2.17.1'
     implementation 'commons-io:commons-io:2.16.1'
 
+
+    // HTTP client p/ Groq (já usado em outras partes também)
+    implementation 'com.squareup.okhttp3:okhttp:4.12.0'
+
     // Spring Boot Web
     implementation 'org.springframework.boot:spring-boot-starter-web'
     implementation 'org.springframework.boot:spring-boot-starter-validation'
@@ -97,6 +101,17 @@ tasks.register('gerarTestesIa', JavaExec) {
     mainClass = 'org.example.web.cli.GerarTestesCli'
 }
 
+// === NOVA TASK CLI p/ AJUSTE DE TESTES (Groq) ===
+tasks.register('ajustarTestesIa', JavaExec) {
+    group = "verification"
+    description = "Pede à Groq patches de testes, salva em entrada-usuario/testes_ai_patches"
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'org.example.web.cli.AjustarTestesCli'
+    // parâmetros padrão (podem ser sobrescritos no CI)
+    args "--modelo=${System.getenv('GROQ_MODELO') ?: 'llama-3.1-8b-instant'}"
+    environment "GROQ_API_KEY", System.getenv("GROQ_API_KEY") ?: ""
+}
+
 configurations {
     usuarioImplementation.extendsFrom implementation
     usuarioRuntimeOnly.extendsFrom runtimeOnly
@@ -107,6 +122,9 @@ configurations {
 def dirEntrada = file('entrada-usuario')
 def dirTestsIA = file('entrada-usuario/testes_explicações/tests')
 def dirTestsUsuario = file('entrada-usuario/testes')
+// 👇 NOVO: diretório onde a IA gravará patches de testes durante o loop
+def dirTestsAIPatches = file('entrada-usuario/testes_ai_patches')
+
 def dirWork = layout.buildDirectory.dir('usuario-src').get().asFile
 def dirMain = new File(dirWork, 'src/main/java')
 
@@ -281,6 +299,7 @@ tasks.register('organizarUsuario') {
     inputs.files(fileTree(dirEntrada) { include '**/*.java' })
     inputs.files(fileTree(dirTestsIA) { include '**/*.java' })
     inputs.files(fileTree(dirTestsUsuario) { include '**/*.java' })
+    inputs.files(fileTree(dirTestsAIPatches) { include '**/*.java' }) // 👈 NOVO: inclui patches da IA
     outputs.dir(dirWork)
 
     doLast {
@@ -346,15 +365,45 @@ tasks.register('organizarUsuario') {
             return lines.join('\n')
         }
 
-        // Carrega tudo
-        def fontesUsuario = []
-        def testesIA = []
-        inputs.files.files.each { File origem ->
-            boolean isTeste = origem.toPath().startsWith(dirTestsIA.toPath()) ||
-                              origem.toPath().startsWith(dirTestsUsuario.toPath())
-            String texto = origem.getText('UTF-8')
-            (isTeste ? testesIA : fontesUsuario) << [file: origem, text: texto]
+        // ===================== CARREGAR TESTES COM PRECEDÊNCIA ======================
+        def lerTests = { File raiz ->
+            def res = []
+            if (raiz.exists()) {
+                fileTree(raiz) { include '**/*.java' }.each { f ->
+                    res << [file: f, text: f.getText('UTF-8')]
+                }
+            }
+            return res
         }
+        def testesUser      = lerTests(dirTestsUsuario)
+        def testesAIPatches = lerTests(dirTestsAIPatches)
+        def testesIAExp     = lerTests(dirTestsIA)
+
+        def nomePublicoTeste = { String s ->
+            def m = (s =~ /(?m)^\s*public\s+(?:class|interface|enum|record)\s+([A-Za-z_]\w*)\b/)
+            m.find() ? m.group(1) : null
+        }
+        def porNome = [:]
+
+        // Carregue do menor p/ maior para o último sobrescrever:
+        // explicações -> patches (IA) -> usuário (vence sempre)
+        [testesIAExp, testesAIPatches, testesUser].each { lista ->
+            lista.each { t ->
+                def n = nomePublicoTeste(t.text) ?: ("Anon_" + t.file.name)
+                porNome[n] = t
+            }
+        }
+        def testesIA = porNome.values().toList()
+        println "organizarUsuario → testes recebidos (raw):  ${testesIA.size()}"
+        // ============================================================================
+
+        // Agora carregue os FONTES (produção) do usuário
+        def fontesUsuario = []
+        fileTree(dirEntrada) {
+            include '**/*.java'
+            // evite trazer os testes para cá
+            exclude 'testes/**', 'testes_explicações/**', 'testes_ai_patches/**'
+        }.each { f -> fontesUsuario << [file: f, text: f.getText('UTF-8')] }
 
         // =============== AUTOCORREÇÃO DE CHAMADAS ESTÁTICAS NOS TESTES ===============
         def extrairMetodosPublicosEstaticos = { String src ->
@@ -510,8 +559,7 @@ tasks.register('organizarUsuario') {
                             public class ${nomePublico} extends ${nomeEsperado} {
                                 public ${nomePublico}() { super(); }
                             }
-                            """.stripIndent(), "UTF-8"
-                        )
+                            """.stripIndent(), "UTF-8")
                         println "organizarUsuario → compat: criada classe-ponte '${nomePublico}' estendendo '${nomeEsperado}'."
                     }
                 } else {
@@ -768,7 +816,6 @@ tasks.register('organizarUsuario') {
             s = lines.join('\n')
 
             // Localiza a primeira declaração pública de tipo
-            def mDecl = (s =~ /(?s)^\s*package\s+[^;]+;\s*|/ ) // apenas pra consumir opcionalmente o package (no-ops)
             def m = (s =~ /(?m)^\s*public\s+(?:class|interface|enum|record)\s+[A-Za-z_]\w*\b/)
             if (!m.find()) {
                 // Sem tipo público — devolve o que temos (não vamos arriscar cortar demais)
@@ -802,12 +849,10 @@ tasks.register('organizarUsuario') {
             return s
         }
 
-
         def fontesUsuarioSan = fontesUsuario.collect { f ->
             [file: f.file, text: sanitizeJavaMain(f.text)]
         }
         fontesUsuario = fontesUsuarioSan
-
 
         fontesUsuario.each { gravar(it.text, false) }
         testesIA.each     { gravar(it.text, true)  }
@@ -1375,4 +1420,32 @@ tasks.withType(JavaExec).configureEach {
 
 tasks.named('test') {
     useJUnitPlatform()
+}
+
+// ========= EXTRA: pacote zip com payload p/ IA (opcional, útil no CI) =========
+tasks.register("gerarPacoteParaIA", Zip) {
+    group = "verification"
+    description = "Empacota fontes/testes/relatórios para a IA ajustar testes."
+    dependsOn "jacocoRelatorioUsuarioConsole"
+
+    archiveBaseName.set("payload-ia")
+    destinationDirectory.set(layout.buildDirectory.dir("ia_payload"))
+
+    from("$buildDir/usuario-src/src/main/java") { into("src_main_staged") }
+    from("$buildDir/usuario-src/src/test_raw/java") { into("tests_raw_stage") }
+    from("$buildDir/usuario-src/src/test/java") { into("tests_stage") }
+
+    from("$projectDir/entrada-usuario") {
+        include '**/*.java', '**/*.txt'
+        into("entrada_usuario_raw")
+    }
+    from("$projectDir/entrada-usuario/testes_ai_patches") { into("tests_ai_patches") }
+    from("$projectDir/entrada-usuario/testes_explicações") { into("tests_ia_explicacoes") }
+    from("$projectDir/entrada-usuario/jacoco-relatorio") { include 'jacoco.xml', 'html/**'; into("jacoco") }
+    from("$buildDir/reports/problems") { include 'problems-report.html'; into("problems") }
+}
+
+// Alias conveniente local
+tasks.register("covUsuarioComPayload") {
+    dependsOn "covUsuario", "gerarPacoteParaIA"
 }
