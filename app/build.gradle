@@ -467,6 +467,58 @@ tasks.register('organizarUsuario') {
             }
 
             println "organizarUsuario → renomeado classe pública '${nomePublico}' → '${nomeEsperado}' para alinhar com os testes"
+
+            // === Após renomear nomePublico -> nomeEsperado, garanta compatibilidade ===
+            if (deveRenomear) {
+                // 1) Atualiza referências nos testes (testesIA) para o novo nome
+                testesIA = testesIA.collect { ti ->
+                    def txt = ti.text?.replaceAll("\\b${java.util.regex.Pattern.quote(nomePublico)}\\b", nomeEsperado)
+                    [file: ti.file, text: txt]
+                }
+
+                // 2) Se o artefato renomeado é uma CLASSE (não final), cria classe-ponte com o nome antigo
+                //    para manter compat (ex.: public class GerenciadorTarefas extends Tarefas { ... }).
+                boolean precisaBridge = false
+                String pacoteDoUsuario = pacoteUsuario ?: ''
+                String headerPkg = pacoteDoUsuario ? "package ${pacoteDoUsuario};\n" : ""
+
+                // Descobre se a definição pós-rename é "public class <nomeEsperado>" e não é final
+                fontesUsuario.each { fu ->
+                    def t = fu.text
+                    // depois do rename, a declaração já deve estar com nomeEsperado:
+                    def mClass = (t =~ /(?m)^\s*public\s+(?:class)\s+${java.util.regex.Pattern.quote(nomeEsperado)}\b/)
+                    def mFinal = (t =~ /(?m)^\s*public\s+final\s+class\s+${java.util.regex.Pattern.quote(nomeEsperado)}\b/)
+                    if (mClass.find() && !mFinal.find()) {
+                        precisaBridge = true
+                    }
+                }
+
+                if (precisaBridge) {
+                    File baseDestino = dirMain
+                    if (pacoteDoUsuario) {
+                        baseDestino = new File(dirMain, pacoteDoUsuario.replace('.', File.separator))
+                        baseDestino.mkdirs()
+                    }
+                    File bridge = new File(baseDestino, "${nomePublico}.java")
+                    if (!bridge.exists()) {
+                        bridge.setText(
+                            """${headerPkg}
+                            /**
+                            * Classe-ponte para compatibilidade com testes antigos.
+                            * Mantém o nome anterior e delega para ${nomeEsperado}.
+                            */
+                            public class ${nomePublico} extends ${nomeEsperado} {
+                                public ${nomePublico}() { super(); }
+                            }
+                            """.stripIndent(), "UTF-8"
+                        )
+                        println "organizarUsuario → compat: criada classe-ponte '${nomePublico}' estendendo '${nomeEsperado}'."
+                    }
+                } else {
+                    println "organizarUsuario → compat: sem classe-ponte (tipo não é 'class' ou é 'final'); apenas reescrevi referências nos testes."
+                }
+            }
+
         }
 
         def ajustarTesteParaPacoteUsuario = { String texto ->
