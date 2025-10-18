@@ -12,3 +12,5 @@ plugins {
 
 rootProject.name = 'projeto-teste-codigo'
 include('app', 'web')
+
+include ':app'

@@ -42,6 +42,7 @@ dependencies {
     // HTTP client p/ Groq (já usado em outras partes também)
     implementation 'com.squareup.okhttp3:okhttp:4.12.0'
 
+
     // Spring Boot Web
     implementation 'org.springframework.boot:spring-boot-starter-web'
     implementation 'org.springframework.boot:spring-boot-starter-validation'
