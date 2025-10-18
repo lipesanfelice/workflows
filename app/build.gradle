@@ -1055,7 +1055,13 @@ tasks.named(sourceSets.usuarioTest.compileJavaTaskName) {
     dependsOn 'organizarUsuario', 'sanearTestesUsuario', 'resolverDepsUsuario', tasks.named(sourceSets.usuario.classesTaskName)
     dependsOn 'preflightUsuarioTests', 'injectNoOpTestIfNeeded'
     options.encoding = 'UTF-8'
+
+    // 👇 evita "Failed to normalize …" porque o preflight renomeia/remove fontes
+    doNotTrackState("Os testes podem ser quarentenados (renomeados para .java.skip) no preflight.")
+    options.incremental = false
+    outputs.upToDateWhen { false }
 }
+
 
 // ===== Runner padrão do Gradle (mantido, mas não é o caminho do covUsuario) =====
 tasks.register('testUsuario', Test) {
