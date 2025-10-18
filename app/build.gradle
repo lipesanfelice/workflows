@@ -109,7 +109,10 @@ def dirTestsIA = file('entrada-usuario/testes_explicações/tests')
 def dirTestsUsuario = file('entrada-usuario/testes')
 def dirWork = layout.buildDirectory.dir('usuario-src').get().asFile
 def dirMain = new File(dirWork, 'src/main/java')
-def dirTest = new File(dirWork, 'src/test/java')
+
+// 🎯 NOVO: separa testes “raw” (entrada) e “stage” (válidos p/ compilar)
+def dirTestRaw   = new File(dirWork, 'src/test_raw/java')
+def dirTestStage = new File(dirWork, 'src/test/java')
 
 // Mapeia imports -> coordenadas Maven padrão (versões estáveis p/ Java 21 / Spring Boot 3.x)
 def mapaImports = [
@@ -285,7 +288,8 @@ tasks.register('organizarUsuario') {
             dirWork.deleteDir()
         }
         dirMain.mkdirs()
-        dirTest.mkdirs()
+        dirTestRaw.mkdirs()
+        dirTestStage.mkdirs() // pode existir vazio; o preflight vai popular
 
         // helpers
         def extrairPacote = { String src ->
@@ -604,7 +608,7 @@ tasks.register('organizarUsuario') {
         def injetarStubLoginAttempt = {
             String pacote = pacoteUsuario ?: ''
             String header = pacote ? "package ${pacote};\n" : ""
-            def destinoDir = pacote ? new File(dirTest, pacote.replace('.', File.separator)) : dirTest
+            def destinoDir = pacote ? new File(dirTestStage, pacote.replace('.', File.separator)) : dirTestStage
             destinoDir.mkdirs()
             new File(destinoDir, "LoginAttempt.java").setText(
                 """${header}
@@ -618,13 +622,13 @@ tasks.register('organizarUsuario') {
                     }
                 }
                 """.stripIndent(), "UTF-8")
-            println "organizarUsuario → stub LoginAttempt injetado em testes"
+            println "organizarUsuario → stub LoginAttempt injetado em testes (stage)"
         }
 
         def injetarTestHooks = {
             String pacote = pacoteUsuario ?: ''
             String header = pacote ? "package ${pacote};\n" : ""
-            def destinoDir = pacote ? new File(dirTest, pacote.replace('.', File.separator)) : dirTest
+            def destinoDir = pacote ? new File(dirTestStage, pacote.replace('.', File.separator)) : dirTestStage
             destinoDir.mkdirs()
             new File(destinoDir, "TestHooks.java").setText(
                 """${header}
@@ -652,7 +656,7 @@ tasks.register('organizarUsuario') {
                     }
                 }
                 """.stripIndent(), "UTF-8")
-            println "organizarUsuario → TestHooks injetado em testes"
+            println "organizarUsuario → TestHooks injetado em testes (stage)"
         }
 
         def gravar = { String texto, boolean isTeste ->
@@ -662,7 +666,7 @@ tasks.register('organizarUsuario') {
             }
             String pacote = extrairPacote(texto)
             String caminhoPacote = pacote ? pacote.replace('.', File.separator) : ''
-            File baseDestino = isTeste ? dirTest : dirMain
+            File baseDestino = isTeste ? dirTestRaw : dirMain
             File destinoDir = caminhoPacote ? new File(baseDestino, caminhoPacote) : baseDestino
             destinoDir.mkdirs()
 
@@ -727,9 +731,11 @@ tasks.register('organizarUsuario') {
             return s
         }
 
-        fontesUsuario = fontesUsuario.collect { f ->
+        def fontesUsuarioSan = fontesUsuario.collect { f ->
             [file: f.file, text: sanitizeJavaMain(f.text)]
         }
+        fontesUsuario = fontesUsuarioSan
+
 
         fontesUsuario.each { gravar(it.text, false) }
         testesIA.each     { gravar(it.text, true)  }
@@ -795,77 +801,31 @@ tasks.register('organizarUsuario') {
         // --- [FIM: injeção condicional de stubs do modelo] ---
 
         println "organizarUsuario → copiado para main: ${dirMain.absolutePath}"
-        println "organizarUsuario → copiado para test: ${dirTest.absolutePath}"
+        println "organizarUsuario → copiado para test_raw: ${dirTestRaw.absolutePath}"
         println "organizarUsuario → fontes recebidos: ${fontesUsuario.size()}"
-        println "organizarUsuario → testes recebidos:  ${testesIA.size()}"
+        println "organizarUsuario → testes recebidos (raw):  ${testesIA.size()}"
         if (nomePublico)  println "organizarUsuario → nome público (usuario): ${nomePublico}"
         if (nomeEsperado) println "organizarUsuario → nome esperado (testes): ${nomeEsperado}"
         if (pacoteUsuario) println "organizarUsuario → pacote do usuário detectado: ${pacoteUsuario}"
 
-        // === [SMOKE TEST] Gera um teste mínimo se nenhum teste existir ===
-        def baseTestDir = new File("$buildDir/usuario-src/src/test/java")
-        def haAlgumTeste = baseTestDir.exists() && fileTree(baseTestDir) { include '**/*.java' }.any { it.text.contains('@Test') }
-
-        if (!haAlgumTeste) {
-            String pacote = pacoteUsuario ?: ''
-            String header = pacote ? "package ${pacote};\n" : ""
-            File destino = pacote
-                ? new File(baseTestDir, pacote.replace('.', File.separator))
-                : baseTestDir
-            destino.mkdirs()
-
-            new File(destino, "UsuarioSmokeTest.java").setText(
-                """${header}
-                import org.junit.jupiter.api.Test;
-                import static org.junit.jupiter.api.Assertions.*;
-
-                public class UsuarioSmokeTest {
-
-                    @Test
-                    void compilaEInstanciaClasseDoUsuario() {
-                        try {
-                            String nome = "${nomeEsperado ?: nomePublico ?: ""}".trim();
-                            if (nome.isEmpty()) {
-                                assertTrue(true); // sem classe pública — valida ambiente
-                                return;
-                            }
-                            String qualificada = "${pacoteUsuario ?: ""}";
-                            Class<?> c = (qualificada.isEmpty() ? Class.forName(nome) : Class.forName(qualificada + "." + nome));
-                            assertNotNull(c, "Classe do usuário não encontrada");
-                            try {
-                                var ctor = c.getDeclaredConstructor();
-                                ctor.setAccessible(true);
-                                Object inst = ctor.newInstance();
-                                assertNotNull(inst);
-                            } catch (NoSuchMethodException e) {
-                                assertNotNull(c); // sem no-args ctor é ok
-                            }
-                        } catch (Throwable t) {
-                            fail("Smoke test falhou ao carregar/instanciar a classe do usuário: " + t);
-                        }
-                    }
-                }
-                """.stripIndent(), "UTF-8"
-            )
-            println "organizarUsuario → nenhum teste encontrado; injetado UsuarioSmokeTest para garantir geração do .exec"
-        }
-        // === [FIM SMOKE TEST] ===
+        // === [SMOKE TEST] Gera um teste mínimo no STAGE se nenhum válido existir depois ===
+        // (deixamos aqui apenas para fallback; o NoOp final também cobre)
     }
 }
 
-// === Sanear testes do usuário (corrigido p/ também pôr ';' em tipos de referência) ===
+// === Sanear testes do usuário (em RAW) ===
 tasks.register('sanearTestesUsuario') {
     group = 'verification'
     description = 'Limpa testes: remove marcas ====CODIGO====, ajusta imports JUnit e fecha chaves faltantes'
 
     dependsOn 'organizarUsuario'
-    inputs.dir("$buildDir/usuario-src/src/test/java")
-    outputs.dir("$buildDir/usuario-src/src/test/java")
+    inputs.dir("$buildDir/usuario-src/src/test_raw/java")
+    outputs.dir("$buildDir/usuario-src/src/test_raw/java")
     outputs.upToDateWhen { false }
     mustRunAfter 'organizarUsuario'
 
     doLast {
-        File baseTest = file("$buildDir/usuario-src/src/test/java")
+        File baseTest = file("$buildDir/usuario-src/src/test_raw/java")
         if (!baseTest.exists()) return
 
         // Padrões pré-compilados (seguros)
@@ -910,7 +870,7 @@ tasks.register('sanearTestesUsuario') {
             // 3b) Declarações (com ou sem modificadores/anotações) sem ';'
             def out = new StringBuilder()
             def patSemipadrao = java.util.regex.Pattern.compile(
-                '^\\s*(?:@\\w+(?:\\([^)]*\\))?\\s+)*' +                       // anotações opcionais
+                '^\\s*(?:@\\w+(?:\\([^)]*\\))?\\s+)*' +
                 '(?:(?:public|private|protected|static|final|abstract|transient|volatile|synchronized)\\s+)*' +
                 '([A-Za-z_][\\w.<>\\[\\]]*)\\s+([A-Za-z_]\\w*)\\s*$'
             )
@@ -937,7 +897,7 @@ tasks.register('sanearTestesUsuario') {
 
             f.setText(src, 'UTF-8')
         }
-        println "sanearTestesUsuario → testes higienizados."
+        println "sanearTestesUsuario → testes (raw) higienizados."
     }
 }
 
@@ -947,9 +907,10 @@ sourceSets {
         resources.srcDirs = []
     }
     usuarioTest {
+        // AGORA compila a partir do STAGE
         java {
-            srcDirs = [dirTest]
-            // ⛔️ exclui testes em quarentena
+            srcDirs = [dirTestStage]
+            // ⛔️ por precaução, mas stage não deve ter .skip
             exclude '**/*.java.skip'
         }
         resources.srcDirs = []
@@ -958,73 +919,67 @@ sourceSets {
     }
 }
 
-// ==================== Pré-voo: quarentena de testes que não compilam ====================
+// ==================== Pré-voo: copia só os válidos RAW → STAGE ====================
 tasks.register('preflightUsuarioTests') {
     group = 'verification'
-    description = 'Compila cada teste isoladamente; os que falharem são renomeados para .java.skip (quarentena).'
+    description = 'Valida testes e copia somente os válidos para o stage (sem renomear/remover no raw).'
     dependsOn 'sanearTestesUsuario'
 
+    inputs.dir(dirTestRaw)
+    outputs.dir(dirTestStage)
+
     doLast {
-        File baseTest = file("$buildDir/usuario-src/src/test/java")
-        if (!baseTest.exists()) return
+        def raw   = dirTestRaw
+        def stage = dirTestStage
+        def quar  = new File(dirWork, 'quarentena')
+        stage.deleteDir(); stage.mkdirs()
+        quar.mkdirs()
 
-        def cp = (sourceSets.usuarioTest.compileClasspath + sourceSets.usuario.output + sourceSets.usuarioTest.output)
-            .files
-            .findAll { it?.exists() }
-            .collect { it.absolutePath }
-            .join(File.pathSeparator)
+        def validos = 0; def quarentenados = 0
 
-        def compiler = javax.tools.ToolProvider.getSystemJavaCompiler()
-        if (compiler == null) {
-            logger.warn("preflightUsuarioTests → Compiler JDK indisponível; pulando quarentena.")
-            return
-        }
+        raw.eachFileRecurse { File f ->
+            if (!f.isFile() || !f.name.endsWith('.java')) return
 
-        def fm = compiler.getStandardFileManager(null, java.util.Locale.getDefault(), java.nio.charset.StandardCharsets.UTF_8)
-        def opts = ["-Xlint:none", "-proc:none", "-classpath", cp] as List<String>
-
-        int ok = 0, bad = 0
-        baseTest.eachFileRecurse { File f ->
-            if (!(f.isFile() && f.name.endsWith(".java"))) return
-            try {
-                def units = fm.getJavaFileObjectsFromFiles([f])
-                def task = compiler.getTask(new java.io.StringWriter(), fm, null, opts, null, units)
-                boolean success = task.call()
-                if (!success) {
-                    def quarantined = new File(f.parentFile, f.name + ".skip")
-                    f.renameTo(quarantined)
-                    bad++
-                    logger.warn("preflightUsuarioTests → quarentenado teste inválido: ${quarantined.name}")
-                } else {
-                    ok++
-                }
-            } catch (Throwable t) {
-                def quarantined = new File(f.parentFile, f.name + ".skip")
-                f.renameTo(quarantined)
-                bad++
-                logger.warn("preflightUsuarioTests → erro ao checar ${f.name}: ${t.class.simpleName}: ${t.message} (quarentena).")
+            def txt = f.getText('UTF-8')
+            // Critérios mínimos de validade (baratos e seguros)
+            boolean temClasse = (txt =~ /(?m)^\s*(public\s+)?(class|interface|enum|record)\s+[A-Za-z_]\w*/).find()
+            boolean temJUnit  = txt.contains('@Test') || txt.contains('org.junit')
+            if (temClasse && temJUnit) {
+                // Copia p/ stage mantendo estrutura relativa
+                def rel = raw.toPath().relativize(f.toPath()).toString()
+                def dst = new File(stage, rel)
+                dst.parentFile.mkdirs()
+                dst.setText(txt, 'UTF-8')
+                validos++
+            } else {
+                // Guarda cópia na quarentena p/ diagnóstico
+                def rel = raw.toPath().relativize(f.toPath()).toString()
+                def dst = new File(quar, rel + ".skip")
+                dst.parentFile.mkdirs()
+                dst.setText(txt, 'UTF-8')
+                quarentenados++
             }
         }
-        fm.close()
-        println "preflightUsuarioTests → válidos: ${ok}, em quarentena: ${bad}"
+
+        println "preflightUsuarioTests → válidos copiados p/ stage: ${validos}, em quarentena: ${quarentenados}"
     }
 }
 
-// Se após a quarentena não sobrar nenhum teste, injeta um NoOp para garantir .exec
+// Se após o preflight não sobrar nenhum teste, injeta um NoOp no STAGE
 tasks.register('injectNoOpTestIfNeeded') {
     group = 'verification'
     description = 'Cria um teste NoOp se nenhum teste válido sobrar.'
     dependsOn 'preflightUsuarioTests'
 
     doLast {
-        File base = file("$buildDir/usuario-src/src/test/java")
+        File base = dirTestStage
         if (!base.exists()) return
         def anyJava = fileTree(base) { include '**/*.java'; exclude '**/*.java.skip' }.files.any()
         if (anyJava) return
 
         // tenta descobrir o package do usuário
         String pkg = ''
-        def srcMain = file("$buildDir/usuario-src/src/main/java")
+        def srcMain = dirMain
         def anyMain = fileTree(srcMain) { include '**/*.java' }.files.find { it.text =~ /(?m)^\s*package\s+[a-zA-Z0-9_.]+\s*;/ }
         if (anyMain) {
             def m = (anyMain.text =~ /(?m)^\s*package\s+([a-zA-Z0-9_.]+)\s*;/)
@@ -1052,12 +1007,12 @@ tasks.named(sourceSets.usuario.compileJavaTaskName) {
 
 // compila testes só depois de organizar, sanear, resolver libs e compilar main + pré-voo/no-op
 tasks.named(sourceSets.usuarioTest.compileJavaTaskName) {
-    dependsOn 'organizarUsuario', 'sanearTestesUsuario', 'resolverDepsUsuario', tasks.named(sourceSets.usuario.classesTaskName)
-    dependsOn 'preflightUsuarioTests', 'injectNoOpTestIfNeeded'
+    dependsOn 'organizarUsuario', 'resolverDepsUsuario', tasks.named(sourceSets.usuario.classesTaskName)
+    dependsOn 'sanearTestesUsuario', 'preflightUsuarioTests', 'injectNoOpTestIfNeeded'
     options.encoding = 'UTF-8'
 
-    // 👇 evita "Failed to normalize …" porque o preflight renomeia/remove fontes
-    doNotTrackState("Os testes podem ser quarentenados (renomeados para .java.skip) no preflight.")
+    // 🔒 robustez extra (não devia mais ser necessário, mas ajuda)
+    doNotTrackState("Os testes são copiados para um diretório de stage antes de compilar.")
     options.incremental = false
     outputs.upToDateWhen { false }
 }
