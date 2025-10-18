@@ -22,18 +22,12 @@ configurations {
     usuarioTestRuntimeOnly.extendsFrom testRuntimeOnly
 }
 
-// Para injetar o agente no JavaExec
-configurations {
-    jacocoRuntime
-}
-
 dependencies {
     // Testes (JUnit)
     testImplementation libs.junit.jupiter
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
     // ConsoleLauncher – fica só no testRuntime; usuarioTest herda via extendsFrom
     testRuntimeOnly 'org.junit.platform:junit-platform-console-standalone:1.10.2'
-    // ❌ REMOVIDO: usuarioTestRuntimeOnly 'org.junit.platform:junit-platform-console-standalone:1.10.2'
 
     // Utilitários
     implementation libs.guava
@@ -51,8 +45,8 @@ dependencies {
     testImplementation platform('org.junit:junit-bom:5.10.2')
     testImplementation 'org.junit.jupiter:junit-jupiter'
 
-    // Agente do JaCoCo (para -javaagent)
-    jacocoRuntime 'org.jacoco:org.jacoco.agent:0.8.12'
+    // ✅ Agente correto do JaCoCo para uso com -javaagent (precisa do classifier :runtime)
+    jacocoAgent "org.jacoco:org.jacoco.agent:0.8.12:runtime"
 }
 
 java {
@@ -98,13 +92,6 @@ tasks.register('salvarRelatorioSonar', JavaExec) {
 tasks.register('gerarTestesIa', JavaExec) {
     classpath = sourceSets.main.runtimeClasspath
     mainClass = 'org.example.web.cli.GerarTestesCli'
-}
-
-configurations {
-    usuarioImplementation.extendsFrom implementation
-    usuarioRuntimeOnly.extendsFrom runtimeOnly
-    usuarioTestImplementation.extendsFrom testImplementation
-    usuarioTestRuntimeOnly.extendsFrom testRuntimeOnly
 }
 
 def dirEntrada = file('entrada-usuario')
@@ -174,7 +161,7 @@ def mapaImports = [
     'com.opencsv'                      : 'com.opencsv:opencsv:5.9',
 
     // === Segurança / Cripto ===
-    'org.jose4j'                       : 'org.bitbucket_b_c:jose4j:0.9.6', // <- corrigido
+    'org.jose4j'                       : 'org.bitbucket.b_c:jose4j:0.9.6', // ✅ pacote correto
     'org.mindrot.jbcrypt'              : 'org.mindrot:jbcrypt:0.4',
 
     // === Mapping / Utils extras ===
@@ -893,8 +880,6 @@ tasks.register('sanearTestesUsuario') {
     }
 }
 
-
-
 sourceSets {
     usuario {
         java { srcDirs = [dirMain] }
@@ -1045,10 +1030,15 @@ tasks.register("testUsuarioConsole", JavaExec) {
 
     doFirst {
         file("$buildDir/jacoco").mkdirs()
-        // ⚠️ INJEÇÃO DO AGENTE AQUI (substitui o antigo bloco 'jacoco { ... }')
-        def agent = configurations.jacocoRuntime.singleFile
+
+        // ✅ Usa o JAR correto do JaCoCo (…-runtime.jar) provido pelo plugin via configurations.jacocoAgent
+        def agentJar = configurations.jacocoAgent.singleFile
         def dest  = file("$buildDir/jacoco/testUsuarioConsole.exec").absolutePath
-        jvmArgs "-javaagent:${agent}=destfile=${dest},append=true,output=file,inclnolocationclasses=false,includes=*"
+
+        jvmArgs "-javaagent:${agentJar}=destfile=${dest},append=true,output=file,inclnolocationclasses=false,includes=*"
+
+        logger.lifecycle("JaCoCo agent: ${agentJar.name}")
+        logger.lifecycle("JaCoCo dest : ${dest}")
     }
 
     standardInput = System.in
@@ -1064,7 +1054,7 @@ tasks.register("jacocoRelatorioUsuarioConsole", JacocoReport) {
 
     doFirst {
         def exec = file("$buildDir/jacoco/testUsuarioConsole.exec")
-        if (!exec.exists()) {
+        if (!exec.exists() || exec.length() == 0) {
             logger.lifecycle("jacocoRelatorioUsuarioConsole → sem execution data; relatório ficará vazio.")
         }
         executionData.from(exec)
