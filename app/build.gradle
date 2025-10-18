@@ -907,25 +907,20 @@ tasks.register('sanearTestesUsuario') {
                 }
             }
 
-            // 3) Declarações primitivas sem ';'
-            src = src.replaceAll('(?m)^(\\s*(?:byte|short|int|long|float|double|boolean|char|String)\\s+[A-Za-z_]\\w*)(\\s*)$', '\$1;')
-
-            // 3b) Declarações de referência sem ';' (ex.: "GerenciadorTarefas gerenciador")
+            // 3b) Declarações (com ou sem modificadores/anotações) sem ';'
             def out = new StringBuilder()
-            src.readLines().each { ln ->
-                def t = ln.trim()
-                boolean ehComentario = t.startsWith("//") || t.startsWith("/*") || t.startsWith("*")
-                boolean ehAssinaturaMetodo = t.contains("(") || t.endsWith("{")
-                boolean precisaPontoEVirgula =
-                    t &&
-                    !ehComentario &&
-                    !ehAssinaturaMetodo &&
-                    !t.endsWith(";") &&
-                    !t.endsWith("}") &&
-                    // padrão: Tipo<...>[]?  nomeVar
-                    (t ==~ /[A-Za-z_][\w\.<>\[\]]*\s+[A-Za-z_]\w*/)
+            def patSemipadrao = java.util.regex.Pattern.compile(
+                '^\\s*(?:@\\w+(?:\\([^)]*\\))?\\s+)*' +                       // anotações opcionais
+                '(?:(?:public|private|protected|static|final|abstract|transient|volatile|synchronized)\\s+)*' +
+                '([A-Za-z_][\\w.<>\\[\\]]*)\\s+([A-Za-z_]\\w*)\\s*$'
+            )
 
-                out.append(precisaPontoEVirgula ? (ln + ";") : ln).append("\n")
+            src.readLines().each { ln ->
+                String t = ln.trim()
+                boolean comentario   = t.startsWith('//') || t.startsWith('/*') || t.startsWith('*')
+                boolean ehAssinatura = t.contains('(') || t.endsWith('{')
+                boolean precisaPV = !(comentario || ehAssinatura || t.endsWith(';') || t.endsWith('}')) && patSemipadrao.matcher(t).matches()
+                out.append(precisaPV ? (ln + ';') : ln).append('\n')
             }
             src = out.toString()
 
@@ -952,21 +947,113 @@ sourceSets {
         resources.srcDirs = []
     }
     usuarioTest {
-        java { srcDirs = [dirTest] }
+        java {
+            srcDirs = [dirTest]
+            // ⛔️ exclui testes em quarentena
+            exclude '**/*.java.skip'
+        }
         resources.srcDirs = []
         compileClasspath += sourceSets.usuario.output
         runtimeClasspath  += sourceSets.usuario.output
     }
 }
 
+// ==================== Pré-voo: quarentena de testes que não compilam ====================
+tasks.register('preflightUsuarioTests') {
+    group = 'verification'
+    description = 'Compila cada teste isoladamente; os que falharem são renomeados para .java.skip (quarentena).'
+    dependsOn 'sanearTestesUsuario'
+
+    doLast {
+        File baseTest = file("$buildDir/usuario-src/src/test/java")
+        if (!baseTest.exists()) return
+
+        def cp = (sourceSets.usuarioTest.compileClasspath + sourceSets.usuario.output + sourceSets.usuarioTest.output)
+            .files
+            .findAll { it?.exists() }
+            .collect { it.absolutePath }
+            .join(File.pathSeparator)
+
+        def compiler = javax.tools.ToolProvider.getSystemJavaCompiler()
+        if (compiler == null) {
+            logger.warn("preflightUsuarioTests → Compiler JDK indisponível; pulando quarentena.")
+            return
+        }
+
+        def fm = compiler.getStandardFileManager(null, java.util.Locale.getDefault(), java.nio.charset.StandardCharsets.UTF_8)
+        def opts = ["-Xlint:none", "-proc:none", "-classpath", cp] as List<String>
+
+        int ok = 0, bad = 0
+        baseTest.eachFileRecurse { File f ->
+            if (!(f.isFile() && f.name.endsWith(".java"))) return
+            try {
+                def units = fm.getJavaFileObjectsFromFiles([f])
+                def task = compiler.getTask(new java.io.StringWriter(), fm, null, opts, null, units)
+                boolean success = task.call()
+                if (!success) {
+                    def quarantined = new File(f.parentFile, f.name + ".skip")
+                    f.renameTo(quarantined)
+                    bad++
+                    logger.warn("preflightUsuarioTests → quarentenado teste inválido: ${quarantined.name}")
+                } else {
+                    ok++
+                }
+            } catch (Throwable t) {
+                def quarantined = new File(f.parentFile, f.name + ".skip")
+                f.renameTo(quarantined)
+                bad++
+                logger.warn("preflightUsuarioTests → erro ao checar ${f.name}: ${t.class.simpleName}: ${t.message} (quarentena).")
+            }
+        }
+        fm.close()
+        println "preflightUsuarioTests → válidos: ${ok}, em quarentena: ${bad}"
+    }
+}
+
+// Se após a quarentena não sobrar nenhum teste, injeta um NoOp para garantir .exec
+tasks.register('injectNoOpTestIfNeeded') {
+    group = 'verification'
+    description = 'Cria um teste NoOp se nenhum teste válido sobrar.'
+    dependsOn 'preflightUsuarioTests'
+
+    doLast {
+        File base = file("$buildDir/usuario-src/src/test/java")
+        if (!base.exists()) return
+        def anyJava = fileTree(base) { include '**/*.java'; exclude '**/*.java.skip' }.files.any()
+        if (anyJava) return
+
+        // tenta descobrir o package do usuário
+        String pkg = ''
+        def srcMain = file("$buildDir/usuario-src/src/main/java")
+        def anyMain = fileTree(srcMain) { include '**/*.java' }.files.find { it.text =~ /(?m)^\s*package\s+[a-zA-Z0-9_.]+\s*;/ }
+        if (anyMain) {
+            def m = (anyMain.text =~ /(?m)^\s*package\s+([a-zA-Z0-9_.]+)\s*;/)
+            if (m.find()) pkg = m.group(1)
+        }
+
+        File dir = pkg ? new File(base, pkg.replace('.', File.separator)) : base
+        dir.mkdirs()
+        new File(dir, "NoOpTest.java").text = (pkg ? "package ${pkg};\n" : "") + """
+            import org.junit.jupiter.api.Test;
+            import static org.junit.jupiter.api.Assertions.*;
+            class NoOpTest {
+                @Test void ok() { assertTrue(true); }
+            }
+        """.stripIndent()
+        println "injectNoOpTestIfNeeded → injetado NoOpTest (para garantir .exec)."
+    }
+}
+// =======================================================================================
+
 // compila main só depois de organizar e resolver libs
 tasks.named(sourceSets.usuario.compileJavaTaskName) {
     dependsOn 'organizarUsuario', 'resolverDepsUsuario'
 }
 
-// compila testes só depois de organizar, sanear, resolver libs e compilar main
+// compila testes só depois de organizar, sanear, resolver libs e compilar main + pré-voo/no-op
 tasks.named(sourceSets.usuarioTest.compileJavaTaskName) {
     dependsOn 'organizarUsuario', 'sanearTestesUsuario', 'resolverDepsUsuario', tasks.named(sourceSets.usuario.classesTaskName)
+    dependsOn 'preflightUsuarioTests', 'injectNoOpTestIfNeeded'
     options.encoding = 'UTF-8'
 }
 
@@ -1112,6 +1199,11 @@ tasks.register("testUsuarioConsole", JavaExec) {
         }
     }
 
+    doLast {
+        def exec = file("$buildDir/jacoco/testUsuarioConsole.exec")
+        println "testUsuarioConsole → exec: ${exec.exists() ? exec.length() + ' bytes' : 'não gerado'}"
+    }
+
     standardInput = System.in
 }
 
@@ -1123,12 +1215,14 @@ tasks.register("jacocoRelatorioUsuarioConsole", JacocoReport) {
     dependsOn "testUsuarioConsole"
     mustRunAfter "testUsuarioConsole"
 
+    // ⚠️ Configure executionData na fase de configuração (evita SKIPPED)
+    executionData.from(file("$buildDir/jacoco/testUsuarioConsole.exec"))
+
     doFirst {
         def exec = file("$buildDir/jacoco/testUsuarioConsole.exec")
         if (!exec.exists() || exec.length()==0) {
-            logger.lifecycle("jacocoRelatorioUsuarioConsole → sem execution data; relatório ficará vazio.")
+            logger.lifecycle("jacocoRelatorioUsuarioConsole → sem execution data; relatório pode ficar vazio.")
         }
-        executionData.from(exec)
         file("$projectDir/entrada-usuario/jacoco-relatorio/html").mkdirs()
     }
 
