@@ -1007,15 +1007,15 @@ tasks.named(sourceSets.usuario.compileJavaTaskName) {
 
 // compila testes só depois de organizar, sanear, resolver libs e compilar main + pré-voo/no-op
 tasks.named(sourceSets.usuarioTest.compileJavaTaskName) {
-    dependsOn 'organizarUsuario', 'resolverDepsUsuario', tasks.named(sourceSets.usuario.classesTaskName)
-    dependsOn 'sanearTestesUsuario', 'preflightUsuarioTests', 'injectNoOpTestIfNeeded'
+    dependsOn 'organizarUsuario', 'sanearTestesUsuario', 'resolverDepsUsuario', tasks.named(sourceSets.usuario.classesTaskName)
+    dependsOn 'preflightUsuarioTests', 'injectNoOpTestIfNeeded'
     options.encoding = 'UTF-8'
 
-    // 🔒 robustez extra (não devia mais ser necessário, mas ajuda)
-    doNotTrackState("Os testes são copiados para um diretório de stage antes de compilar.")
+    // NÃO use doNotTrackState aqui: quebra o JavaCompile
     options.incremental = false
     outputs.upToDateWhen { false }
 }
+
 
 
 // ===== Runner padrão do Gradle (mantido, mas não é o caminho do covUsuario) =====
