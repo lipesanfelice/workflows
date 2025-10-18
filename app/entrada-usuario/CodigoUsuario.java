@@ -1,63 +1,51 @@
 import java.util.Scanner;
 
-public class ConversorTemperatura {
+public class Calculadora {
     public static void main(String[] args) {
         Scanner scanner = new Scanner(System.in);
         
-        System.out.println("=== CONVERSOR DE TEMPERATURA ===");
-        System.out.println("1 - Celsius para Fahrenheit");
-        System.out.println("2 - Fahrenheit para Celsius");
-        System.out.println("3 - Celsius para Kelvin");
-        System.out.println("4 - Kelvin para Celsius");
-        System.out.print("Escolha a conversão: ");
+        System.out.println("=== CALCULADORA SIMPLES ===");
+        System.out.print("Digite o primeiro número: ");
+        double num1 = scanner.nextDouble();
+        
+        System.out.print("Digite o segundo número: ");
+        double num2 = scanner.nextDouble();
+        
+        System.out.println("\nEscolha a operação:");
+        System.out.println("1 - Soma (+)");
+        System.out.println("2 - Subtração (-)");
+        System.out.println("3 - Multiplicação (*)");
+        System.out.println("4 - Divisão (/)");
+        System.out.print("Opção: ");
         
         int opcao = scanner.nextInt();
-        System.out.print("Digite a temperatura: ");
-        double temperatura = scanner.nextDouble();
         double resultado = 0;
         
         switch (opcao) {
             case 1:
-                resultado = (temperatura * 9/5) + 32;
-                System.out.println(temperatura + "°C = " + resultado + "°F");
+                resultado = num1 + num2;
+                System.out.println(num1 + " + " + num2 + " = " + resultado);
                 break;
-                
             case 2:
-                resultado = (temperatura - 32) * 5/9;
-                System.out.println(temperatura + "°F = " + resultado + "°C");
+                resultado = num1 - num2;
+                System.out.println(num1 + " - " + num2 + " = " + resultado);
                 break;
-                
             case 3:
-                resultado = temperatura + 273.15;
-                System.out.println(temperatura + "°C = " + resultado + "K");
+                resultado = num1 * num2;
+                System.out.println(num1 + " * " + num2 + " = " + resultado);
                 break;
-                
             case 4:
-                resultado = temperatura - 273.15;
-                System.out.println(temperatura + "K = " + resultado + "°C");
+                if (num2 != 0) {
+                    resultado = num1 / num2;
+                    System.out.println(num1 + " / " + num2 + " = " + resultado);
+                } else {
+                    System.out.println("Erro: Divisão por zero!");
+                }
                 break;
-                
             default:
                 System.out.println("Opção inválida!");
         }
         
         scanner.close();
-    }
-    
-    // Métodos adicionais para reutilização
-    public static double celsiusParaFahrenheit(double celsius) {
-        return (celsius * 9/5) + 32;
-    }
-    
-    public static double fahrenheitParaCelsius(double fahrenheit) {
-        return (fahrenheit - 32) * 5/9;
-    }
-    
-    public static double celsiusParaKelvin(double celsius) {
-        return celsius + 273.15;
-    }
-    
-    public static double kelvinParaCelsius(double kelvin) {
-        return kelvin - 273.15;
     }
 }

@@ -1074,23 +1074,25 @@ tasks.register("jacocoRelatorioUsuario", JacocoReport) {
     doFirst { file("$projectDir/entrada-usuario/jacoco-relatorio/html").mkdirs() }
 }
 
-// ---> Verificação de cobertura (não-fatal por padrão; fatal só com -PenforceCoverage=true ou ENFORCE_COVERAGE=true)
 tasks.register("coberturaMinimaUsuario") {
-    dependsOn "jacocoRelatorioUsuarioConsole" // usar o relatório do Console por default
+    dependsOn "jacocoRelatorioUsuarioConsole" // garante que o XML foi gerado
     doLast {
         def thr = (project.findProperty("coverageMinUsuario") ?: System.getenv("MIN_COVERAGE") ?: "0.60") as BigDecimal
-        def enforce = (project.findProperty("enforceCoverage") ?: System.getenv("ENFORCE_COVERAGE") ?: "false").toString().equalsIgnoreCase("true")
+        def enforce = (project.findProperty("enforceCoverage") ?: System.getenv("ENFORCE_COVERAGE") ?: "false")
+                .toString().equalsIgnoreCase("true")
 
         def xml = file("$projectDir/entrada-usuario/jacoco-relatorio/jacoco.xml")
         if (!xml.exists() || xml.length() == 0) {
-            logger.warn("coberturaMinimaUsuario → jacoco.xml não encontrado; pulando verificação.")
+            logger.warn("coberturaMinimaUsuario → jacoco.xml não encontrado ou vazio; pulando verificação.")
             return
         }
 
-        def sl = new groovy.xml.XmlSlurper().parse(xml)
+        // ⚠️ Remove DOCTYPE para evitar SAXParseException
+        String xmlText = xml.getText("UTF-8").replaceAll("(?is)<!DOCTYPE[^>]*>", "")
+        def sl = new groovy.xml.XmlSlurper(false, false).parseText(xmlText)
+
         long missed = 0
         long covered = 0
-
         sl.'**'.findAll { it.name() == 'counter' && it.@type?.text() == 'LINE' }.each { c ->
             missed += (c.@missed.text() as long)
             covered += (c.@covered.text() as long)
@@ -1117,6 +1119,7 @@ tasks.register("coberturaMinimaUsuario") {
         }
     }
 }
+
 
 /* ===================== NOVO FLUXO: ConsoleLauncher + JaCoCo ===================== */
 
