@@ -21,7 +21,7 @@ configurations {
     usuarioTestImplementation.extendsFrom testImplementation
     usuarioTestRuntimeOnly.extendsFrom testRuntimeOnly
 
-    // agente do JaCoCo só para o ConsoleLauncher
+    // Agente do JaCoCo para -javaagent (correto = classifier runtime@jar)
     jacocoAgentRuntime
 }
 
@@ -48,8 +48,8 @@ dependencies {
     testImplementation platform('org.junit:junit-bom:5.10.2')
     testImplementation 'org.junit.jupiter:junit-jupiter'
 
-    // Agente (runtime) usado SOMENTE no JavaExec (ConsoleLauncher)
-    jacocoAgentRuntime "org.jacoco:org.jacoco.agent:0.8.12:runtime"
+    // ✅ agente correto (resolve o erro Premain-Class):
+    jacocoAgentRuntime "org.jacoco:org.jacoco.agent:0.8.12:runtime@jar"
 }
 
 java {
@@ -95,6 +95,13 @@ tasks.register('salvarRelatorioSonar', JavaExec) {
 tasks.register('gerarTestesIa', JavaExec) {
     classpath = sourceSets.main.runtimeClasspath
     mainClass = 'org.example.web.cli.GerarTestesCli'
+}
+
+configurations {
+    usuarioImplementation.extendsFrom implementation
+    usuarioRuntimeOnly.extendsFrom runtimeOnly
+    usuarioTestImplementation.extendsFrom testImplementation
+    usuarioTestRuntimeOnly.extendsFrom testRuntimeOnly
 }
 
 def dirEntrada = file('entrada-usuario')
@@ -314,11 +321,11 @@ tasks.register('organizarUsuario') {
 
             def isValidStart = { String ln ->
                 return (ln ==~ /\s*/) ||                        // vazia
-                    (ln ==~ /\s*package\s+.*/) ||
-                    (ln ==~ /\s*import\s+.*/)  ||
-                    (ln ==~ /\s*@.*/)          ||
-                    (ln ==~ /\s*(public\s+)?(class|interface|enum|record)\b.*/) ||
-                    (ln ==~ /\s*\/\/.*/) || (ln ==~ /\s*\/\*.*/) || (ln ==~ /\s*\*.*/)
+                       (ln ==~ /\s*package\s+.*/) ||
+                       (ln ==~ /\s*import\s+.*/)  ||
+                       (ln ==~ /\s*@.*/)          ||
+                       (ln ==~ /\s*(public\s+)?(class|interface|enum|record)\b.*/) ||
+                       (ln ==~ /\s*\/\/.*/) || (ln ==~ /\s*\/\*.*/) || (ln ==~ /\s*\*.*/)
             }
 
             // ✅ Regex sem slashy: evita erro do parser
@@ -340,7 +347,7 @@ tasks.register('organizarUsuario') {
         def testesIA = []
         inputs.files.files.each { File origem ->
             boolean isTeste = origem.toPath().startsWith(dirTestsIA.toPath()) ||
-                            origem.toPath().startsWith(dirTestsUsuario.toPath())
+                              origem.toPath().startsWith(dirTestsUsuario.toPath())
             String texto = origem.getText('UTF-8')
             (isTeste ? testesIA : fontesUsuario) << [file: origem, text: texto]
         }
@@ -427,20 +434,18 @@ tasks.register('organizarUsuario') {
         if (deveRenomear) {
             fontesUsuario = fontesUsuario.collect { f ->
                 if (extrairNomePublico(f.text) == nomePublico) {
-                    // troca declaração da classe
-                    def novoTexto = f.text.replaceFirst(
-                        /(?m)(^\s*public\s+(?:class|interface|enum|record)\s+)${java.util.regex.Pattern.quote(nomePublico)}\b/,
-                        "\$1${nomeEsperado}"
-                    )
-                    // ⚠️ também troca construtor e instâncias "new OldName("
-                    def oldQ = java.util.regex.Pattern.quote(nomePublico)
-                    novoTexto = novoTexto
-                        // declaração de construtor
-                        .replaceAll("(?m)^(\\s*(?:public|protected|private)\\s+)?${oldQ}\\s*\\(", "\$1${nomeEsperado}(")
-                        // criação de instâncias
-                        .replaceAll("\\bnew\\s+${oldQ}\\s*\\(", "new ${nomeEsperado}(")
+                    def novoTexto = f.text
+                        // renomeia o identificador da classe
+                        .replaceFirst(
+                            /(?m)(^\s*public\s+(?:class|interface|enum|record)\s+)${java.util.regex.Pattern.quote(nomePublico)}\b/,
+                            "\$1${nomeEsperado}"
+                        )
+                        // ✅ renomeia construtores antigos (public OldName(...)) para o novo nome
+                        .replaceAll(
+                            "(?m)(^\\s*public\\s+)${java.util.regex.Pattern.quote(nomePublico)}\\s*\\(",
+                            "\$1${nomeEsperado}("
+                        )
 
-                    // gravar no repo espelhado (entrada-usuario) com o novo nome
                     def pacote = extrairPacote(novoTexto)
                     def caminhoPacote = pacote ? pacote.replace('.', File.separator) : ''
                     def repoDir = new File(dirEntrada, caminhoPacote)
@@ -457,7 +462,7 @@ tasks.register('organizarUsuario') {
                 }
             }
 
-            println "organizarUsuario → renomeado classe pública '${nomePublico}' → '${nomeEsperado}' e ajustados construtores/usos"
+            println "organizarUsuario → renomeado classe pública '${nomePublico}' → '${nomeEsperado}' para alinhar com os testes"
         }
 
         def ajustarTesteParaPacoteUsuario = { String texto ->
@@ -856,7 +861,7 @@ tasks.register('sanearTestesUsuario') {
             // 3) Declarações primitivas sem ';'
             src = src.replaceAll('(?m)^(\\s*(?:byte|short|int|long|float|double|boolean|char|String)\\s+[A-Za-z_]\\w*)(\\s*)$', '\$1;')
 
-            // 3b) Declarações de referência sem ';' (ex.: "Tipo var")
+            // 3b) Declarações de referência sem ';' (ex.: "GerenciadorTarefas gerenciador")
             def out = new StringBuilder()
             src.readLines().each { ln ->
                 def t = ln.trim()
@@ -868,7 +873,9 @@ tasks.register('sanearTestesUsuario') {
                     !ehAssinaturaMetodo &&
                     !t.endsWith(";") &&
                     !t.endsWith("}") &&
+                    // padrão: Tipo<...>[]?  nomeVar
                     (t ==~ /[A-Za-z_][\w\.<>\[\]]*\s+[A-Za-z_]\w*/)
+
                 out.append(precisaPontoEVirgula ? (ln + ";") : ln).append("\n")
             }
             src = out.toString()
@@ -1040,12 +1047,18 @@ tasks.register("testUsuarioConsole", JavaExec) {
 
     doFirst {
         file("$buildDir/jacoco").mkdirs()
-        // ✅ injeta o agente **runtime** só aqui
-        def agentJar = configurations.jacocoAgentRuntime.singleFile
-        def dest  = file("$buildDir/jacoco/testUsuarioConsole.exec").absolutePath
-        jvmArgs "-javaagent:${agentJar}=destfile=${dest},append=true,output=file,inclnolocationclasses=false,includes=*"
-        logger.lifecycle("JaCoCo agent: ${agentJar.name}")
-        logger.lifecycle("JaCoCo dest : ${dest}")
+        // ⚠️ INJEÇÃO DO AGENTE (com proteção anti-quebra)
+        try {
+            def agent = configurations.jacocoAgentRuntime.singleFile
+            if (agent == null || !agent.exists()) {
+                logger.lifecycle("testUsuarioConsole → agente JaCoCo não encontrado; rodando sem cobertura.")
+            } else {
+                def dest  = file("$buildDir/jacoco/testUsuarioConsole.exec").absolutePath
+                jvmArgs "-javaagent:${agent.absolutePath}=destfile=${dest},append=true,output=file,inclnolocationclasses=false,includes=*"
+            }
+        } catch (Throwable t) {
+            logger.lifecycle("testUsuarioConsole → falha ao injetar JaCoCo: ${t.class.simpleName}: ${t.message}. Seguindo sem cobertura.")
+        }
     }
 
     standardInput = System.in
@@ -1061,7 +1074,7 @@ tasks.register("jacocoRelatorioUsuarioConsole", JacocoReport) {
 
     doFirst {
         def exec = file("$buildDir/jacoco/testUsuarioConsole.exec")
-        if (!exec.exists()) {
+        if (!exec.exists() || exec.length()==0) {
             logger.lifecycle("jacocoRelatorioUsuarioConsole → sem execution data; relatório ficará vazio.")
         }
         executionData.from(exec)
