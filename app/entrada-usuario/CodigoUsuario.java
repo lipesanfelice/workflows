@@ -1,102 +1,71 @@
 import java.util.*;
 import java.util.concurrent.*;
-import java.util.concurrent.locks.ReentrantReadWriteLock;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
-public class AdvancedCache<K, V> {
-    private final ConcurrentHashMap<K, CacheEntry<V>> cache;
-    private final LinkedHashMap<K, Long> accessOrder;
-    private final ReentrantReadWriteLock lock;
-    private final long defaultExpiry;
-    private final int maxSize;
-    private final ScheduledExecutorService cleaner;
+public class DataPipelineProcessor<T, R> {
+    private final List<ProcessingStage<T, ?>> stages;
+    private final ExecutorService executor;
 
-    public AdvancedCache(int maxSize, long defaultExpiryMillis) {
-        this.maxSize = maxSize;
-        this.defaultExpiry = defaultExpiryMillis;
-        this.cache = new ConcurrentHashMap<>();
-        this.lock = new ReentrantReadWriteLock();
-        this.accessOrder = new LinkedHashMap<>(16, 0.75f, true);
-        
-        this.cleaner = Executors.newScheduledThreadPool(1);
-        this.cleaner.scheduleAtFixedRate(this::cleanup, 1, 1, TimeUnit.MINUTES);
+    public DataPipelineProcessor() {
+        this.stages = new ArrayList<>();
+        this.executor = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors());
     }
 
-    private static class CacheEntry<V> {
-        private final V value;
-        private final long expiryTime;
-        private final long creationTime;
+    public <U> DataPipelineProcessor<T, U> addStage(Function<T, U> transformer) {
+        return addStage(transformer, false);
+    }
 
-        public CacheEntry(V value, long expiryTime) {
-            this.value = value;
-            this.expiryTime = expiryTime;
-            this.creationTime = System.currentTimeMillis();
+    public <U> DataPipelineProcessor<T, U> addStage(Function<T, U> transformer, boolean parallel) {
+        stages.add(new ProcessingStage<>(transformer, parallel));
+        return (DataPipelineProcessor<T, U>) this;
+    }
+
+    public CompletableFuture<List<R>> process(List<T> input) {
+        if (stages.isEmpty()) {
+            return CompletableFuture.completedFuture((List<R>) input);
         }
 
-        public boolean isExpired() {
-            return System.currentTimeMillis() > expiryTime;
+        CompletableFuture<List<?>> current = CompletableFuture.completedFuture(input);
+
+        for (ProcessingStage<T, ?> stage : stages) {
+            current = current.thenCompose(data -> processStage(stage, (List<Object>) data));
         }
+
+        return current.thenApply(result -> (List<R>) result);
     }
 
-    public void put(K key, V value) {
-        put(key, value, defaultExpiry);
-    }
+    private <I, O> CompletableFuture<List<O>> processStage(ProcessingStage<I, O> stage, List<I> input) {
+        if (stage.isParallel()) {
+            List<CompletableFuture<O>> futures = input.stream()
+                    .map(item -> CompletableFuture.supplyAsync(() -> stage.getTransformer().apply(item), executor))
+                    .collect(Collectors.toList());
 
-    public void put(K key, V value, long expiryMillis) {
-        lock.writeLock().lock();
-        try {
-            if (cache.size() >= maxSize) {
-                evictLRU();
-            }
-            
-            long expiryTime = System.currentTimeMillis() + expiryMillis;
-            CacheEntry<V> entry = new CacheEntry<>(value, expiryTime);
-            cache.put(key, entry);
-            accessOrder.put(key, System.currentTimeMillis());
-        } finally {
-            lock.writeLock().unlock();
+            return CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]))
+                    .thenApply(v -> futures.stream()
+                            .map(CompletableFuture::join)
+                            .collect(Collectors.toList()));
+        } else {
+            return CompletableFuture.supplyAsync(() -> input.stream()
+                    .map(stage.getTransformer())
+                    .collect(Collectors.toList()), executor);
         }
     }
 
-    public V get(K key) {
-        lock.readLock().lock();
-        try {
-            CacheEntry<V> entry = cache.get(key);
-            if (entry == null || entry.isExpired()) {
-                return null;
-            }
-            accessOrder.put(key, System.currentTimeMillis());
-            return entry.value;
-        } finally {
-            lock.readLock().unlock();
-        }
-    }
+    private static class ProcessingStage<I, O> {
+        private final Function<I, O> transformer;
+        private final boolean parallel;
 
-    private void evictLRU() {
-        Iterator<Map.Entry<K, Long>> iterator = accessOrder.entrySet().iterator();
-        if (iterator.hasNext()) {
-            K lruKey = iterator.next().getKey();
-            iterator.remove();
-            cache.remove(lruKey);
+        public ProcessingStage(Function<I, O> transformer, boolean parallel) {
+            this.transformer = transformer;
+            this.parallel = parallel;
         }
-    }
 
-    private void cleanup() {
-        lock.writeLock().lock();
-        try {
-            Iterator<Map.Entry<K, CacheEntry<V>>> iterator = cache.entrySet().iterator();
-            while (iterator.hasNext()) {
-                Map.Entry<K, CacheEntry<V>> entry = iterator.next();
-                if (entry.getValue().isExpired()) {
-                    iterator.remove();
-                    accessOrder.remove(entry.getKey());
-                }
-            }
-        } finally {
-            lock.writeLock().unlock();
-        }
+        public Function<I, O> getTransformer() { return transformer; }
+        public boolean isParallel() { return parallel; }
     }
 
     public void shutdown() {
-        cleaner.shutdown();
+        executor.shutdown();
     }
 }

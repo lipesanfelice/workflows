@@ -20,6 +20,8 @@ configurations {
     usuarioRuntimeOnly.extendsFrom runtimeOnly
     usuarioTestImplementation.extendsFrom testImplementation
     usuarioTestRuntimeOnly.extendsFrom testRuntimeOnly
+
+    // agente do JaCoCo só para o ConsoleLauncher
     jacocoAgentRuntime
 }
 
@@ -46,8 +48,7 @@ dependencies {
     testImplementation platform('org.junit:junit-bom:5.10.2')
     testImplementation 'org.junit.jupiter:junit-jupiter'
 
-    // ✅ Agente correto do JaCoCo para uso com -javaagent (precisa do classifier :runtime)
-    // jacocoAgent "org.jacoco:org.jacoco.agent:0.8.12:runtime"
+    // Agente (runtime) usado SOMENTE no JavaExec (ConsoleLauncher)
     jacocoAgentRuntime "org.jacoco:org.jacoco.agent:0.8.12:runtime"
 }
 
@@ -163,7 +164,7 @@ def mapaImports = [
     'com.opencsv'                      : 'com.opencsv:opencsv:5.9',
 
     // === Segurança / Cripto ===
-    'org.jose4j'                       : 'org.bitbucket.b_c:jose4j:0.9.6', // ✅ pacote correto
+    'org.jose4j'                       : 'org.bitbucket_b_c:jose4j:0.9.6',
     'org.mindrot.jbcrypt'              : 'org.mindrot:jbcrypt:0.4',
 
     // === Mapping / Utils extras ===
@@ -426,11 +427,20 @@ tasks.register('organizarUsuario') {
         if (deveRenomear) {
             fontesUsuario = fontesUsuario.collect { f ->
                 if (extrairNomePublico(f.text) == nomePublico) {
+                    // troca declaração da classe
                     def novoTexto = f.text.replaceFirst(
                         /(?m)(^\s*public\s+(?:class|interface|enum|record)\s+)${java.util.regex.Pattern.quote(nomePublico)}\b/,
                         "\$1${nomeEsperado}"
                     )
+                    // ⚠️ também troca construtor e instâncias "new OldName("
+                    def oldQ = java.util.regex.Pattern.quote(nomePublico)
+                    novoTexto = novoTexto
+                        // declaração de construtor
+                        .replaceAll("(?m)^(\\s*(?:public|protected|private)\\s+)?${oldQ}\\s*\\(", "\$1${nomeEsperado}(")
+                        // criação de instâncias
+                        .replaceAll("\\bnew\\s+${oldQ}\\s*\\(", "new ${nomeEsperado}(")
 
+                    // gravar no repo espelhado (entrada-usuario) com o novo nome
                     def pacote = extrairPacote(novoTexto)
                     def caminhoPacote = pacote ? pacote.replace('.', File.separator) : ''
                     def repoDir = new File(dirEntrada, caminhoPacote)
@@ -447,7 +457,7 @@ tasks.register('organizarUsuario') {
                 }
             }
 
-            println "organizarUsuario → renomeado classe pública '${nomePublico}' → '${nomeEsperado}' para alinhar com os testes"
+            println "organizarUsuario → renomeado classe pública '${nomePublico}' → '${nomeEsperado}' e ajustados construtores/usos"
         }
 
         def ajustarTesteParaPacoteUsuario = { String texto ->
@@ -846,7 +856,7 @@ tasks.register('sanearTestesUsuario') {
             // 3) Declarações primitivas sem ';'
             src = src.replaceAll('(?m)^(\\s*(?:byte|short|int|long|float|double|boolean|char|String)\\s+[A-Za-z_]\\w*)(\\s*)$', '\$1;')
 
-            // 3b) Declarações de referência sem ';' (ex.: "GerenciadorTarefas gerenciador")
+            // 3b) Declarações de referência sem ';' (ex.: "Tipo var")
             def out = new StringBuilder()
             src.readLines().each { ln ->
                 def t = ln.trim()
@@ -858,9 +868,7 @@ tasks.register('sanearTestesUsuario') {
                     !ehAssinaturaMetodo &&
                     !t.endsWith(";") &&
                     !t.endsWith("}") &&
-                    // padrão: Tipo<...>[]?  nomeVar
                     (t ==~ /[A-Za-z_][\w\.<>\[\]]*\s+[A-Za-z_]\w*/)
-
                 out.append(precisaPontoEVirgula ? (ln + ";") : ln).append("\n")
             }
             src = out.toString()
@@ -1032,7 +1040,7 @@ tasks.register("testUsuarioConsole", JavaExec) {
 
     doFirst {
         file("$buildDir/jacoco").mkdirs()
-        // ✅ usa o artefato runtime **somente aqui**, sem afetar o plugin
+        // ✅ injeta o agente **runtime** só aqui
         def agentJar = configurations.jacocoAgentRuntime.singleFile
         def dest  = file("$buildDir/jacoco/testUsuarioConsole.exec").absolutePath
         jvmArgs "-javaagent:${agentJar}=destfile=${dest},append=true,output=file,inclnolocationclasses=false,includes=*"
@@ -1053,7 +1061,7 @@ tasks.register("jacocoRelatorioUsuarioConsole", JacocoReport) {
 
     doFirst {
         def exec = file("$buildDir/jacoco/testUsuarioConsole.exec")
-        if (!exec.exists() || exec.length() == 0) {
+        if (!exec.exists()) {
             logger.lifecycle("jacocoRelatorioUsuarioConsole → sem execution data; relatório ficará vazio.")
         }
         executionData.from(exec)
@@ -1170,5 +1178,4 @@ tasks.withType(JavaExec).configureEach {
 
 tasks.named('test') {
     useJUnitPlatform()
-    jacoco.enabled = false   // opcional
 }
