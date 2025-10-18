@@ -168,7 +168,7 @@ jobs:
       run: |
         ./gradlew --no-daemon -Dorg.gradle.configuration-cache=false -p app clean covUsuario --info
         echo "JACOCO_XML=${{ github.workspace }}/app/entrada-usuario/jacoco-relatorio/jacoco.xml" >> $GITHUB_ENV
-        echo "JACOCO_EXEC=${{ github.workspace }}/app/build/jacoco/testUsuario.exec" >> $GITHUB_ENV
+        echo "JACOCO_EXEC=${{ github.workspace }}/app/build/jacoco/testUsuarioConsole.exec" >> $GITHUB_ENV
 
     
     - name: Debug cobertura
@@ -178,6 +178,16 @@ jobs:
         ls -la $GITHUB_WORKSPACE/app/entrada-usuario/jacoco-relatorio || true
         head -n 20 $JACOCO_XML || true
 
+    - name: Publicar cobertura (artefatos)
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: cobertura-usuario
+        path: |
+          app/build/jacoco/testUsuarioConsole.exec
+          app/entrada-usuario/jacoco-relatorio/jacoco.xml
+          app/entrada-usuario/jacoco-relatorio/html
+        retention-days: 7
 
 
     - name: Inspecionar artefatos de cobertura

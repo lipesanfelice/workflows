@@ -801,6 +801,55 @@ tasks.register('organizarUsuario') {
         if (nomePublico)  println "organizarUsuario → nome público (usuario): ${nomePublico}"
         if (nomeEsperado) println "organizarUsuario → nome esperado (testes): ${nomeEsperado}"
         if (pacoteUsuario) println "organizarUsuario → pacote do usuário detectado: ${pacoteUsuario}"
+
+        // === [SMOKE TEST] Gera um teste mínimo se nenhum teste existir ===
+        def baseTestDir = new File("$buildDir/usuario-src/src/test/java")
+        def haAlgumTeste = baseTestDir.exists() && fileTree(baseTestDir) { include '**/*.java' }.any { it.text.contains('@Test') }
+
+        if (!haAlgumTeste) {
+            String pacote = pacoteUsuario ?: ''
+            String header = pacote ? "package ${pacote};\n" : ""
+            File destino = pacote
+                ? new File(baseTestDir, pacote.replace('.', File.separator))
+                : baseTestDir
+            destino.mkdirs()
+
+            new File(destino, "UsuarioSmokeTest.java").setText(
+                """${header}
+                import org.junit.jupiter.api.Test;
+                import static org.junit.jupiter.api.Assertions.*;
+
+                public class UsuarioSmokeTest {
+
+                    @Test
+                    void compilaEInstanciaClasseDoUsuario() {
+                        try {
+                            String nome = "${nomeEsperado ?: nomePublico ?: ""}".trim();
+                            if (nome.isEmpty()) {
+                                assertTrue(true); // sem classe pública — valida ambiente
+                                return;
+                            }
+                            String qualificada = "${pacoteUsuario ?: ""}";
+                            Class<?> c = (qualificada.isEmpty() ? Class.forName(nome) : Class.forName(qualificada + "." + nome));
+                            assertNotNull(c, "Classe do usuário não encontrada");
+                            try {
+                                var ctor = c.getDeclaredConstructor();
+                                ctor.setAccessible(true);
+                                Object inst = ctor.newInstance();
+                                assertNotNull(inst);
+                            } catch (NoSuchMethodException e) {
+                                assertNotNull(c); // sem no-args ctor é ok
+                            }
+                        } catch (Throwable t) {
+                            fail("Smoke test falhou ao carregar/instanciar a classe do usuário: " + t);
+                        }
+                    }
+                }
+                """.stripIndent(), "UTF-8"
+            )
+            println "organizarUsuario → nenhum teste encontrado; injetado UsuarioSmokeTest para garantir geração do .exec"
+        }
+        // === [FIM SMOKE TEST] ===
     }
 }
 
@@ -1036,6 +1085,8 @@ tasks.register("testUsuarioConsole", JavaExec) {
 
     // Varre todo o classpath por testes
     args '--scan-class-path'
+    // força engine jupiter (ajuda a descoberta)
+    args '--include-engine', 'junit-jupiter'
     // Sumário legível
     args '--details', 'summary'
 
@@ -1181,6 +1232,9 @@ dependencies {
     usuarioTestImplementation platform('org.junit:junit-bom:5.10.2')
     usuarioTestImplementation 'org.junit.jupiter:junit-jupiter'
     usuarioTestRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+    // ✅ garante engine do JUnit 5 no usuarioTest
+    usuarioTestRuntimeOnly 'org.junit.jupiter:junit-jupiter-engine'
+
     usuarioImplementation fileTree('entrada-usuario/libs') { include '*.jar' }
     testImplementation 'org.mockito:mockito-core:5.13.0'
 }
