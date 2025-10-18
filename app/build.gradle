@@ -20,6 +20,7 @@ configurations {
     usuarioRuntimeOnly.extendsFrom runtimeOnly
     usuarioTestImplementation.extendsFrom testImplementation
     usuarioTestRuntimeOnly.extendsFrom testRuntimeOnly
+    jacocoAgentRuntime
 }
 
 dependencies {
@@ -46,7 +47,8 @@ dependencies {
     testImplementation 'org.junit.jupiter:junit-jupiter'
 
     // ✅ Agente correto do JaCoCo para uso com -javaagent (precisa do classifier :runtime)
-    jacocoAgent "org.jacoco:org.jacoco.agent:0.8.12:runtime"
+    // jacocoAgent "org.jacoco:org.jacoco.agent:0.8.12:runtime"
+    jacocoAgentRuntime "org.jacoco:org.jacoco.agent:0.8.12:runtime"
 }
 
 java {
@@ -1030,13 +1032,10 @@ tasks.register("testUsuarioConsole", JavaExec) {
 
     doFirst {
         file("$buildDir/jacoco").mkdirs()
-
-        // ✅ Usa o JAR correto do JaCoCo (…-runtime.jar) provido pelo plugin via configurations.jacocoAgent
-        def agentJar = configurations.jacocoAgent.singleFile
+        // ✅ usa o artefato runtime **somente aqui**, sem afetar o plugin
+        def agentJar = configurations.jacocoAgentRuntime.singleFile
         def dest  = file("$buildDir/jacoco/testUsuarioConsole.exec").absolutePath
-
         jvmArgs "-javaagent:${agentJar}=destfile=${dest},append=true,output=file,inclnolocationclasses=false,includes=*"
-
         logger.lifecycle("JaCoCo agent: ${agentJar.name}")
         logger.lifecycle("JaCoCo dest : ${dest}")
     }
@@ -1171,4 +1170,5 @@ tasks.withType(JavaExec).configureEach {
 
 tasks.named('test') {
     useJUnitPlatform()
+    jacoco.enabled = false   // opcional
 }
