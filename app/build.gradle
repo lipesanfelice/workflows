@@ -9,6 +9,7 @@ plugins {
 
 import org.gradle.testing.jacoco.plugins.JacocoTaskExtension
 import java.util.regex.Pattern
+import groovy.json.JsonSlurper
 
 repositories {
     mavenCentral()
@@ -38,10 +39,8 @@ dependencies {
     implementation 'com.fasterxml.jackson.core:jackson-databind:2.17.1'
     implementation 'commons-io:commons-io:2.16.1'
 
-
     // HTTP client p/ Groq (já usado em outras partes também)
     implementation 'com.squareup.okhttp3:okhttp:4.12.0'
-
 
     // Spring Boot Web
     implementation 'org.springframework.boot:spring-boot-starter-web'
@@ -527,7 +526,7 @@ tasks.register('organizarUsuario') {
                 }
 
                 // 2) Se o artefato renomeado é uma CLASSE (não final), cria classe-ponte com o nome antigo
-                //    para manter compat (ex.: public class GerenciadorTarefas extends Tarefas { ... }).
+                //    para manter compat (ex.: public class GerenciadorTarefas extends Tarefas { ...]).
                 boolean precisaBridge = false
                 String pacoteDoUsuario = pacoteUsuario ?: ''
                 String headerPkg = pacoteDoUsuario ? "package ${pacoteDoUsuario};\n" : ""
@@ -1036,7 +1035,6 @@ tasks.register('sanearTestesUsuario') {
     }
 }
 
-
 sourceSets {
     usuario {
         java { srcDirs = [dirMain] }
@@ -1153,8 +1151,6 @@ tasks.named(sourceSets.usuarioTest.compileJavaTaskName) {
     outputs.upToDateWhen { false }
 }
 
-
-
 // ===== Runner padrão do Gradle (mantido, mas não é o caminho do covUsuario) =====
 tasks.register('testUsuario', Test) {
     dependsOn tasks.named(sourceSets.usuario.classesTaskName),
@@ -1257,6 +1253,120 @@ tasks.register("coberturaMinimaUsuario") {
     }
 }
 
+/* ===================== GATES SONAR → TESTES DEVEM EXERCITAR O CÓDIGO ===================== */
+
+// 1) Extrai fila de alvos priorizados a partir do relatorio-sonar.json
+tasks.register('analisarPrioridadesSonar') {
+    group = 'verification'
+    description = 'Extrai classes-alvo por prioridade (Bugs>Vulns>Smells>Complexity>Dup).'
+    inputs.file("$projectDir/entrada-usuario/relatorio-sonar.json")
+    outputs.file("$buildDir/usuario-src/targets_por_prioridade.txt")
+    doLast {
+        def inJson = file("$projectDir/entrada-usuario/relatorio-sonar.json")
+        if (!inJson.exists() || inJson.length()==0) {
+            throw new GradleException("relatorio-sonar.json ausente/vazio. Rode a extração antes.")
+        }
+        def root
+        try {
+            root = new JsonSlurper().parseText(inJson.getText('UTF-8'))
+        } catch (Throwable t) {
+            throw new GradleException("relatorio-sonar.json inválido: ${t.message}")
+        }
+
+        def issues = (root?.issues instanceof List) ? root.issues : []
+        def byBucket = ['BUGS':[] as Set, 'VULNS':[] as Set, 'SMELLS':[] as Set, 'COMPLEXITY':[] as Set, 'DUPLICATION':[] as Set]
+        def bucketOf = { issue ->
+            switch (String.valueOf(issue?.type)) {
+                case 'BUG':            return 'BUGS'
+                case 'VULNERABILITY':  return 'VULNS'
+                case 'CODE_SMELL':     return 'SMELLS'
+                default:               return null
+            }
+        }
+        issues.each { is ->
+            def b = bucketOf(is) ?: 'SMELLS'
+            def comp = String.valueOf(is?.component ?: '')
+            if (!comp) return
+            def m = (comp =~ /([A-Za-z0-9_\/\.-]+\.java)$/)
+            if (m.find()) byBucket[b] << m.group(1)
+        }
+
+        def fila = []
+        ['BUGS','VULNS','SMELLS','COMPLEXITY','DUPLICATION'].each { k ->
+            fila.addAll(byBucket[k].toList())
+        }
+
+        def out = file("$buildDir/usuario-src/targets_por_prioridade.txt")
+        out.parentFile.mkdirs()
+        out.text = fila.join('\n') + '\n'
+        println "analisarPrioridadesSonar → alvos priorizados: ${fila.size()} (arquivo: ${out})"
+    }
+}
+
+// 2) Valida que os testes do STAGE referenciam as classes priorizadas (ou ao menos alguma classe do usuário)
+tasks.register('verificarPrioridadeECoberturaAlvo') {
+    group = 'verification'
+    description = 'Garante que os testes exercitam classes priorizadas do usuário conforme o Sonar.'
+    dependsOn 'preflightUsuarioTests', 'analisarPrioridadesSonar'
+    inputs.files("$buildDir/usuario-src/src/test/java")
+    inputs.file("$buildDir/usuario-src/targets_por_prioridade.txt")
+    inputs.files("$buildDir/usuario-src/src/main/java")
+    outputs.file("$projectDir/entrada-usuario/testes_explicações/gaps_prioridade.txt")
+    doLast {
+        def stageDir = file("$buildDir/usuario-src/src/test/java")
+        def mainDir  = file("$buildDir/usuario-src/src/main/java")
+        def fila     = file("$buildDir/usuario-src/targets_por_prioridade.txt")
+        def gapsFile = file("$projectDir/entrada-usuario/testes_explicações/gaps_prioridade.txt")
+
+        if (!stageDir.exists()) {
+            throw new GradleException("Sem testes no STAGE. O gerador/loop deve criar testes primeiro.")
+        }
+        def testsTxt = new StringBuilder()
+        fileTree(stageDir) { include '**/*.java' }.each { testsTxt.append(it.getText('UTF-8')).append('\n') }
+        String allTests = testsTxt.toString()
+
+        // Nomes de classes do usuário
+        def userClasses = [] as Set
+        fileTree(mainDir) { include '**/*.java' }.each { f ->
+            def t = f.getText('UTF-8')
+            def m = (t =~ /(?m)^\s*public\s+(?:class|interface|enum|record)\s+([A-Za-z_]\w*)\b/)
+            if (m.find()) userClasses << m.group(1)
+        }
+
+        // O teste toca a classe se chama NomeClasse.algo(…) ou NomeClasse.main(new String[]{})
+        def touches = { String simple ->
+            def pat = ~/(?s)\b${java.util.regex.Pattern.quote(simple)}\s*\.\s*[A-Za-z_]\w*\s*\(/
+            def patMain = ~/(?s)\b${java.util.regex.Pattern.quote(simple)}\s*\.\s*main\s*\(\s*new\s+String\[\]\s*\)/
+            return pat.matcher(allTests).find() || patMain.matcher(allTests).find()
+        }
+
+        def targets = fila.exists() ? fila.readLines().findAll{ it?.trim() } : []
+        def toSimple = { String path -> path.replace('\\','/').tokenize('/').last()?.replaceAll(/\.java$/,'') }
+
+        def faltantes = [] as List<String>
+        if (targets.isEmpty()) {
+            def ok = userClasses.any { touches(it) }
+            if (!ok) faltantes << "(geral) Nenhum teste referencia classes do usuário."
+        } else {
+            targets.each { path ->
+                def simple = toSimple(path)
+                if (simple && !touches(simple)) {
+                    faltantes << "Falta teste que exercite ${simple} (alvo priorizado: ${path})"
+                }
+            }
+        }
+
+        gapsFile.parentFile.mkdirs()
+        if (faltantes.isEmpty()) {
+            gapsFile.text = "OK: todos os alvos priorizados estão referenciados por testes do STAGE.\n"
+            println "verificarPrioridadeECoberturaAlvo → OK"
+        } else {
+            gapsFile.text = (["Lacunas detectadas (ordem de prioridade Sonar):"] + faltantes).join("\n") + "\n"
+            println gapsFile.text
+            throw new GradleException("Faltam testes que toquem classes priorizadas. Veja ${gapsFile} e ajuste via IA.")
+        }
+    }
+}
 
 /* ===================== NOVO FLUXO: ConsoleLauncher + JaCoCo ===================== */
 
@@ -1266,7 +1376,9 @@ tasks.register("testUsuarioConsole", JavaExec) {
 
     dependsOn 'organizarUsuario', 'resolverDepsUsuario',
               tasks.named(sourceSets.usuario.classesTaskName),
-              tasks.named(sourceSets.usuarioTest.classesTaskName)
+              tasks.named(sourceSets.usuarioTest.classesTaskName),
+              // 🔒 Gate: só roda ConsoleLauncher se os testes tocarem as classes priorizadas
+              'verificarPrioridadeECoberturaAlvo'
 
     mainClass = 'org.junit.platform.console.ConsoleLauncher'
     classpath = sourceSets.usuarioTest.runtimeClasspath
@@ -1409,7 +1521,6 @@ tasks.named("jacocoRelatorioUsuario") {
 tasks.named("jacocoRelatorioUsuarioConsole") {
     finalizedBy("jacocoXmlGarantido")
 }
-
 
 tasks.register('usuarioCobertura') {
     dependsOn 'testUsuario'
