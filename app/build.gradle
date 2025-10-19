@@ -114,10 +114,15 @@ tasks.register('ajustarTestesIa', JavaExec) {
     environment "GROQ_API_KEY", System.getenv("GROQ_API_KEY") ?: ""
     // evita ClassNotFound quando a classe ainda não compilou
     dependsOn tasks.named(sourceSets.main.classesTaskName)
+    dependsOn("classes")
     ignoreExitValue = true
     onlyIf {
-        file("$buildDir/classes/java/main/org/example/web/ia/AjustarTestesCli.class").exists()
+        project.layout.buildDirectory
+            .file("classes/java/main/org/example/web/ia/AjustarTestesCli.class")
+            .map { it.asFile.exists() }
+            .getOrElse(false)
     }
+
 }
 
 configurations {
