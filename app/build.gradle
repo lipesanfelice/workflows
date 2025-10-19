@@ -107,10 +107,17 @@ tasks.register('ajustarTestesIa', JavaExec) {
     group = "verification"
     description = "Pede à Groq patches de testes, salva em entrada-usuario/testes_ai_patches"
     classpath = sourceSets.main.runtimeClasspath
-    mainClass = 'org.example.web.cli.AjustarTestesCli'
+    // ✅ Opção A: usa o pacote 'ia'
+    mainClass = 'org.example.web.ia.AjustarTestesCli'
     // parâmetros padrão (podem ser sobrescritos no CI)
     args "--modelo=${System.getenv('GROQ_MODELO') ?: 'llama-3.1-8b-instant'}"
     environment "GROQ_API_KEY", System.getenv("GROQ_API_KEY") ?: ""
+    // evita ClassNotFound quando a classe ainda não compilou
+    dependsOn tasks.named(sourceSets.main.classesTaskName)
+    ignoreExitValue = true
+    onlyIf {
+        file("$buildDir/classes/java/main/org/example/web/ia/AjustarTestesCli.class").exists()
+    }
 }
 
 configurations {
@@ -158,7 +165,7 @@ def mapaImports = [
     'com.fasterxml.jackson.core'       : 'com.fasterxml.jackson.core:jackson-core:2.17.1',
     'com.fasterxml.jackson.annotation' : 'com.fasterxml.jackson.core:jackson-annotations:2.17.1',
     'com.fasterxml.jackson.databind'   : 'com.fasterxml.jackson.core:jackson-databind:2.17.1',
-    'com.fasterxml.jackson.dataformat' : 'com.fasterxml.jackson.dataformat:jackson-dataformat-xml:2.17.1',
+    'com.fasterxml.jackson.dataformat' : 'com.fasterxml.jackson.core:jackson-dataformat-xml:2.17.1',
     'com.fasterxml.jackson.datatype'   : 'com.fasterxml.jackson.datatype:jackson-datatype-jsr310:2.17.1',
 
     // === Logging ===
@@ -931,6 +938,16 @@ tasks.register('organizarUsuario') {
     }
 }
 
+/* ✅ Encadeamento e hints p/ cache de configuração */
+tasks.named("resolverDepsUsuario").configure {
+    // já há outputs.dir declarado na task
+    notCompatibleWithConfigurationCache("Usa resolução dinâmica e fileTrees de diretórios externos do projeto.")
+}
+tasks.named("organizarUsuario").configure {
+    dependsOn tasks.named("resolverDepsUsuario")
+    inputs.dir("$projectDir/entrada-usuario/libs")
+}
+
 // === Sanear testes do usuário (em RAW) ===
 tasks.register('sanearTestesUsuario') {
     group = 'verification'
@@ -1514,4 +1531,3 @@ tasks.register("covUsuarioComPayload") {
 tasks.named("covUsuario") {
     finalizedBy "avaliarCoberturaUsuario"
 }
-
