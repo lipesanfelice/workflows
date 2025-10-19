@@ -2,28 +2,27 @@ package org.example.web.ia;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import okhttp3.MediaType;
-import okhttp3.OkHttpClient;
-import okhttp3.Request;
-import okhttp3.RequestBody;
-import okhttp3.Response;
 
 import java.io.IOException;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.HashMap;
 import java.util.Map;
 
-/** Cliente mínimo para a API Chat Completions da Groq (compatível com OpenAI). */
+/** Cliente mínimo para a API Chat Completions da Groq (compatível com OpenAI), usando java.net.http. */
 public class GroqClient {
     private static final ObjectMapper M = new ObjectMapper();
-    private static final MediaType JSON = MediaType.get("application/json");
-    private final OkHttpClient http;
+    private final HttpClient http;
     private final String apiKey;
 
     public GroqClient(String apiKey) {
         this.apiKey = apiKey;
-        this.http = new OkHttpClient.Builder()
-                .callTimeout(Duration.ofSeconds(120))
+        this.http = HttpClient.newBuilder()
+                .connectTimeout(Duration.ofSeconds(30))
                 .build();
     }
 
@@ -34,26 +33,28 @@ public class GroqClient {
         body.put("response_format", Map.of("type", "json_object"));
         body.put("temperature", 0.2);
 
-        var messages = new Object[]{
+        var messages = new Object[] {
                 Map.of("role", "system", "content", system),
-                Map.of("role", "user", "content", userContent)
+                Map.of("role", "user",   "content", userContent)
         };
         body.put("messages", messages);
 
         byte[] payload = M.writeValueAsBytes(body);
 
-        Request req = new Request.Builder()
-                .url("https://api.groq.com/openai/v1/chat/completions")
+        HttpRequest req = HttpRequest.newBuilder(URI.create("https://api.groq.com/openai/v1/chat/completions"))
+                .timeout(Duration.ofSeconds(120))
                 .header("Authorization", "Bearer " + apiKey)
-                .post(RequestBody.create(payload, JSON))
+                .header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofByteArray(payload))
                 .build();
 
-        try (Response resp = http.newCall(req).execute()) {
-            if (!resp.isSuccessful()) {
-                String errBody = resp.body() != null ? resp.body().string() : "";
-                throw new IOException("Groq HTTP " + resp.code() + ": " + errBody);
+        try {
+            HttpResponse<String> resp = http.send(req, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+            if (resp.statusCode() < 200 || resp.statusCode() >= 300) {
+                throw new IOException("Groq HTTP " + resp.statusCode() + ": " + resp.body());
             }
-            String text = resp.body() != null ? resp.body().string() : "";
+
+            String text = resp.body();
             if (text == null || text.isBlank()) {
                 return M.createObjectNode().putArray("files"); // vazio
             }
@@ -63,6 +64,9 @@ public class GroqClient {
                 return M.createObjectNode().putArray("files"); // vazio
             }
             return M.readTree(content);
+        } catch (InterruptedException ie) {
+            Thread.currentThread().interrupt();
+            throw new IOException("Requisição interrompida", ie);
         }
     }
 }
