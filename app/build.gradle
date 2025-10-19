@@ -38,10 +38,8 @@ dependencies {
     implementation 'com.fasterxml.jackson.core:jackson-databind:2.17.1'
     implementation 'commons-io:commons-io:2.16.1'
 
-
     // HTTP client p/ Groq (já usado em outras partes também)
     implementation 'com.squareup.okhttp3:okhttp:4.12.0'
-
 
     // Spring Boot Web
     implementation 'org.springframework.boot:spring-boot-starter-web'
@@ -158,8 +156,8 @@ def mapaImports = [
     'com.fasterxml.jackson.core'       : 'com.fasterxml.jackson.core:jackson-core:2.17.1',
     'com.fasterxml.jackson.annotation' : 'com.fasterxml.jackson.core:jackson-annotations:2.17.1',
     'com.fasterxml.jackson.databind'   : 'com.fasterxml.jackson.core:jackson-databind:2.17.1',
-    'com.fasterxml.jackson.dataformat' : 'com.fasterxml.jackson.dataformat:jackson-dataformat-xml:2.17.1',
-    'com.fasterxml.jackson.datatype'   : 'com.fasterxml.jackson.datatype:jackson-datatype-jsr310:2.17.1',
+    'com.fasterxml.jackson.dataformat' : 'com.fasterxml.jackson.core:jackson-dataformat-xml:2.17.1',
+    'com.fasterxml.jackson.datatype'   : 'com.fasterxml.jackson.core:jackson-datatype-jsr310:2.17.1',
 
     // === Logging ===
     'org.slf4j'                        : 'org.slf4j:slf4j-api:2.0.13',
@@ -297,11 +295,16 @@ tasks.register('resolverDepsUsuario') {
 }
 
 tasks.register('organizarUsuario') {
+    // ✅ adiciona libs como input explícito (elimina dependência implícita)
+    inputs.dir("$projectDir/entrada-usuario/libs")
     inputs.files(fileTree(dirEntrada) { include '**/*.java' })
     inputs.files(fileTree(dirTestsIA) { include '**/*.java' })
     inputs.files(fileTree(dirTestsUsuario) { include '**/*.java' })
     inputs.files(fileTree(dirTestsAIPatches) { include '**/*.java' }) // 👈 NOVO: inclui patches da IA
     outputs.dir(dirWork)
+
+    // ✅ garante ordem: organizarUsuario depende de resolverDepsUsuario
+    dependsOn 'resolverDepsUsuario'
 
     doLast {
         if (dirWork.exists()) {
@@ -1036,7 +1039,6 @@ tasks.register('sanearTestesUsuario') {
     }
 }
 
-
 sourceSets {
     usuario {
         java { srcDirs = [dirMain] }
@@ -1153,8 +1155,6 @@ tasks.named(sourceSets.usuarioTest.compileJavaTaskName) {
     outputs.upToDateWhen { false }
 }
 
-
-
 // ===== Runner padrão do Gradle (mantido, mas não é o caminho do covUsuario) =====
 tasks.register('testUsuario', Test) {
     dependsOn tasks.named(sourceSets.usuario.classesTaskName),
@@ -1256,7 +1256,6 @@ tasks.register("coberturaMinimaUsuario") {
         }
     }
 }
-
 
 /* ===================== NOVO FLUXO: ConsoleLauncher + JaCoCo ===================== */
 
@@ -1409,7 +1408,6 @@ tasks.named("jacocoRelatorioUsuario") {
 tasks.named("jacocoRelatorioUsuarioConsole") {
     finalizedBy("jacocoXmlGarantido")
 }
-
 
 tasks.register('usuarioCobertura') {
     dependsOn 'testUsuario'

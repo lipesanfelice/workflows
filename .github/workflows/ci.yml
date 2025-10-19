@@ -209,6 +209,17 @@ jobs:
         echo "JACOCO_EXEC=${{ github.workspace }}/app/build/jacoco/testUsuarioConsole.exec" >> $GITHUB_ENV
 
     # ==================== FIM LOOP DE AUTOFIX COM GROQ ====================
+
+    # Antes do loop ensure_reports
+    - name: 'Warm-up: organizar, resolver deps e rodar testes'
+      run: |
+        set -euo pipefail
+        ./gradlew --no-daemon -p app \
+          resolverDepsUsuario \
+          organizarUsuario \
+          testUsuarioConsole \
+          -Dorg.gradle.configuration-cache=false
+
     - name: 'Loop: reforço de cobertura (>= 60%)'
       env:
         MIN_COVERAGE: '0.60'

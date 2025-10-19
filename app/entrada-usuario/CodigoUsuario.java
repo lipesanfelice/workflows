@@ -1,105 +1,186 @@
 import java.lang.annotation.*;
-import java.lang.reflect.Method;
+import java.lang.reflect.*;
+import java.sql.*;
 import java.util.*;
-import java.util.concurrent.*;
-import java.util.function.Consumer;
+import java.util.stream.Collectors;
 
 @Retention(RetentionPolicy.RUNTIME)
-@Target(ElementType.METHOD)
-public @interface Subscribe {
-    String topic() default "";
-    boolean async() default false;
-    int priority() default 0;
+@Target(ElementType.FIELD)
+public @interface Column {
+    String name() default "";
+    boolean primaryKey() default false;
+    boolean autoIncrement() default false;
 }
 
-public class AdvancedEventBus {
-    private final Map<String, List<Subscriber>> subscribers;
-    private final ExecutorService asyncExecutor;
-    private final boolean enableLogging;
+@Retention(RetentionPolicy.RUNTIME)
+@Target(ElementType.TYPE)
+public @interface Table {
+    String name();
+}
 
-    public AdvancedEventBus(boolean enableLogging) {
-        this.subscribers = new ConcurrentHashMap<>();
-        this.asyncExecutor = Executors.newCachedThreadPool();
-        this.enableLogging = enableLogging;
+public class SimpleORM {
+    private final Connection connection;
+
+    public SimpleORM(Connection connection) {
+        this.connection = connection;
     }
 
-    private class Subscriber implements Comparable<Subscriber> {
-        final Object target;
-        final Method method;
-        final boolean async;
-        final int priority;
-
-        Subscriber(Object target, Method method, boolean async, int priority) {
-            this.target = target;
-            this.method = method;
-            this.async = async;
-            this.priority = priority;
-            method.setAccessible(true);
+    public <T> void createTable(Class<T> clazz) throws SQLException {
+        if (!clazz.isAnnotationPresent(Table.class)) {
+            throw new IllegalArgumentException("Class must be annotated with @Table");
         }
 
-        void handleEvent(Object event) {
-            if (async) {
-                asyncExecutor.submit(() -> invokeMethod(event));
-            } else {
-                invokeMethod(event);
-            }
-        }
+        Table table = clazz.getAnnotation(Table.class);
+        List<String> columns = new ArrayList<>();
 
-        private void invokeMethod(Object event) {
-            try {
-                method.invoke(target, event);
-            } catch (Exception e) {
-                if (enableLogging) {
-                    System.err.println("Error invoking subscriber: " + e.getMessage());
-                }
-            }
-        }
-
-        @Override
-        public int compareTo(Subscriber other) {
-            return Integer.compare(other.priority, this.priority);
-        }
-    }
-
-    public void register(Object listener) {
-        for (Method method : listener.getClass().getDeclaredMethods()) {
-            if (method.isAnnotationPresent(Subscribe.class)) {
-                Subscribe annotation = method.getAnnotation(Subscribe.class);
-                String topic = annotation.topic();
-                boolean async = annotation.async();
-                int priority = annotation.priority();
-
-                Class<?>[] params = method.getParameterTypes();
-                if (params.length != 1) {
-                    throw new IllegalArgumentException("Subscriber method must have exactly one parameter");
-                }
-
-                Subscriber subscriber = new Subscriber(listener, method, async, priority);
-                subscribers.computeIfAbsent(topic, k -> new ArrayList<>()).add(subscriber);
+        for (Field field : clazz.getDeclaredFields()) {
+            if (field.isAnnotationPresent(Column.class)) {
+                Column column = field.getAnnotation(Column.class);
+                String columnName = column.name().isEmpty() ? field.getName() : column.name();
+                String columnType = getSqlType(field.getType());
                 
-                // Sort by priority
-                subscribers.get(topic).sort(Subscriber::compareTo);
+                StringBuilder columnDef = new StringBuilder(columnName + " " + columnType);
+                
+                if (column.primaryKey()) {
+                    columnDef.append(" PRIMARY KEY");
+                }
+                if (column.autoIncrement()) {
+                    columnDef.append(" AUTOINCREMENT");
+                }
+                
+                columns.add(columnDef.toString());
+            }
+        }
+
+        String sql = String.format("CREATE TABLE IF NOT EXISTS %s (%s)", 
+            table.name(), String.join(", ", columns));
+
+        try (Statement stmt = connection.createStatement()) {
+            stmt.execute(sql);
+        }
+    }
+
+    public <T> void save(T entity) throws Exception {
+        Class<?> clazz = entity.getClass();
+        Table table = clazz.getAnnotation(Table.class);
+        
+        List<String> columnNames = new ArrayList<>();
+        List<String> placeholders = new ArrayList<>();
+        List<Object> values = new ArrayList<>();
+
+        for (Field field : clazz.getDeclaredFields()) {
+            if (field.isAnnotationPresent(Column.class)) {
+                Column column = field.getAnnotation(Column.class);
+                if (column.autoIncrement() && isPrimaryKeyAutoIncrement(entity)) {
+                    continue;
+                }
+                
+                field.setAccessible(true);
+                String columnName = column.name().isEmpty() ? field.getName() : column.name();
+                columnNames.add(columnName);
+                placeholders.add("?");
+                values.add(field.get(entity));
+            }
+        }
+
+        String sql = String.format("INSERT INTO %s (%s) VALUES (%s)",
+            table.name(), 
+            String.join(", ", columnNames),
+            String.join(", ", placeholders));
+
+        try (PreparedStatement stmt = connection.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
+            for (int i = 0; i < values.size(); i++) {
+                stmt.setObject(i + 1, values.get(i));
+            }
+            
+            stmt.executeUpdate();
+            
+            // Handle auto-increment keys
+            if (isPrimaryKeyAutoIncrement(entity)) {
+                try (ResultSet generatedKeys = stmt.getGeneratedKeys()) {
+                    if (generatedKeys.next()) {
+                        setPrimaryKey(entity, generatedKeys.getObject(1));
+                    }
+                }
             }
         }
     }
 
-    public void post(Object event) {
-        post("", event);
-    }
-
-    public void post(String topic, Object event) {
-        List<Subscriber> topicSubscribers = subscribers.getOrDefault(topic, new ArrayList<>());
+    public <T> List<T> findAll(Class<T> clazz) throws Exception {
+        Table table = clazz.getAnnotation(Table.class);
+        String sql = "SELECT * FROM " + table.name();
         
-        if (enableLogging) {
-            System.out.println("Dispatching event to " + topicSubscribers.size() + " subscribers");
+        List<T> results = new ArrayList<>();
+        
+        try (Statement stmt = connection.createStatement();
+             ResultSet rs = stmt.executeQuery(sql)) {
+            
+            while (rs.next()) {
+                T entity = clazz.getDeclaredConstructor().newInstance();
+                mapResultSetToEntity(rs, entity);
+                results.add(entity);
+            }
         }
+        
+        return results;
+    }
 
-        for (Subscriber subscriber : topicSubscribers) {
-            subscriber.handleEvent(event);
+    private <T> void mapResultSetToEntity(ResultSet rs, T entity) throws Exception {
+        for (Field field : entity.getClass().getDeclaredFields()) {
+            if (field.isAnnotationPresent(Column.class)) {
+                Column column = field.getAnnotation(Column.class);
+                String columnName = column.name().isEmpty() ? field.getName() : column.name();
+                
+                field.setAccessible(true);
+                field.set(entity, rs.getObject(columnName));
+            }
         }
     }
 
-    public void shutdown() {
-        asyncExecutor.shutdown();
+    private String getSqlType(Class<?> type) {
+        if (type == String.class) return "TEXT";
+        if (type == int.class || type == Integer.class) return "INTEGER";
+        if (type == long.class || type == Long.class) return "BIGINT";
+        if (type == double.class || type == Double.class) return "REAL";
+        if (type == boolean.class || type == Boolean.class) return "BOOLEAN";
+        if (type == Date.class) return "DATETIME";
+        return "TEXT";
+    }
+
+    private <T> boolean isPrimaryKeyAutoIncrement(T entity) throws Exception {
+        for (Field field : entity.getClass().getDeclaredFields()) {
+            if (field.isAnnotationPresent(Column.class)) {
+                Column column = field.getAnnotation(Column.class);
+                if (column.primaryKey() && column.autoIncrement()) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    private <T> void setPrimaryKey(T entity, Object key) throws Exception {
+        for (Field field : entity.getClass().getDeclaredFields()) {
+            if (field.isAnnotationPresent(Column.class)) {
+                Column column = field.getAnnotation(Column.class);
+                if (column.primaryKey()) {
+                    field.setAccessible(true);
+                    field.set(entity, convertType(key, field.getType()));
+                    break;
+                }
+            }
+        }
+    }
+
+    private Object convertType(Object value, Class<?> targetType) {
+        if (value == null) return null;
+        
+        if (targetType == Integer.class || targetType == int.class) {
+            return ((Number) value).intValue();
+        } else if (targetType == Long.class || targetType == long.class) {
+            return ((Number) value).longValue();
+        }
+        
+        return value;
     }
 }
