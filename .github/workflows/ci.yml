@@ -169,7 +169,7 @@ jobs:
       env:
         GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
         GROQ_MODELO: llama-3.1-8b-instant
-        MAX_TRIES: '3'
+        MAX_TRIES: '10'
       run: |
         set -euo pipefail
         tries=1

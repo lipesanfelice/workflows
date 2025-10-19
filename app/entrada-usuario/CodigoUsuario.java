@@ -1,36 +1,63 @@
-import java.util.Random;
 import java.util.Scanner;
 
-public class JogoAdivinhacao {
+public class ConversorTemperatura {
     public static void main(String[] args) {
         Scanner scanner = new Scanner(System.in);
-        Random random = new Random();
         
-        int numeroSecreto = random.nextInt(100) + 1;
-        int tentativas = 0;
-        int palpite;
+        System.out.println("=== CONVERSOR DE TEMPERATURA ===");
+        System.out.println("1 - Celsius para Fahrenheit");
+        System.out.println("2 - Fahrenheit para Celsius");
+        System.out.println("3 - Celsius para Kelvin");
+        System.out.println("4 - Kelvin para Celsius");
+        System.out.print("Escolha a conversão: ");
         
-        System.out.println("=== JOGO DE ADIVINHAÇÃO ===");
-        System.out.println("Estou pensando em um número entre 1 e 100.");
-        System.out.println("Tente adivinhar!");
+        int opcao = scanner.nextInt();
+        System.out.print("Digite a temperatura: ");
+        double temperatura = scanner.nextDouble();
+        double resultado = 0;
         
-        do {
-            System.out.print("\nDigite seu palpite: ");
-            palpite = scanner.nextInt();
-            tentativas++;
-            
-            if (palpite < numeroSecreto) {
-                System.out.println("Muito baixo! Tente um número maior.");
-            } else if (palpite > numeroSecreto) {
-                System.out.println("Muito alto! Tente um número menor.");
-            } else {
-                System.out.println("🎉 Parabéns! Você acertou!");
-                System.out.println("O número era: " + numeroSecreto);
-                System.out.println("Tentativas: " + tentativas);
-            }
-            
-        } while (palpite != numeroSecreto);
+        switch (opcao) {
+            case 1:
+                resultado = (temperatura * 9/5) + 32;
+                System.out.println(temperatura + "°C = " + resultado + "°F");
+                break;
+                
+            case 2:
+                resultado = (temperatura - 32) * 5/9;
+                System.out.println(temperatura + "°F = " + resultado + "°C");
+                break;
+                
+            case 3:
+                resultado = temperatura + 273.15;
+                System.out.println(temperatura + "°C = " + resultado + "K");
+                break;
+                
+            case 4:
+                resultado = temperatura - 273.15;
+                System.out.println(temperatura + "K = " + resultado + "°C");
+                break;
+                
+            default:
+                System.out.println("Opção inválida!");
+        }
         
         scanner.close();
+    }
+    
+    // Métodos adicionais para reutilização
+    public static double celsiusParaFahrenheit(double celsius) {
+        return (celsius * 9/5) + 32;
+    }
+    
+    public static double fahrenheitParaCelsius(double fahrenheit) {
+        return (fahrenheit - 32) * 5/9;
+    }
+    
+    public static double celsiusParaKelvin(double celsius) {
+        return celsius + 273.15;
+    }
+    
+    public static double kelvinParaCelsius(double kelvin) {
+        return kelvin - 273.15;
     }
 }
