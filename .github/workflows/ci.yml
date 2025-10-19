@@ -165,48 +165,21 @@ jobs:
           echo "tem=false" >> "$GITHUB_OUTPUT"
         fi
 
-    - name: 'Loop: testes + cobertura + auto-ajuste (Groq)'
+    - name: Loop de cobertura com IA (gradle)
       env:
         GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
         GROQ_MODELO: llama-3.1-8b-instant
         MAX_TRIES: '10'
       run: |
         set -euo pipefail
-        tries=1
-        while [ $tries -le ${MAX_TRIES} ]; do
-          echo "== Tentativa $tries/${MAX_TRIES} =="
-          if ./gradlew --no-daemon -Dorg.gradle.configuration-cache=false -p app clean covUsuario --info; then
-            ok_exec=1
-          else
-            ok_exec=0
-          fi
+        ./gradlew --no-daemon -Dorg.gradle.configuration-cache=false -p app clean covUsuarioIaLoop \
+          -PcoverageThreshold=${MIN_COVERAGE} \
+          -PmaxIaIters=${MAX_LOOPS} \
+          --info
 
-          XML="${{ github.workspace }}/app/entrada-usuario/jacoco-relatorio/jacoco.xml"
-          EXEC="${{ github.workspace }}/app/build/jacoco/testUsuarioConsole.exec"
+        echo "JACOCO_XML=${GITHUB_WORKSPACE}/app/entrada-usuario/jacoco-relatorio/jacoco.xml" >> $GITHUB_ENV
+        echo "JACOCO_EXEC=${GITHUB_WORKSPACE}/app/build/jacoco/testUsuarioConsole.exec" >> $GITHUB_ENV
 
-          have_exec=0; have_xml=0
-          [ -s "$EXEC" ] && have_exec=1
-          [ -s "$XML"  ] && have_xml=1
-
-          if [ $ok_exec -eq 1 ] && [ $have_exec -eq 1 ] && [ $have_xml -eq 1 ]; then
-            echo "✅ cobertura e artefatos presentes"
-            break
-          fi
-
-          echo "❌ Falha/sem cobertura; gerando payload e pedindo patches à IA…"
-          ./gradlew --no-daemon -p app gerarPacoteParaIA --info || true
-          ./gradlew --no-daemon -p app ajustarTestesIa --info || true
-
-          if ! ls "${{ github.workspace }}/app/entrada-usuario/testes_ai_patches"/*.java >/dev/null 2>&1; then
-            echo "⚠️ IA não produziu patches; encerrando loop."
-            break
-          fi
-
-          tries=$((tries+1))
-        done
-
-        echo "JACOCO_XML=${{ github.workspace }}/app/entrada-usuario/jacoco-relatorio/jacoco.xml" >> $GITHUB_ENV
-        echo "JACOCO_EXEC=${{ github.workspace }}/app/build/jacoco/testUsuarioConsole.exec" >> $GITHUB_ENV
 
     # ==================== FIM LOOP DE AUTOFIX COM GROQ ====================
 
