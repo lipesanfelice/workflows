@@ -220,80 +220,80 @@ jobs:
     #       testUsuarioConsole \
     #       -Dorg.gradle.configuration-cache=false
 
-    - name: 'Loop: reforço de cobertura (>= 60%)'
-      env:
-        MIN_COVERAGE: '0.60'
-        MAX_TRIES_COVERAGE: '6'
-        ENFORCE_COVERAGE: 'false'  # não falhar o job; só iterar
-        GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
-        GROQ_MODELO: llama-3.1-8b-instant
-      run: |
-        set -euo pipefail
+    # - name: 'Loop: reforço de cobertura (>= 60%)'
+    #   env:
+    #     MIN_COVERAGE: '0.60'
+    #     MAX_TRIES_COVERAGE: '6'
+    #     ENFORCE_COVERAGE: 'false'  # não falhar o job; só iterar
+    #     GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+    #     GROQ_MODELO: llama-3.1-8b-instant
+    #   run: |
+    #     set -euo pipefail
 
-        XML="app/entrada-usuario/jacoco-relatorio/jacoco.xml"
-        EXEC="app/build/jacoco/testUsuario.exec"
+    #     XML="app/entrada-usuario/jacoco-relatorio/jacoco.xml"
+    #     EXEC="app/build/jacoco/testUsuario.exec"
 
-        ensure_reports() {
-          # Gera cobertura até existir XML e EXEC
-          for i in $(seq 1 3); do
-            ./gradlew --no-daemon -p app covUsuario -Dorg.gradle.configuration-cache=false
-            [ -s "$XML" ] && [ -s "$EXEC" ] && return 0
-            echo "Ainda sem jacoco.xml/exec; tentando novamente ($i/3)..."
-          done
-          return 1
-        }
+    #     ensure_reports() {
+    #       # Gera cobertura até existir XML e EXEC
+    #       for i in $(seq 1 3); do
+    #         ./gradlew --no-daemon -p app covUsuario -Dorg.gradle.configuration-cache=false
+    #         [ -s "$XML" ] && [ -s "$EXEC" ] && return 0
+    #         echo "Ainda sem jacoco.xml/exec; tentando novamente ($i/3)..."
+    #       done
+    #       return 1
+    #     }
 
-        get_cov_pct() {
-          # Usa a própria task Groovy que você tem; ela imprime a % em stdout
-          ./gradlew --no-daemon -p app coberturaMinimaUsuario \
-            -PcoverageMinUsuario="$MIN_COVERAGE" -PenforceCoverage="$ENFORCE_COVERAGE" \
-            | tee cov.out
-          # Extrai o número (ex: 12.34)
-          pct=$(grep -Eo 'Cobertura de linhas: [0-9]+\.[0-9]+%' cov.out | awk '{print $4}' | tr -d '%')
-          rm -f cov.out
-          echo "${pct:-0}"
-        }
+    #     get_cov_pct() {
+    #       # Usa a própria task Groovy que você tem; ela imprime a % em stdout
+    #       ./gradlew --no-daemon -p app coberturaMinimaUsuario \
+    #         -PcoverageMinUsuario="$MIN_COVERAGE" -PenforceCoverage="$ENFORCE_COVERAGE" \
+    #         | tee cov.out
+    #       # Extrai o número (ex: 12.34)
+    #       pct=$(grep -Eo 'Cobertura de linhas: [0-9]+\.[0-9]+%' cov.out | awk '{print $4}' | tr -d '%')
+    #       rm -f cov.out
+    #       echo "${pct:-0}"
+    #     }
 
-        stage_ai_patches() {
-          # Se a IA escreveu arquivos em entrada-usuario/testes_ai_patches, mova-os p/ testes de fato
-          if [ -d "app/entrada-usuario/testes_ai_patches" ]; then
-            mkdir -p app/entrada-usuario/testes
-            find app/entrada-usuario/testes_ai_patches -type f -name '*.java' -print -exec cp {} app/entrada-usuario/testes/ \;
-          fi
-        }
+    #     stage_ai_patches() {
+    #       # Se a IA escreveu arquivos em entrada-usuario/testes_ai_patches, mova-os p/ testes de fato
+    #       if [ -d "app/entrada-usuario/testes_ai_patches" ]; then
+    #         mkdir -p app/entrada-usuario/testes
+    #         find app/entrada-usuario/testes_ai_patches -type f -name '*.java' -print -exec cp {} app/entrada-usuario/testes/ \;
+    #       fi
+    #     }
 
-        tries=1
-        # Garante que temos relatório inicial
-        if ! ensure_reports; then
-          echo "Falha ao gerar relatórios do JaCoCo (xml/exec). Abortando."
-          exit 1
-        fi
+    #     tries=1
+    #     # Garante que temos relatório inicial
+    #     if ! ensure_reports; then
+    #       echo "Falha ao gerar relatórios do JaCoCo (xml/exec). Abortando."
+    #       exit 1
+    #     fi
 
-        while [ $tries -le ${MAX_TRIES_COVERAGE} ]; do
-          cov=$(get_cov_pct)
-          echo "Cobertura atual: ${cov}% (tentativa $tries/${MAX_TRIES_COVERAGE})"
+    #     while [ $tries -le ${MAX_TRIES_COVERAGE} ]; do
+    #       cov=$(get_cov_pct)
+    #       echo "Cobertura atual: ${cov}% (tentativa $tries/${MAX_TRIES_COVERAGE})"
 
-          # Alvo batido?
-          awk "BEGIN {exit !(${cov} >= ${MIN_COVERAGE}*100)}" && { echo "OK: cobertura >= 60%"; break; }
+    #       # Alvo batido?
+    #       awk "BEGIN {exit !(${cov} >= ${MIN_COVERAGE}*100)}" && { echo "OK: cobertura >= 60%"; break; }
 
-          echo "Cobertura < 60% → pedindo ajuste de testes para a IA…"
-          # Envia (1) código do usuário, (2) testes atuais, (3) relatório do JaCoCo p/ IA
-          # A sua CLI já lê de entrada-usuario/* (conforme build.gradle)
-          ./gradlew --no-daemon -p app ajustarTestesIa -Dorg.gradle.configuration-cache=false
+    #       echo "Cobertura < 60% → pedindo ajuste de testes para a IA…"
+    #       # Envia (1) código do usuário, (2) testes atuais, (3) relatório do JaCoCo p/ IA
+    #       # A sua CLI já lê de entrada-usuario/* (conforme build.gradle)
+    #       ./gradlew --no-daemon -p app ajustarTestesIa -Dorg.gradle.configuration-cache=false
 
-          # Sobe patches para a pasta de testes e recompila
-          stage_ai_patches
+    #       # Sobe patches para a pasta de testes e recompila
+    #       stage_ai_patches
 
-          # Re-roda cobertura
-          if ! ensure_reports; then
-            echo "Falha ao regenerar relatórios do JaCoCo após ajuste. Encerrando."
-            exit 1
-          fi
+    #       # Re-roda cobertura
+    #       if ! ensure_reports; then
+    #         echo "Falha ao regenerar relatórios do JaCoCo após ajuste. Encerrando."
+    #         exit 1
+    #       fi
 
-          tries=$((tries+1))
-        done
+    #       tries=$((tries+1))
+    #     done
 
-        echo "Loop de reforço de cobertura finalizado."
+    #     echo "Loop de reforço de cobertura finalizado."
 
 
     - name: Debug cobertura
