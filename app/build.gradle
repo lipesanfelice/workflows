@@ -38,8 +38,10 @@ dependencies {
     implementation 'com.fasterxml.jackson.core:jackson-databind:2.17.1'
     implementation 'commons-io:commons-io:2.16.1'
 
+
     // HTTP client p/ Groq (já usado em outras partes também)
     implementation 'com.squareup.okhttp3:okhttp:4.12.0'
+
 
     // Spring Boot Web
     implementation 'org.springframework.boot:spring-boot-starter-web'
@@ -1034,6 +1036,7 @@ tasks.register('sanearTestesUsuario') {
     }
 }
 
+
 sourceSets {
     usuario {
         java { srcDirs = [dirMain] }
@@ -1150,6 +1153,8 @@ tasks.named(sourceSets.usuarioTest.compileJavaTaskName) {
     outputs.upToDateWhen { false }
 }
 
+
+
 // ===== Runner padrão do Gradle (mantido, mas não é o caminho do covUsuario) =====
 tasks.register('testUsuario', Test) {
     dependsOn tasks.named(sourceSets.usuario.classesTaskName),
@@ -1251,6 +1256,7 @@ tasks.register("coberturaMinimaUsuario") {
         }
     }
 }
+
 
 /* ===================== NOVO FLUXO: ConsoleLauncher + JaCoCo ===================== */
 
@@ -1404,6 +1410,7 @@ tasks.named("jacocoRelatorioUsuarioConsole") {
     finalizedBy("jacocoXmlGarantido")
 }
 
+
 tasks.register('usuarioCobertura') {
     dependsOn 'testUsuario'
 }
@@ -1463,101 +1470,3 @@ tasks.register("gerarPacoteParaIA", Zip) {
 tasks.register("covUsuarioComPayload") {
     dependsOn "covUsuario", "gerarPacoteParaIA"
 }
-
-/* ===================== LOOP DE COBERTURA COM IA (< 50% volta) ===================== */
-
-tasks.register("avaliarCobertura") {
-    group = "verification"
-    description = "Lê jacoco.xml e grava build/ia/coverage.txt com a cobertura % (fração) e status (OK/LOW)."
-    doLast {
-        def thr = (project.findProperty("coverageThreshold") ?: System.getenv("COVERAGE_THRESHOLD") ?: "0.50") as BigDecimal
-        def xml = file("$projectDir/entrada-usuario/jacoco-relatorio/jacoco.xml")
-        file("$buildDir/ia").mkdirs()
-        def statusFile = file("$buildDir/ia/coverage.txt")
-
-        if (!xml.exists() || xml.length()==0) {
-            statusFile.text = "0.00,LOW"
-            println "avaliarCobertura → jacoco.xml ausente/vazio -> 0.00% (LOW)"
-            return
-        }
-        String xmlText = xml.getText("UTF-8").replaceAll("(?is)<!DOCTYPE[^>]*>", "")
-        def sl = new groovy.xml.XmlSlurper(false, false).parseText(xmlText)
-        long missed = 0; long covered = 0
-        sl.'**'.findAll { it.name() == 'counter' && it.@type?.text() == 'LINE' }.each { c ->
-            missed += (c.@missed.text() as long)
-            covered += (c.@covered.text() as long)
-        }
-        BigDecimal pct = (missed+covered) ? (covered as BigDecimal) / (missed+covered) : 0
-        def pctFmt = String.format(java.util.Locale.US, "%.4f", pct) // fração
-        def status = (pct >= thr) ? "OK" : "LOW"
-        statusFile.text = "${pctFmt},${status}"
-        println "avaliarCobertura → cobertura=${String.format(java.util.Locale.US, '%.2f', pct*100)}%  status=${status}  thr=${(thr*100).toBigDecimal().setScale(0, java.math.RoundingMode.HALF_UP)}%"
-    }
-}
-
-// Ajusta a tarefa já existente para só rodar quando status for LOW
-tasks.named("ajustarTestesIa").configure {
-    onlyIf {
-        def f = file("$buildDir/ia/coverage.txt")
-        f.exists() && f.text.trim().split(",")[-1] == "LOW"
-    }
-    doFirst {
-        println "ajustarTestesIa → cobertura baixa detectada; pedindo patches à IA…"
-    }
-}
-
-// Função para registrar passos encadeados
-def registrarPassoIa = { int n, boolean primeiro ->
-    def passo = "covPasso${n}"
-    def ajustar = "ajustarIa${n}"
-    def statusGate = { ->
-        def f = file("$buildDir/ia/coverage.txt")
-        f.exists() && f.text.trim().split(",")[-1] == "LOW"
-    }
-
-    // executa testes + jacoco + avalia
-    tasks.register(passo) {
-        group = "verification"
-        description = "Passo ${n}: testes ConsoleLauncher + relatório + avaliação cobertura"
-        dependsOn "organizarUsuario", "resolverDepsUsuario",
-                  tasks.named(sourceSets.usuario.classesTaskName),
-                  tasks.named(sourceSets.usuarioTest.classesTaskName),
-                  "testUsuarioConsole", "jacocoRelatorioUsuarioConsole", "jacocoXmlGarantido", "avaliarCobertura"
-        if (!primeiro) {
-            onlyIf { statusGate() }
-        }
-    }
-
-    // chama IA se LOW
-    tasks.register(ajustar) {
-        group = "verification"
-        description = "Passo ${n}: ajuste IA se cobertura baixa"
-        dependsOn passo
-        finalizedBy "ajustarTestesIa"
-        onlyIf { statusGate() }
-        doLast {
-            println "${ajustar} → (se a IA gerou patches) eles entram em 'entrada-usuario/testes_ai_patches' e serão recolhidos no próximo passo."
-        }
-    }
-}
-
-def maxIters = (project.findProperty("maxIaIters") ?: System.getenv("MAX_IA_ITERS") ?: "3") as int
-(1..maxIters).each { i -> registrarPassoIa(i, i==1) }
-
-tasks.register("covUsuarioIaLoop") {
-    group = "verification"
-    description = "Roda cobertura; se < limiar, pede patches à IA e repete até ${maxIters} vezes."
-    dependsOn ((1..maxIters).collect { "covPasso${it}" } + (1..maxIters).collect { "ajustarIa${it}" })
-    doLast {
-        def f = file("$buildDir/ia/coverage.txt")
-        if (f.exists()) {
-            def parts = f.text.trim().split(",")
-            def frac = (parts[0] as BigDecimal)
-            def status = parts[1]
-            println "covUsuarioIaLoop → cobertura final: ${String.format(java.util.Locale.US, '%.2f', frac*100)}%  (${status})"
-        } else {
-            println "covUsuarioIaLoop → sem coverage.txt; verifique logs dos passos."
-        }
-    }
-}
-/* ===================== FIM DO LOOP DE COBERTURA COM IA ===================== */
