@@ -1039,21 +1039,22 @@ tasks.register('sanearTestesUsuario') {
 
 sourceSets {
     usuario {
-        java { srcDirs = [dirMain] }
+        // mantém como já está no teu projeto:
+        java { srcDirs = [dirMain] }      // <-- sem 'src/usuario-helpers/java'
         resources.srcDirs = []
     }
     usuarioTest {
-        // AGORA compila a partir do STAGE
-        java {
-            srcDirs = [dirTestStage]
-            // ⛔️ por precaução, mas stage não deve ter .skip
-            exclude '**/*.java.skip'
-        }
+        java { srcDirs = [dirTestStage] }
         resources.srcDirs = []
+        // já existia:
         compileClasspath += sourceSets.usuario.output
         runtimeClasspath  += sourceSets.usuario.output
+        // ADICIONA isto para ver as classes do 'main' (onde está o UsuarioEntrypoint)
+        compileClasspath += sourceSets.main.output
+        runtimeClasspath  += sourceSets.main.output
     }
 }
+
 
 // ==================== Pré-voo: copia só os válidos RAW → STAGE ====================
 tasks.register('preflightUsuarioTests') {
@@ -1466,7 +1467,51 @@ tasks.register("gerarPacoteParaIA", Zip) {
     from("$buildDir/reports/problems") { include 'problems-report.html'; into("problems") }
 }
 
+// Caminho do relatório que teu fluxo já gera
+ext.jacocoUsuarioXml = "$projectDir/entrada-usuario/jacoco-relatorio/jacoco.xml"
+
+tasks.register("avaliarCoberturaUsuario") {
+    doLast {
+        def xmlFile = file(jacocoUsuarioXml)
+        if (!xmlFile.exists() || xmlFile.length() == 0L) {
+            throw new GradleException("jacoco.xml ausente ou vazio em: ${xmlFile}")
+        }
+
+        // 👇 Remover DOCTYPE evita SAXParseException/lookup de DTD
+        String xmlText = xmlFile.getText("UTF-8").replaceAll("(?is)<!DOCTYPE[^>]*>", "")
+        def doc = new groovy.xml.XmlSlurper(false, false).parseText(xmlText)
+
+        def counters = doc.'**'.findAll { it.name() == 'counter' && it.@type == 'LINE' }
+        if (!counters) throw new GradleException("Sem <counter type='LINE'> no jacoco.xml")
+
+        def totalLine = counters[-1]
+        long missed = totalLine.@missed.toLong()
+        long covered = totalLine.@covered.toLong()
+        long total   = missed + covered
+        double pct   = total == 0 ? 0.0d : (double) covered / (double) total * 100.0d
+
+        BigDecimal minCovProp = project.hasProperty('minCoverage') ?
+                new BigDecimal(project.property('minCoverage').toString()) : 0.50G
+        double alvo = minCovProp.doubleValue() * 100.0d
+
+        println String.format("Cobertura (linhas): %.2f%% (%d/%d) — alvo: %.2f%%",
+                pct, covered, total, alvo)
+
+        if (pct < alvo) {
+            throw new GradleException(String.format(
+                "Cobertura abaixo do alvo: %.2f%% < %.2f%%", pct, alvo))
+        }
+    }
+}
+
+
+
 // Alias conveniente local
 tasks.register("covUsuarioComPayload") {
     dependsOn "covUsuario", "gerarPacoteParaIA"
 }
+
+tasks.named("covUsuario") {
+    finalizedBy "avaliarCoberturaUsuario"
+}
+
