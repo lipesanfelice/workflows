@@ -2,7 +2,6 @@ package org.example.web.ia;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import org.example.web.ia.GroqClient;
 
 import java.io.File;
 import java.io.IOException;
@@ -32,7 +31,8 @@ public class AjustarTestesCli {
             System.exit(2);
         }
 
-        Path root = Paths.get("").toAbsolutePath().resolve("app"); // ponto de vista do job atual
+        // ✅ Raiz = diretório atual do módulo :app (JavaExec roda com workdir = :app)
+        Path root = Paths.get("").toAbsolutePath();
         Path entrada = root.resolve("entrada-usuario");
         Path patches = entrada.resolve("testes_ai_patches");
         Files.createDirectories(patches);
@@ -74,7 +74,7 @@ public class AjustarTestesCli {
             "",
             "Objetivo:",
             "- Consertar erros de compilação/descoberta e alinhar nomes de classes/pacotes usados nos testes.",
-            "- Garantir que pelo menos um teste executa código do usuário (não apenas main interativo).",
+            "- Garantir que pelo menos 5 testes executem o código do usuário (não apenas main interativo).",
             "- Se havia divergência de nome (ex.: GerenciadorTarefas -> Tarefas), ajuste os testes.",
             "- Use JUnit 5 (org.junit.jupiter.api.Test) e Assertions estáticas.",
             "- Se necessário, crie testes 'smoke' mínimos por classe pública.",
