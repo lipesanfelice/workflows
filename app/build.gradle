@@ -111,12 +111,25 @@ tasks.register('ajustarTestesIa', JavaExec) {
     // parâmetros padrão (podem ser sobrescritos no CI)
     args "--modelo=${System.getenv('GROQ_MODELO') ?: 'llama-3.1-8b-instant'}"
     environment "GROQ_API_KEY", System.getenv("GROQ_API_KEY") ?: ""
-    // roda só se o main existir e a chave estiver presente
+    // ✅ onlyIf à prova de nulos/exceções, com logs
     onlyIf {
-        System.getenv("GROQ_API_KEY") &&
-        sourceSets.main.output.asFileTree.matching {
-            include 'org/example/web/ia/AjustarTestesCli*.class'
-        }.files
+        try {
+            def key = System.getenv('GROQ_API_KEY')
+            if (!key || key.trim().isEmpty()) {
+                logger.lifecycle("ajustarTestesIa → GROQ_API_KEY ausente; pulando task (sem falhar).")
+                return false
+            }
+            def hasCli = !sourceSets.main.output.asFileTree.matching {
+                include 'org/example/web/ia/AjustarTestesCli*.class'
+            }.files.isEmpty()
+            if (!hasCli) {
+                logger.lifecycle("ajustarTestesIa → classe org.example.web.ia.AjustarTestesCli não encontrada no build; pulando.")
+            }
+            return hasCli
+        } catch (Throwable t) {
+            logger.lifecycle("ajustarTestesIa → onlyIf falhou: ${t.class.simpleName}: ${t.message}; pulando.")
+            return false
+        }
     }
     ignoreExitValue = true
 }
@@ -1003,7 +1016,6 @@ tasks.register('sanearTestesUsuario') {
                 '(?:(?:public|private|protected|static|final|abstract|transient|volatile|synchronized)\\s+)*' +
                 '([A-Za-z_][\\w.<>\\[\\]]*)\\s+([A-Za-z_]\\w*)\\s*$'
             )
-
             src.readLines().each { ln ->
                 String t = ln.trim()
                 boolean comentario   = t.startsWith('//') || t.startsWith('/*') || t.startsWith('*')
@@ -1013,17 +1025,41 @@ tasks.register('sanearTestesUsuario') {
             }
             src = out.toString()
 
-            // 4) Fecha chaves faltantes no fim e remove '}' órfãos sozinhos
-            // remove linhas com } isolado que causam "illegal start of type"
-            src = src.replaceAll('(?m)^\\s*}\\s*$', '')
-            int abre = 0, fecha = 0
+            // 4) 🛡️ Balanceamento robusto de chaves:
+            //    - remove '}' que fechariam abaixo de zero (órfãs);
+            //    - no final, completa com '}' faltantes.
+            StringBuilder fixed = new StringBuilder()
+            int depth = 0
             for (int i = 0; i < src.length(); i++) {
                 char c = src.charAt(i)
-                if (c == '{') abre++
-                else if (c == '}') fecha++
+                if (c == '}') {
+                    if (depth == 0) {
+                        // ignora chave órfã (impede fechamento prematuro da classe)
+                        continue
+                    } else {
+                        depth--
+                        fixed.append(c)
+                    }
+                } else {
+                    if (c == '{') depth++
+                    fixed.append(c)
+                }
             }
-            if (abre > fecha) {
-                src = src + ("\n" + ("}" * (abre - fecha)) + "\n")
+            if (depth > 0) {
+                fixed.append('\n')
+                for (int d = 0; d < depth; d++) fixed.append('}')
+                fixed.append('\n')
+            }
+            src = fixed.toString()
+
+            // 5) 🧰 Opção A — Embrulhar @Test top-level quando não houver classe
+            boolean temClasse = (src =~ /(?m)^\s*(public\s+)?(class|interface|enum|record)\s+[A-Za-z_]\w*/).find()
+            if (!temClasse && src.contains("@Test")) {
+                // separa head (package+imports) e corpo
+                def m = (src =~ /(?s)^\s*((?:package\s+[^;]+;\s*)?(?:import\s+[^;]+;\s*)*)/)
+                String head = ""; String body = src
+                if (m.find()) { head = m.group(1); body = src.substring(m.end()) }
+                src = head + "\nclass AutoWrappedTest {\n" + body + "\n}\n"
             }
 
             f.setText(src, 'UTF-8')

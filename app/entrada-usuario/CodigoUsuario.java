@@ -1,19 +1,19 @@
-import java.util.HashMap;
+import java.util.ArrayList;
 import java.util.Scanner;
 
-public class CadastroAlunos {
+public class GerenciadorTarefas {
     public static void main(String[] args) {
         Scanner scanner = new Scanner(System.in);
-        HashMap<String, Double> alunos = new HashMap<>();
+        ArrayList<String> tarefas = new ArrayList<>();
         int opcao;
         
-        System.out.println("=== CADASTRO DE ALUNOS ===");
+        System.out.println("=== GERENCIADOR DE TAREFAS ===");
         
         do {
             System.out.println("\nMenu:");
-            System.out.println("1 - Cadastrar aluno");
-            System.out.println("2 - Buscar aluno");
-            System.out.println("3 - Listar todos os alunos");
+            System.out.println("1 - Adicionar tarefa");
+            System.out.println("2 - Listar tarefas");
+            System.out.println("3 - Remover tarefa");
             System.out.println("4 - Sair");
             System.out.print("Escolha uma opção: ");
             
@@ -22,40 +22,40 @@ public class CadastroAlunos {
             
             switch (opcao) {
                 case 1:
-                    System.out.print("Digite o nome do aluno: ");
-                    String nome = scanner.nextLine();
-                    System.out.print("Digite a nota do aluno: ");
-                    double nota = scanner.nextDouble();
-                    
-                    alunos.put(nome, nota);
-                    System.out.println("Aluno cadastrado com sucesso!");
+                    System.out.print("Digite a tarefa: ");
+                    String tarefa = scanner.nextLine();
+                    tarefas.add(tarefa);
+                    System.out.println("Tarefa adicionada!");
                     break;
                     
                 case 2:
-                    System.out.print("Digite o nome do aluno a buscar: ");
-                    String nomeBusca = scanner.nextLine();
-                    
-                    if (alunos.containsKey(nomeBusca)) {
-                        double notaAluno = alunos.get(nomeBusca);
-                        System.out.println("Aluno: " + nomeBusca + " - Nota: " + notaAluno);
+                    if (tarefas.isEmpty()) {
+                        System.out.println("Nenhuma tarefa cadastrada.");
                     } else {
-                        System.out.println("Aluno não encontrado!");
+                        System.out.println("\n=== LISTA DE TAREFAS ===");
+                        for (int i = 0; i < tarefas.size(); i++) {
+                            System.out.println((i + 1) + ". " + tarefas.get(i));
+                        }
                     }
                     break;
                     
                 case 3:
-                    if (alunos.isEmpty()) {
-                        System.out.println("Nenhum aluno cadastrado.");
+                    if (tarefas.isEmpty()) {
+                        System.out.println("Nenhuma tarefa para remover.");
                     } else {
-                        System.out.println("\n=== LISTA DE ALUNOS ===");
-                        for (String aluno : alunos.keySet()) {
-                            System.out.println("Aluno: " + aluno + " - Nota: " + alunos.get(aluno));
+                        System.out.print("Digite o número da tarefa a remover: ");
+                        int numero = scanner.nextInt();
+                        if (numero >= 1 && numero <= tarefas.size()) {
+                            tarefas.remove(numero - 1);
+                            System.out.println("Tarefa removida!");
+                        } else {
+                            System.out.println("Número inválido!");
                         }
                     }
                     break;
                     
                 case 4:
-                    System.out.println("Saindo...");
+                    System.out.println("Saindo... Até logo!");
                     break;
                     
                 default:
