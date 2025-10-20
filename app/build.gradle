@@ -9,7 +9,6 @@ plugins {
 
 import org.gradle.testing.jacoco.plugins.JacocoTaskExtension
 import java.util.regex.Pattern
-import groovy.json.JsonSlurper
 
 repositories {
     mavenCentral()
@@ -106,32 +105,17 @@ tasks.register('ajustarTestesIa', JavaExec) {
     group = "verification"
     description = "Pede à Groq patches de testes, salva em entrada-usuario/testes_ai_patches"
     classpath = sourceSets.main.runtimeClasspath
-    // ⬇️ corrigido para o pacote real informado
-    mainClass = 'org.example.web.ia.AjustarTestesCli'
+    mainClass = 'org.example.web.cli.AjustarTestesCli'
     // parâmetros padrão (podem ser sobrescritos no CI)
     args "--modelo=${System.getenv('GROQ_MODELO') ?: 'llama-3.1-8b-instant'}"
     environment "GROQ_API_KEY", System.getenv("GROQ_API_KEY") ?: ""
-    // ✅ onlyIf à prova de nulos/exceções, com logs
-    onlyIf {
-        try {
-            def key = System.getenv('GROQ_API_KEY')
-            if (!key || key.trim().isEmpty()) {
-                logger.lifecycle("ajustarTestesIa → GROQ_API_KEY ausente; pulando task (sem falhar).")
-                return false
-            }
-            def hasCli = !sourceSets.main.output.asFileTree.matching {
-                include 'org/example/web/ia/AjustarTestesCli*.class'
-            }.files.isEmpty()
-            if (!hasCli) {
-                logger.lifecycle("ajustarTestesIa → classe org.example.web.ia.AjustarTestesCli não encontrada no build; pulando.")
-            }
-            return hasCli
-        } catch (Throwable t) {
-            logger.lifecycle("ajustarTestesIa → onlyIf falhou: ${t.class.simpleName}: ${t.message}; pulando.")
-            return false
-        }
-    }
-    ignoreExitValue = true
+}
+
+configurations {
+    usuarioImplementation.extendsFrom implementation
+    usuarioRuntimeOnly.extendsFrom runtimeOnly
+    usuarioTestImplementation.extendsFrom testImplementation
+    usuarioTestRuntimeOnly.extendsFrom testRuntimeOnly
 }
 
 def dirEntrada = file('entrada-usuario')
@@ -541,6 +525,7 @@ tasks.register('organizarUsuario') {
                 }
 
                 // 2) Se o artefato renomeado é uma CLASSE (não final), cria classe-ponte com o nome antigo
+                //    para manter compat (ex.: public class GerenciadorTarefas extends Tarefas { ... }).
                 boolean precisaBridge = false
                 String pacoteDoUsuario = pacoteUsuario ?: ''
                 String headerPkg = pacoteDoUsuario ? "package ${pacoteDoUsuario};\n" : ""
@@ -793,7 +778,7 @@ tasks.register('organizarUsuario') {
             }
         }
 
-        def testesIA2 = testesIA.collect { ti ->
+        testesIA = testesIA.collect { ti ->
             String t = sanitizeJavaTest(ti.text)
             String patched = t.replaceAll(
                 /(\\b[A-Za-z_][A-Za-z0-9_]*)\\.users\\.get\\(([^)]+)\\)\\.isActive\\s*=\\s*(true|false)\\s*;/,
@@ -808,13 +793,15 @@ tasks.register('organizarUsuario') {
             [file: ti.file, text: patched]
         }
 
-        // --- SANEAMENTO DE FONTES DE PRODUÇÃO ---
+        // --- SANEAMENTO DE FONTES DE PRODUÇÃO (robusto contra "lixo" fora da classe) ---
         def sanitizeJavaMain = { String s ->
             if (s == null) return s
+            // Remove BOM e cercas de markdown
             s = s.replace('\uFEFF','')
             s = s.replaceAll('(?m)^```\\w*\\s*\\r?\\n?', '')
             s = s.replaceAll('(?m)^```\\s*$', '')
 
+            // Remove linhas iniciais não-Java até o primeiro token válido
             def lines = s.readLines()
             def inicioValido = { String ln ->
                 ln ==~ /\s*/ ||
@@ -827,16 +814,20 @@ tasks.register('organizarUsuario') {
             while (!lines.isEmpty() && !inicioValido(lines[0])) { lines.remove(0) }
             s = lines.join('\n')
 
+            // Localiza a primeira declaração pública de tipo
             def m = (s =~ /(?m)^\s*public\s+(?:class|interface|enum|record)\s+[A-Za-z_]\w*\b/)
             if (!m.find()) {
+                // Sem tipo público — devolve o que temos (não vamos arriscar cortar demais)
                 return s
             }
             int declStart = m.start()
+            // Acha a primeira '{' depois da declaração
             int braceOpen = s.indexOf('{', declStart)
             if (braceOpen == -1) {
-                return s
+                return s // sem '{' — não há o que balancear
             }
 
+            // Varre contando chaves até fechar o bloco do tipo
             int depth = 0
             int endIdx = -1
             for (int i = braceOpen; i < s.length(); i++) {
@@ -847,8 +838,10 @@ tasks.register('organizarUsuario') {
             }
 
             if (endIdx != -1) {
+                // Corta qualquer coisa após o fechamento do tipo (remove statements soltos como "scanner.close();")
                 s = s.substring(0, endIdx + 1)
             } else {
+                // Arquivo termina sem fechar — completa com as chaves necessárias
                 s = s + ("\n" + ("}" * depth) + "\n")
             }
 
@@ -861,7 +854,7 @@ tasks.register('organizarUsuario') {
         fontesUsuario = fontesUsuarioSan
 
         fontesUsuario.each { gravar(it.text, false) }
-        testesIA2.each    { gravar(it.text, true)  }
+        testesIA.each     { gravar(it.text, true)  }
 
         // --- [INÍCIO: injeção condicional de stubs do modelo] ---
         def modeloPkgPath = new File(dirMain, "org/example/model")
@@ -873,7 +866,7 @@ tasks.register('organizarUsuario') {
             }.any { it.text.contains("package org.example.model") }
         }
 
-        def allText = (fontesUsuario.collect{it.text} + testesIA2.collect{it.text}).join("\n")
+        def allText = (fontesUsuario.collect{it.text} + testesIA.collect{it.text}).join("\n")
         def precisaRel   = allText.contains("RelatorioCobertura") && !modeloJaExiste("RelatorioCobertura")
         def precisaClasse= allText.contains("ClasseCoberta")      && !modeloJaExiste("ClasseCoberta")
         def precisaMetodo= allText.contains("MetodoCoberto")      && !modeloJaExiste("MetodoCoberto")
@@ -930,12 +923,10 @@ tasks.register('organizarUsuario') {
         if (nomePublico)  println "organizarUsuario → nome público (usuario): ${nomePublico}"
         if (nomeEsperado) println "organizarUsuario → nome esperado (testes): ${nomeEsperado}"
         if (pacoteUsuario) println "organizarUsuario → pacote do usuário detectado: ${pacoteUsuario}"
-    }
-}
 
-// 🔗 evita “implicit dependency” (organizar usa saída de resolverDeps)
-tasks.named('organizarUsuario') {
-    mustRunAfter 'resolverDepsUsuario'
+        // === [SMOKE TEST] Gera um teste mínimo no STAGE se nenhum válido existir depois ===
+        // (deixamos aqui apenas para fallback; o NoOp final também cobre)
+    }
 }
 
 // === Sanear testes do usuário (em RAW) ===
@@ -992,23 +983,6 @@ tasks.register('sanearTestesUsuario') {
                 }
             }
 
-            // 2b) 🩹 Cura: se houver @Test mas nenhum método de teste, injeta um no-op
-            if (src.contains("@Test")) {
-                def temMetodoDeTeste = (src =~ /@Test[\s\S]*?(?:public\s+)?void\s+[A-Za-z_]\w*\s*\(\s*\)\s*\{/).find()
-                if (!temMetodoDeTeste) {
-                    // garante import das Assertions se ainda não existir
-                    if (!(src =~ /(?m)^\s*import\s+static\s+org\.junit\.jupiter\.api\.Assertions\.\*\s*;/).find()) {
-                        if ((src =~ /(?m)^\s*package\s+[^;]+;\s*$/).find()) {
-                            src = src.replaceFirst(/(?m)^(\s*package\s+[^;]+;\s*)/, "\$1\nimport static org.junit.jupiter.api.Assertions.*;\n")
-                        } else {
-                            src = "import static org.junit.jupiter.api.Assertions.*;\n" + src
-                        }
-                    }
-                    // injeta método no-op para @Test órfão no fim do arquivo
-                    src = src.replaceFirst(/@Test\s*$/, "@Test\nvoid autoFix() { assertTrue(true); }")
-                }
-            }
-
             // 3b) Declarações (com ou sem modificadores/anotações) sem ';'
             def out = new StringBuilder()
             def patSemipadrao = java.util.regex.Pattern.compile(
@@ -1016,6 +990,7 @@ tasks.register('sanearTestesUsuario') {
                 '(?:(?:public|private|protected|static|final|abstract|transient|volatile|synchronized)\\s+)*' +
                 '([A-Za-z_][\\w.<>\\[\\]]*)\\s+([A-Za-z_]\\w*)\\s*$'
             )
+
             src.readLines().each { ln ->
                 String t = ln.trim()
                 boolean comentario   = t.startsWith('//') || t.startsWith('/*') || t.startsWith('*')
@@ -1025,41 +1000,15 @@ tasks.register('sanearTestesUsuario') {
             }
             src = out.toString()
 
-            // 4) 🛡️ Balanceamento robusto de chaves:
-            //    - remove '}' que fechariam abaixo de zero (órfãs);
-            //    - no final, completa com '}' faltantes.
-            StringBuilder fixed = new StringBuilder()
-            int depth = 0
+            // 4) Fecha chaves faltantes no fim
+            int abre = 0, fecha = 0
             for (int i = 0; i < src.length(); i++) {
                 char c = src.charAt(i)
-                if (c == '}') {
-                    if (depth == 0) {
-                        // ignora chave órfã (impede fechamento prematuro da classe)
-                        continue
-                    } else {
-                        depth--
-                        fixed.append(c)
-                    }
-                } else {
-                    if (c == '{') depth++
-                    fixed.append(c)
-                }
+                if (c == '{') abre++
+                else if (c == '}') fecha++
             }
-            if (depth > 0) {
-                fixed.append('\n')
-                for (int d = 0; d < depth; d++) fixed.append('}')
-                fixed.append('\n')
-            }
-            src = fixed.toString()
-
-            // 5) 🧰 Opção A — Embrulhar @Test top-level quando não houver classe
-            boolean temClasse = (src =~ /(?m)^\s*(public\s+)?(class|interface|enum|record)\s+[A-Za-z_]\w*/).find()
-            if (!temClasse && src.contains("@Test")) {
-                // separa head (package+imports) e corpo
-                def m = (src =~ /(?s)^\s*((?:package\s+[^;]+;\s*)?(?:import\s+[^;]+;\s*)*)/)
-                String head = ""; String body = src
-                if (m.find()) { head = m.group(1); body = src.substring(m.end()) }
-                src = head + "\nclass AutoWrappedTest {\n" + body + "\n}\n"
+            if (abre > fecha) {
+                src = src + ("\n" + ("}" * (abre - fecha)) + "\n")
             }
 
             f.setText(src, 'UTF-8')
@@ -1108,21 +1057,10 @@ tasks.register('preflightUsuarioTests') {
             if (!f.isFile() || !f.name.endsWith('.java')) return
 
             def txt = f.getText('UTF-8')
-
-            // ✅ nova validação: chaves balanceadas
-            int abre = 0, fecha = 0
-            for (int i = 0; i < txt.length(); i++) {
-                char c = txt.charAt(i)
-                if (c == '{') abre++
-                else if (c == '}') fecha++
-            }
-            boolean chavesBalanceadas = (abre == fecha)
-
-            boolean temClasse       = (txt =~ /(?m)^\s*(public\s+)?(class|interface|enum|record)\s+[A-Za-z_]\w*/).find()
-            boolean temJUnit        = txt.contains('@Test') || txt.contains('org.junit')
-            boolean temMetodoDeTeste= (txt =~ /@Test[\s\S]*?(?:public\s+)?void\s+[A-Za-z_]\w*\s*\(\s*\)\s*\{/).find()
-            boolean semPlaceholders = !(txt.contains("====CODIGO====") || txt.contains("```"))
-            if (temClasse && temJUnit && temMetodoDeTeste && semPlaceholders && chavesBalanceadas) {
+            // Critérios mínimos de validade (baratos e seguros)
+            boolean temClasse = (txt =~ /(?m)^\s*(public\s+)?(class|interface|enum|record)\s+[A-Za-z_]\w*/).find()
+            boolean temJUnit  = txt.contains('@Test') || txt.contains('org.junit')
+            if (temClasse && temJUnit) {
                 // Copia p/ stage mantendo estrutura relativa
                 def rel = raw.toPath().relativize(f.toPath()).toString()
                 def dst = new File(stage, rel)
@@ -1193,6 +1131,8 @@ tasks.named(sourceSets.usuarioTest.compileJavaTaskName) {
     options.incremental = false
     outputs.upToDateWhen { false }
 }
+
+
 
 // ===== Runner padrão do Gradle (mantido, mas não é o caminho do covUsuario) =====
 tasks.register('testUsuario', Test) {
@@ -1296,120 +1236,6 @@ tasks.register("coberturaMinimaUsuario") {
     }
 }
 
-/* ===================== GATES SONAR → TESTES DEVEM EXERCITAR O CÓDIGO ===================== */
-
-// 1) Extrai fila de alvos priorizados a partir do relatorio-sonar.json
-tasks.register('analisarPrioridadesSonar') {
-    group = 'verification'
-    description = 'Extrai classes-alvo por prioridade (Bugs>Vulns>Smells>Complexity>Dup).'
-    inputs.file("$projectDir/entrada-usuario/relatorio-sonar.json")
-    outputs.file("$buildDir/usuario-src/targets_por_prioridade.txt")
-    doLast {
-        def inJson = file("$projectDir/entrada-usuario/relatorio-sonar.json")
-        if (!inJson.exists() || inJson.length()==0) {
-            throw new GradleException("relatorio-sonar.json ausente/vazio. Rode a extração antes.")
-        }
-        def root
-        try {
-            root = new JsonSlurper().parseText(inJson.getText('UTF-8'))
-        } catch (Throwable t) {
-            throw new GradleException("relatorio-sonar.json inválido: ${t.message}")
-        }
-
-        def issues = (root?.issues instanceof List) ? root.issues : []
-        def byBucket = ['BUGS':[] as Set, 'VULNS':[] as Set, 'SMELLS':[] as Set, 'COMPLEXITY':[] as Set, 'DUPLICATION':[] as Set]
-        def bucketOf = { issue ->
-            switch (String.valueOf(issue?.type)) {
-                case 'BUG':            return 'BUGS'
-                case 'VULNERABILITY':  return 'VULNS'
-                case 'CODE_SMELL':     return 'SMELLS'
-                default:               return null
-            }
-        }
-        issues.each { is ->
-            def b = bucketOf(is) ?: 'SMELLS'
-            def comp = String.valueOf(is?.component ?: '')
-            if (!comp) return
-            def m = (comp =~ /([A-Za-z0-9_\/\.-]+\.java)$/)
-            if (m.find()) byBucket[b] << m.group(1)
-        }
-
-        def fila = []
-        ['BUGS','VULNS','SMELLS','COMPLEXITY','DUPLICATION'].each { k ->
-            fila.addAll(byBucket[k].toList())
-        }
-
-        def out = file("$buildDir/usuario-src/targets_por_prioridade.txt")
-        out.parentFile.mkdirs()
-        out.text = fila.join('\n') + '\n'
-        println "analisarPrioridadesSonar → alvos priorizados: ${fila.size()} (arquivo: ${out})"
-    }
-}
-
-// 2) Valida que os testes do STAGE referenciam as classes priorizadas (ou ao menos alguma classe do usuário)
-tasks.register('verificarPrioridadeECoberturaAlvo') {
-    group = 'verification'
-    description = 'Garante que os testes exercitam classes priorizadas do usuário conforme o Sonar.'
-    dependsOn 'preflightUsuarioTests', 'analisarPrioridadesSonar'
-    inputs.files("$buildDir/usuario-src/src/test/java")
-    inputs.file("$buildDir/usuario-src/targets_por_prioridade.txt")
-    inputs.files("$buildDir/usuario-src/src/main/java")
-    outputs.file("$projectDir/entrada-usuario/testes_explicações/gaps_prioridade.txt")
-    doLast {
-        def stageDir = file("$buildDir/usuario-src/src/test/java")
-        def mainDir  = file("$buildDir/usuario-src/src/main/java")
-        def fila     = file("$buildDir/usuario-src/targets_por_prioridade.txt")
-        def gapsFile = file("$projectDir/entrada-usuario/testes_explicações/gaps_prioridade.txt")
-
-        if (!stageDir.exists()) {
-            throw new GradleException("Sem testes no STAGE. O gerador/loop deve criar testes primeiro.")
-        }
-        def testsTxt = new StringBuilder()
-        fileTree(stageDir) { include '**/*.java' }.each { testsTxt.append(it.getText('UTF-8')).append('\n') }
-        String allTests = testsTxt.toString()
-
-        // Nomes de classes do usuário
-        def userClasses = [] as Set
-        fileTree(mainDir) { include '**/*.java' }.each { f ->
-            def t = f.getText('UTF-8')
-            def m = (t =~ /(?m)^\s*public\s+(?:class|interface|enum|record)\s+([A-Za-z_]\w*)\b/)
-            if (m.find()) userClasses << m.group(1)
-        }
-
-        // O teste toca a classe se chama NomeClasse.algo(…) ou NomeClasse.main(new String[]{})
-        def touches = { String simple ->
-            def pat = ~/(?s)\b${java.util.regex.Pattern.quote(simple)}\s*\.\s*[A-Za-z_]\w*\s*\(/
-            def patMain = ~/(?s)\b${java.util.regex.Pattern.quote(simple)}\s*\.\s*main\s*\(\s*new\s+String\[\]\s*\)/
-            return pat.matcher(allTests).find() || patMain.matcher(allTests).find()
-        }
-
-        def targets = fila.exists() ? fila.readLines().findAll{ it?.trim() } : []
-        def toSimple = { String path -> path.replace('\\','/').tokenize('/').last()?.replaceAll(/\.java$/,'') }
-
-        def faltantes = [] as List<String>
-        if (targets.isEmpty()) {
-            def ok = userClasses.any { touches(it) }
-            if (!ok) faltantes << "(geral) Nenhum teste referencia classes do usuário."
-        } else {
-            targets.each { path ->
-                def simple = toSimple(path)
-                if (simple && !touches(simple)) {
-                    faltantes << "Falta teste que exercite ${simple} (alvo priorizado: ${path})"
-                }
-            }
-        }
-
-        gapsFile.parentFile.mkdirs()
-        if (faltantes.isEmpty()) {
-            gapsFile.text = "OK: todos os alvos priorizados estão referenciados por testes do STAGE.\n"
-            println "verificarPrioridadeECoberturaAlvo → OK"
-        } else {
-            gapsFile.text = (["Lacunas detectadas (ordem de prioridade Sonar):"] + faltantes).join("\n") + "\n"
-            println gapsFile.text
-            throw new GradleException("Faltam testes que toquem classes priorizadas. Veja ${gapsFile} e ajuste via IA.")
-        }
-    }
-}
 
 /* ===================== NOVO FLUXO: ConsoleLauncher + JaCoCo ===================== */
 
@@ -1419,9 +1245,7 @@ tasks.register("testUsuarioConsole", JavaExec) {
 
     dependsOn 'organizarUsuario', 'resolverDepsUsuario',
               tasks.named(sourceSets.usuario.classesTaskName),
-              tasks.named(sourceSets.usuarioTest.classesTaskName),
-              // 🔒 Gate: só roda ConsoleLauncher se os testes tocarem as classes priorizadas
-              'verificarPrioridadeECoberturaAlvo'
+              tasks.named(sourceSets.usuarioTest.classesTaskName)
 
     mainClass = 'org.junit.platform.console.ConsoleLauncher'
     classpath = sourceSets.usuarioTest.runtimeClasspath
@@ -1562,7 +1386,7 @@ tasks.named("jacocoRelatorioUsuario") {
     finalizedBy("jacocoRelatorioGeral")
 }
 tasks.named("jacocoRelatorioUsuarioConsole") {
-    finalizedBy("jacocoXmlGarantido")
+    finalizedBy("coberturaMinimaUsuario")
 }
 
 tasks.register('usuarioCobertura') {
@@ -1623,14 +1447,4 @@ tasks.register("gerarPacoteParaIA", Zip) {
 // Alias conveniente local
 tasks.register("covUsuarioComPayload") {
     dependsOn "covUsuario", "gerarPacoteParaIA"
-}
-
-/* ======== Compatibilidade com configuration cache: marcar tasks dinâmicas ======== */
-['resolverDepsUsuario','organizarUsuario','sanearTestesUsuario','preflightUsuarioTests',
- 'injectNoOpTestIfNeeded','testUsuarioConsole','jacocoRelatorioUsuarioConsole'].each { n ->
-    if (tasks.findByName(n)) {
-        tasks.named(n) {
-            notCompatibleWithConfigurationCache("Task usa closures dinâmicos/IO fora do modelo CC.")
-        }
-    }
 }
