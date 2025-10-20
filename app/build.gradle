@@ -25,6 +25,9 @@ configurations {
     jacocoAgentRuntime
 }
 
+/** 🚫 Kill switch para renomear produção (default: false) */
+def ALLOW_RENAME = providers.provider { (System.getenv("ALLOW_RENAME") ?: "false").equalsIgnoreCase("true") }
+
 dependencies {
     // Testes (JUnit)
     testImplementation libs.junit.jupiter
@@ -105,7 +108,7 @@ tasks.register('ajustarTestesIa', JavaExec) {
     group = "verification"
     description = "Pede à Groq patches de testes, salva em entrada-usuario/testes_ai_patches"
     classpath = sourceSets.main.runtimeClasspath
-    mainClass = 'org.example.web.cli.AjustarTestesCli'
+    mainClass = 'org.example.web.ia.AjustarTestesCli'
     // parâmetros padrão (podem ser sobrescritos no CI)
     args "--modelo=${System.getenv('GROQ_MODELO') ?: 'llama-3.1-8b-instant'}"
     environment "GROQ_API_KEY", System.getenv("GROQ_API_KEY") ?: ""
@@ -483,7 +486,8 @@ tasks.register('organizarUsuario') {
         boolean deveRenomear = (nomePublico && nomeEsperado && nomePublico != nomeEsperado &&
                                 nomesPublicosUsuario.size()==1 && nomesReferenciadosTestes.size()==1)
 
-        if (deveRenomear) {
+        // 🔒 Proteção para NÃO renomear produção (default)
+        if (ALLOW_RENAME.get() && deveRenomear) {
             fontesUsuario = fontesUsuario.collect { f ->
                 if (extrairNomePublico(f.text) == nomePublico) {
                     def novoTexto = f.text
@@ -524,8 +528,7 @@ tasks.register('organizarUsuario') {
                     [file: ti.file, text: txt]
                 }
 
-                // 2) Se o artefato renomeado é uma CLASSE (não final), cria classe-ponte com o nome antigo
-                //    para manter compat (ex.: public class GerenciadorTarefas extends Tarefas { ... }).
+                // 2) Se o artefato renomeado é uma CLASSE (não final), cria classe-ponte
                 boolean precisaBridge = false
                 String pacoteDoUsuario = pacoteUsuario ?: ''
                 String headerPkg = pacoteDoUsuario ? "package ${pacoteDoUsuario};\n" : ""
@@ -533,7 +536,6 @@ tasks.register('organizarUsuario') {
                 // Descobre se a definição pós-rename é "public class <nomeEsperado>" e não é final
                 fontesUsuario.each { fu ->
                     def t = fu.text
-                    // depois do rename, a declaração já deve estar com nomeEsperado:
                     def mClass = (t =~ /(?m)^\s*public\s+(?:class)\s+${java.util.regex.Pattern.quote(nomeEsperado)}\b/)
                     def mFinal = (t =~ /(?m)^\s*public\s+final\s+class\s+${java.util.regex.Pattern.quote(nomeEsperado)}\b/)
                     if (mClass.find() && !mFinal.find()) {
@@ -566,6 +568,8 @@ tasks.register('organizarUsuario') {
                 }
             }
 
+        } else if (deveRenomear) {
+            println "organizarUsuario → ⚠️ rename AUTOMÁTICO DESLIGADO (regra: não renomear produção). Ajuste os TESTES para referenciar '${nomePublico}'."
         }
 
         def ajustarTesteParaPacoteUsuario = { String texto ->

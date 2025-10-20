@@ -1,68 +1,50 @@
-import java.util.ArrayList;
 import java.util.Scanner;
 
-public class GerenciadorTarefas {
+public class Calculadora {
     public static void main(String[] args) {
         Scanner scanner = new Scanner(System.in);
-        ArrayList<String> tarefas = new ArrayList<>();
-        int opcao;
         
-        System.out.println("=== GERENCIADOR DE TAREFAS ===");
+        System.out.println("=== CALCULADORA SIMPLES ===");
+        System.out.print("Digite o primeiro número: ");
+        double num1 = scanner.nextDouble();
         
-        do {
-            System.out.println("\nMenu:");
-            System.out.println("1 - Adicionar tarefa");
-            System.out.println("2 - Listar tarefas");
-            System.out.println("3 - Remover tarefa");
-            System.out.println("4 - Sair");
-            System.out.print("Escolha uma opção: ");
-            
-            opcao = scanner.nextInt();
-            scanner.nextLine(); // Limpar buffer
-            
-            switch (opcao) {
-                case 1:
-                    System.out.print("Digite a tarefa: ");
-                    String tarefa = scanner.nextLine();
-                    tarefas.add(tarefa);
-                    System.out.println("Tarefa adicionada!");
-                    break;
-                    
-                case 2:
-                    if (tarefas.isEmpty()) {
-                        System.out.println("Nenhuma tarefa cadastrada.");
-                    } else {
-                        System.out.println("\n=== LISTA DE TAREFAS ===");
-                        for (int i = 0; i < tarefas.size(); i++) {
-                            System.out.println((i + 1) + ". " + tarefas.get(i));
-                        }
-                    }
-                    break;
-                    
-                case 3:
-                    if (tarefas.isEmpty()) {
-                        System.out.println("Nenhuma tarefa para remover.");
-                    } else {
-                        System.out.print("Digite o número da tarefa a remover: ");
-                        int numero = scanner.nextInt();
-                        if (numero >= 1 && numero <= tarefas.size()) {
-                            tarefas.remove(numero - 1);
-                            System.out.println("Tarefa removida!");
-                        } else {
-                            System.out.println("Número inválido!");
-                        }
-                    }
-                    break;
-                    
-                case 4:
-                    System.out.println("Saindo... Até logo!");
-                    break;
-                    
-                default:
-                    System.out.println("Opção inválida!");
-            }
-            
-        } while (opcao != 4);
+        System.out.print("Digite o segundo número: ");
+        double num2 = scanner.nextDouble();
+        
+        System.out.println("\nEscolha a operação:");
+        System.out.println("1 - Soma (+)");
+        System.out.println("2 - Subtração (-)");
+        System.out.println("3 - Multiplicação (*)");
+        System.out.println("4 - Divisão (/)");
+        System.out.print("Opção: ");
+        
+        int opcao = scanner.nextInt();
+        double resultado = 0;
+        
+        switch (opcao) {
+            case 1:
+                resultado = num1 + num2;
+                System.out.println(num1 + " + " + num2 + " = " + resultado);
+                break;
+            case 2:
+                resultado = num1 - num2;
+                System.out.println(num1 + " - " + num2 + " = " + resultado);
+                break;
+            case 3:
+                resultado = num1 * num2;
+                System.out.println(num1 + " * " + num2 + " = " + resultado);
+                break;
+            case 4:
+                if (num2 != 0) {
+                    resultado = num1 / num2;
+                    System.out.println(num1 + " / " + num2 + " = " + resultado);
+                } else {
+                    System.out.println("Erro: Divisão por zero!");
+                }
+                break;
+            default:
+                System.out.println("Opção inválida!");
+        }
         
         scanner.close();
     }
