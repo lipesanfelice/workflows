@@ -169,7 +169,7 @@ jobs:
       env:
         GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
         GROQ_MODELO: llama-3.1-8b-instant
-        MAX_TRIES: '10'
+        MAX_TRIES: '5'
       run: |
         set -euo pipefail
         tries=1
@@ -207,6 +207,21 @@ jobs:
 
         echo "JACOCO_XML=${{ github.workspace }}/app/entrada-usuario/jacoco-relatorio/jacoco.xml" >> $GITHUB_ENV
         echo "JACOCO_EXEC=${{ github.workspace }}/app/build/jacoco/testUsuarioConsole.exec" >> $GITHUB_ENV
+
+    - name: Upload Jacoco HTML
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: jacoco-html
+        path: app/entrada-usuario/jacoco-relatorio/html/
+
+    - name: Upload Jacoco XML
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: jacoco-xml
+        path: app/entrada-usuario/jacoco-relatorio/jacoco.xml
+
 
 
     - name: Debug cobertura

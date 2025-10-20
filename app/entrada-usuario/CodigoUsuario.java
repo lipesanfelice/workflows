@@ -1,105 +1,71 @@
-import java.lang.annotation.*;
-import java.lang.reflect.Method;
 import java.util.*;
 import java.util.concurrent.*;
-import java.util.function.Consumer;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
-@Retention(RetentionPolicy.RUNTIME)
-@Target(ElementType.METHOD)
-public @interface Subscribe {
-    String topic() default "";
-    boolean async() default false;
-    int priority() default 0;
-}
+public class DataPipelineProcessor<T, R> {
+    private final List<ProcessingStage<T, ?>> stages;
+    private final ExecutorService executor;
 
-public class AdvancedEventBus {
-    private final Map<String, List<Subscriber>> subscribers;
-    private final ExecutorService asyncExecutor;
-    private final boolean enableLogging;
-
-    public AdvancedEventBus(boolean enableLogging) {
-        this.subscribers = new ConcurrentHashMap<>();
-        this.asyncExecutor = Executors.newCachedThreadPool();
-        this.enableLogging = enableLogging;
+    public DataPipelineProcessor() {
+        this.stages = new ArrayList<>();
+        this.executor = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors());
     }
 
-    private class Subscriber implements Comparable<Subscriber> {
-        final Object target;
-        final Method method;
-        final boolean async;
-        final int priority;
+    public <U> DataPipelineProcessor<T, U> addStage(Function<T, U> transformer) {
+        return addStage(transformer, false);
+    }
 
-        Subscriber(Object target, Method method, boolean async, int priority) {
-            this.target = target;
-            this.method = method;
-            this.async = async;
-            this.priority = priority;
-            method.setAccessible(true);
+    public <U> DataPipelineProcessor<T, U> addStage(Function<T, U> transformer, boolean parallel) {
+        stages.add(new ProcessingStage<>(transformer, parallel));
+        return (DataPipelineProcessor<T, U>) this;
+    }
+
+    public CompletableFuture<List<R>> process(List<T> input) {
+        if (stages.isEmpty()) {
+            return CompletableFuture.completedFuture((List<R>) input);
         }
 
-        void handleEvent(Object event) {
-            if (async) {
-                asyncExecutor.submit(() -> invokeMethod(event));
-            } else {
-                invokeMethod(event);
-            }
+        CompletableFuture<List<?>> current = CompletableFuture.completedFuture(input);
+
+        for (ProcessingStage<T, ?> stage : stages) {
+            current = current.thenCompose(data -> processStage(stage, (List<Object>) data));
         }
 
-        private void invokeMethod(Object event) {
-            try {
-                method.invoke(target, event);
-            } catch (Exception e) {
-                if (enableLogging) {
-                    System.err.println("Error invoking subscriber: " + e.getMessage());
-                }
-            }
-        }
+        return current.thenApply(result -> (List<R>) result);
+    }
 
-        @Override
-        public int compareTo(Subscriber other) {
-            return Integer.compare(other.priority, this.priority);
+    private <I, O> CompletableFuture<List<O>> processStage(ProcessingStage<I, O> stage, List<I> input) {
+        if (stage.isParallel()) {
+            List<CompletableFuture<O>> futures = input.stream()
+                    .map(item -> CompletableFuture.supplyAsync(() -> stage.getTransformer().apply(item), executor))
+                    .collect(Collectors.toList());
+
+            return CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]))
+                    .thenApply(v -> futures.stream()
+                            .map(CompletableFuture::join)
+                            .collect(Collectors.toList()));
+        } else {
+            return CompletableFuture.supplyAsync(() -> input.stream()
+                    .map(stage.getTransformer())
+                    .collect(Collectors.toList()), executor);
         }
     }
 
-    public void register(Object listener) {
-        for (Method method : listener.getClass().getDeclaredMethods()) {
-            if (method.isAnnotationPresent(Subscribe.class)) {
-                Subscribe annotation = method.getAnnotation(Subscribe.class);
-                String topic = annotation.topic();
-                boolean async = annotation.async();
-                int priority = annotation.priority();
+    private static class ProcessingStage<I, O> {
+        private final Function<I, O> transformer;
+        private final boolean parallel;
 
-                Class<?>[] params = method.getParameterTypes();
-                if (params.length != 1) {
-                    throw new IllegalArgumentException("Subscriber method must have exactly one parameter");
-                }
-
-                Subscriber subscriber = new Subscriber(listener, method, async, priority);
-                subscribers.computeIfAbsent(topic, k -> new ArrayList<>()).add(subscriber);
-                
-                // Sort by priority
-                subscribers.get(topic).sort(Subscriber::compareTo);
-            }
-        }
-    }
-
-    public void post(Object event) {
-        post("", event);
-    }
-
-    public void post(String topic, Object event) {
-        List<Subscriber> topicSubscribers = subscribers.getOrDefault(topic, new ArrayList<>());
-        
-        if (enableLogging) {
-            System.out.println("Dispatching event to " + topicSubscribers.size() + " subscribers");
+        public ProcessingStage(Function<I, O> transformer, boolean parallel) {
+            this.transformer = transformer;
+            this.parallel = parallel;
         }
 
-        for (Subscriber subscriber : topicSubscribers) {
-            subscriber.handleEvent(event);
-        }
+        public Function<I, O> getTransformer() { return transformer; }
+        public boolean isParallel() { return parallel; }
     }
 
     public void shutdown() {
-        asyncExecutor.shutdown();
+        executor.shutdown();
     }
 }
