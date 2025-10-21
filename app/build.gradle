@@ -170,7 +170,7 @@ def mapaImports = [
     'org.apache.http.client'           : 'org.apache.httpcomponents:httpclient:4.5.14',
     'okhttp3'                          : 'com.squareup.okhttp3:okhttp:4.12.0',
     'retrofit2'                        : 'com.squareup.retrofit2:retrofit:2.11.0',
-    'okio'                             : 'com.squareup.okio:okio:3.9.0',
+    'okio'                             : 'com.squareup.okio:3.9.0',
     'org.jsoup'                        : 'org.jsoup:jsoup:1.18.1',
 
     // === Banco de dados / JDBC ===
@@ -1062,8 +1062,8 @@ tasks.register('sanearTestesUsuario') {
                 boolean usaQualAssertions = PAT_QUAL_ASSERTIONS.matcher(src).find()
                 boolean temImportAssertions = PAT_IMPORT_ASSERTIONS.matcher(src).find()
                 if (usaQualAssertions && !temImportAssertions) {
-                    if ((src =~ /(?m)^\\s*package\\s+[^;]+;\\s*$/).find()) {
-                        src = src.replaceFirst(/(?m)^(\\s*package\\s+[^;]+;\\s*)/, "\$1\nimport org.junit.jupiter.api.Assertions;\n")
+                    if ((src =~ /(?m)^\s*package\s+[^;]+;\s*$/).find()) {
+                        src = src.replaceFirst(/(?m)^(\s*package\s+[^;]+;\s*)/, "\$1\nimport org.junit.jupiter.api.Assertions;\n")
                     } else {
                         src = "import org.junit.jupiter.api.Assertions;\n" + src
                     }
@@ -1071,8 +1071,6 @@ tasks.register('sanearTestesUsuario') {
                 }
             }
         }
-
-
 
         println "sanearTestesUsuario → testes (raw) higienizados."
     }
@@ -1101,7 +1099,6 @@ import java.util.regex.Pattern
 import java.util.regex.PatternSyntaxException
 
 // ... (mantenha o resto do arquivo) ...
-
 
 def entradaUsuario = "${projectDir}/entrada-usuario"
 
@@ -1394,75 +1391,56 @@ tasks.register("coberturaMinimaUsuario") {
 
 /* ===================== NOVO FLUXO: ConsoleLauncher + JaCoCo ===================== */
 
-
+// 🚀 Executa os testes do sourceSet usuarioTest via JUnit ConsoleLauncher + JaCoCo
 tasks.register("testUsuarioConsole", JavaExec) {
     group = "verification"
-    description = "Roda os testes do sourceSet usuarioTest usando o JUnit ConsoleLauncher (instrumentado pelo JaCoCo)."
+    description = "Roda os testes do sourceSet usuarioTest usando JUnit ConsoleLauncher (com JaCoCo)."
 
+    // garante tudo pronto antes de rodar
     dependsOn 'organizarUsuario', 'resolverDepsUsuario',
               tasks.named(sourceSets.usuario.classesTaskName),
               tasks.named(sourceSets.usuarioTest.classesTaskName)
 
+    // ConsoleLauncher do JUnit 5
     mainClass = 'org.junit.platform.console.ConsoleLauncher'
     classpath = sourceSets.usuarioTest.runtimeClasspath
 
-    // Varre todo o classpath por testes
+    // Descoberta & filtros
     args '--scan-class-path'
-    // força engine jupiter (ajuda a descoberta)
     args '--include-engine', 'junit-jupiter'
-    // Sumário legível
     args '--details', 'summary'
+    args '--details-theme', 'ascii'
+    args '--reports-dir', "$projectDir/entrada-usuario/junit-console"
+    // Se quiser falhar quando não achar nenhum teste, descomente:
+    // args '--fail-if-no-tests'
 
-    // Não falhar o build se testes falharem (para ainda gerar cobertura)
+    // não derrubar o build se algum teste falhar (a cobertura ainda sai)
     ignoreExitValue = true
 
     // Charset consistente
     jvmArgs '-Dfile.encoding=UTF-8'
 
     doFirst {
-        file("$buildDir/jacoco").mkdirs()
-        // ⚠️ INJEÇÃO DO AGENTE (com proteção anti-quebra)
-        try {
-            def agent = configurations.jacocoAgentRuntime.singleFile
-            if (agent == null || !agent.exists()) {
-                logger.lifecycle("testUsuarioConsole → agente JaCoCo não encontrado; rodando sem cobertura.")
-            } else {
-                def dest  = file("$buildDir/jacoco/testUsuarioConsole.exec").absolutePath
-                jvmArgs "-javaagent:${agent.absolutePath}=destfile=${dest},append=true,output=file,inclnolocationclasses=false,includes=*"
-            }
-        } catch (Throwable t) {
-            logger.lifecycle("testUsuarioConsole → falha ao injetar JaCoCo: ${t.class.simpleName}: ${t.message}. Seguindo sem cobertura.")
-        }
-    }
-
-    doLast {
-        def exec = file("$buildDir/jacoco/testUsuarioConsole.exec")
-        println "testUsuarioConsole → exec: ${exec.exists() ? exec.length() + ' bytes' : 'não gerado'}"
-    }
-
-    standardInput = System.in
-}
-
-// Ajustes/diagnóstico para o ConsoleLauncher
-tasks.named("testUsuarioConsole", JavaExec) {
-    // Onde salvar os relatórios de descoberta/execução do JUnit Console
-    args '--details-theme', 'ascii'
-    args '--reports-dir', "$projectDir/entrada-usuario/junit-console"
-
-    // (Opcional, útil no CI) falhar se não houver nenhum teste descoberto
-    // args '--fail-if-no-tests'
-
-    doFirst {
-        // Loga quantos .class de teste temos no STAGE
+        // 1) Log: quantos .class de teste temos no STAGE?
         File testOut = file("$buildDir/classes/java/usuarioTest")
         def count = fileTree(testOut) { include '**/*Test.class', '**/*Tests.class', '**/*_testes.class' }.files.size()
         logger.lifecycle("testUsuarioConsole → classes de teste detectadas no STAGE: ${count}")
 
-        // Confirma agente JaCoCo
+        // 2) Passa a classe pública do usuário (usada pelo NoOpSmokeTest)
+        def meta = file("$projectDir/entrada-usuario/meta/nome_classe.env")
+        if (meta.exists()) {
+            def props = new Properties()
+            meta.withInputStream { props.load(it) }
+            def clazz = (props.getProperty("USUARIO_PUBLIC_CLASS","") ?: "").trim()
+            if (clazz) jvmArgs "-DUSUARIO_PUBLIC_CLASS=${clazz}"
+        }
+
+        // 3) Injeção do agente JaCoCo
+        file("$buildDir/jacoco").mkdirs()
         try {
             def agent = configurations.jacocoAgentRuntime.singleFile
             if (agent?.exists()) {
-                def dest  = file("$buildDir/jacoco/testUsuarioConsole.exec").absolutePath
+                def dest = file("$buildDir/jacoco/testUsuarioConsole.exec").absolutePath
                 jvmArgs "-javaagent:${agent.absolutePath}=destfile=${dest},append=true,output=file,inclnolocationclasses=false,includes=*"
                 logger.lifecycle("testUsuarioConsole → JaCoCo agent injetado: ${agent.name}")
             } else {
@@ -1472,7 +1450,16 @@ tasks.named("testUsuarioConsole", JavaExec) {
             logger.lifecycle("testUsuarioConsole → ⚠️ falha ao injetar JaCoCo: ${t.class.simpleName}: ${t.message}")
         }
     }
+
+    doLast {
+        def exec = file("$buildDir/jacoco/testUsuarioConsole.exec")
+        logger.lifecycle("testUsuarioConsole → exec: ${exec.exists() ? exec.length() + ' bytes' : 'NÃO GERADO'}")
+    }
+
+    // permite digitar no console quando rodar local
+    standardInput = System.in
 }
+
 
 
 // 2) Relatório JaCoCo a partir do .exec do ConsoleLauncher
