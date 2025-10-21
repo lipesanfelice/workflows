@@ -1151,6 +1151,22 @@ tasks.register('injectNoOpTestIfNeeded') {
     }
 }
 
+// Passe final e "silencioso" do JaCoCo, sem IA
+tasks.register("jacocoFinalSolo") {
+    group = "verification"
+    description = "Executa testes instrumentados e gera jacoco.xml sem acionar IA (passe final)."
+
+    // garante toda a cadeia necessária
+    dependsOn "testUsuarioConsole"
+    dependsOn "jacocoRelatorioUsuarioConsole"
+    finalizedBy "jacocoXmlGarantido"
+
+    doLast {
+        println "jacocoFinalSolo → finalizado. Relatórios em: entrada-usuario/jacoco-relatorio/"
+    }
+}
+
+
 
 // =======================================================================================
 

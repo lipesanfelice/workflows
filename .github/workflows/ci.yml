@@ -255,6 +255,12 @@ jobs:
             echo "JACOCO_XML=${{ github.workspace }}/app/entrada-usuario/jacoco-relatorio/jacoco.xml" >> $GITHUB_ENV
             echo "JACOCO_EXEC=${{ github.workspace }}/app/build/jacoco/testUsuarioConsole.exec" >> $GITHUB_ENV
 
+    - name: Passe final JaCoCo (sem IA)
+      run: |
+        ./gradlew --no-daemon --no-configuration-cache -p app jacocoFinalSolo --info
+      env:
+        MIN_COVERAGE: '0.40'   # ou o que preferir; aqui não impede rodar, só informa as tasks
+
 
     - name: Upload Jacoco HTML
       if: always()
