@@ -1086,7 +1086,29 @@ tasks.register('preflightUsuarioTests') {
                 dst.setText(txt, 'UTF-8')
                 quarentenados++
             }
+
+            // --- Heurística anti-falso-positivo de assertThrows ---
+            def throwsPat = ~/(?s)assertThrows\\s*\\(\\s*(ArithmeticException|IllegalArgumentException|NullPointerException)\\s*\\.class/
+            boolean usaAssertThrowsBasico = throwsPat.matcher(txt).find()
+            boolean temLastroThrow = false
+            if (usaAssertThrowsBasico) {
+                // varre fontes 'main' staged procurando 'throw new <Ex>' explícito
+                String mainAll = fileTree("$buildDir/usuario-src/src/main/java") { include '**/*.java' }
+                        .files.collect { it.getText('UTF-8') }.join("\n")
+                def exList = ['ArithmeticException','IllegalArgumentException','NullPointerException']
+                temLastroThrow = exList.any { ex -> mainAll.contains("throw new ${ex}") }
+            }
+            if (usaAssertThrowsBasico && !temLastroThrow) {
+                // manda para quarentena
+                def rel = raw.toPath().relativize(f.toPath()).toString()
+                def dst = new File(quar, rel + ".skip")
+                dst.parentFile.mkdirs()
+                dst.setText(txt, 'UTF-8')
+                quarentenados++
+                return // segue para próximo arquivo
+            }
         }
+
 
         println "preflightUsuarioTests → válidos copiados p/ stage: ${validos}, em quarentena: ${quarentenados}"
     }
@@ -1416,6 +1438,67 @@ tasks.register("covUsuario") {
     finalizedBy "jacocoXmlGarantido"
 }
 
+// ===== Loop resiliente: para ao gerar jacoco != empty (e opcionalmente cobre >= MIN_COVERAGE) =====
+tasks.register("covUsuarioLoop") {
+    group = "verification"
+    description = "Tenta até gerar jacoco.xml com cobertura > 0; para na 1ª vez que conseguir."
+
+    doLast {
+        int maxTentativas = (System.getenv("COV_MAX_ATTEMPTS") ?: "5") as int
+        BigDecimal thr = (System.getenv("MIN_COVERAGE") ?: "0.00") as BigDecimal  // 0.00 = só precisa ter algo
+        boolean enforce = (System.getenv("ENFORCE_COVERAGE") ?: "false").toString().equalsIgnoreCase("true")
+
+        File xml = file("$projectDir/entrada-usuario/jacoco-relatorio/jacoco.xml")
+
+        for (int i = 1; i <= maxTentativas; i++) {
+            println "== Tentativa ${i}/${maxTentativas} =="
+
+            // 1) organiza/resolve/compila/roda testes instrumentados + gera relatório
+            exec { commandLine "./gradlew", ":app:covUsuario"; isIgnoreExitValue = true }
+
+            boolean temContagem = false
+            BigDecimal pct = 0.0
+
+            if (xml.exists() && xml.length() > 0) {
+                // remove DOCTYPE e lê contadores
+                String xmlText = xml.getText("UTF-8").replaceAll("(?is)<!DOCTYPE[^>]*>", "")
+                def sl = new groovy.xml.XmlSlurper(false, false).parseText(xmlText)
+                long missed = 0, covered = 0
+                sl.'**'.findAll { it.name() == 'counter' && it.@type?.text() == 'LINE' }.each { c ->
+                    missed += (c.@missed.text() as long)
+                    covered += (c.@covered.text() as long)
+                }
+                long total = missed + covered
+                temContagem = (total > 0 && covered > 0)
+                if (total > 0) pct = (covered as BigDecimal) / (total as BigDecimal)
+            }
+
+            if (temContagem) {
+                String pctFmt = String.format(java.util.Locale.US, "%.2f", pct * 100)
+                println "✅ Cobertura gerada: ${pctFmt}%"
+                if (pct >= thr || !enforce) {
+                    println "🏁 Parando o loop (critério satisfeito)."
+                    return
+                } else {
+                    println "⚠️ Abaixo do mínimo (${thr*100}%). Tentando melhorar com patches…"
+                }
+            } else {
+                println "❌ Relatório vazio/sem linhas cobertas. Pedindo patches…"
+            }
+
+            // 2) pedir patches para IA (tolerante a erro/429)
+            try {
+                exec { commandLine "./gradlew", ":app:ajustarTestesIa"; isIgnoreExitValue = true }
+            } catch (Throwable t) {
+                println "IA falhou (${t.class.simpleName}): seguindo para próxima tentativa."
+            }
+        }
+
+        println "🔚 Loop esgotado; se ainda não há cobertura suficiente, verifique logs/patches em 'entrada-usuario/testes_ai_patches/'."
+    }
+}
+
+
 /* ===================== FIM: NOVO FLUXO ===================== */
 
 // --- Demais integrações que você já tinha ---
@@ -1511,3 +1594,17 @@ tasks.register("gerarPacoteParaIA", Zip) {
 tasks.register("covUsuarioComPayload") {
     dependsOn "covUsuario", "gerarPacoteParaIA"
 }
+
+// --- Correções de orquestração entre organizarUsuario e resolverDepsUsuario ---
+tasks.named('organizarUsuario') {
+    // garante ordem correta, eliminando o erro de dependência implícita
+    dependsOn 'resolverDepsUsuario'
+    inputs.dir("$projectDir/entrada-usuario/libs")
+    // esta task faz varreduras de FS e escreve múltiplos destinos dinamicamente
+    notCompatibleWithConfigurationCache("Organiza fontes dinamicamente e lê saídas de outras tasks")
+}
+tasks.named('resolverDepsUsuario') {
+    // usa detachedConfiguration e Project.dependencies dentro do doLast
+    notCompatibleWithConfigurationCache("Cria detachedConfiguration em tempo de execução")
+}
+
