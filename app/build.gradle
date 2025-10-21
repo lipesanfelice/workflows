@@ -1026,6 +1026,54 @@ tasks.register('sanearTestesUsuario') {
 
             f.setText(src, 'UTF-8')
         }
+
+        // === NORMALIZAÇÃO DE PACKAGE P/ USUÁRIO NO DEFAULT PACKAGE ===
+        // Se o código do usuário NÃO declara package, remova 'package ...;' dos testes (RAW e STAGE)
+        File srcMain = file("$buildDir/usuario-src/src/main/java")
+        boolean usuarioTemPackage = fileTree(srcMain){ include '**/*.java' }
+                .files.any { it.text =~ /(?m)^\s*package\s+[a-zA-Z0-9_.]+\s*;/ }
+
+        if (!usuarioTemPackage) {
+            [file("$buildDir/usuario-src/src/test_raw/java"),
+            file("$buildDir/usuario-src/src/test/java")].each { dir ->
+                if (!dir.exists()) return
+                fileTree(dir) { include '**/*.java'; exclude '**/*.java.skip' }.each { File f ->
+                    String t = f.getText('UTF-8')
+                    // remove a 1ª linha package; + quebra de linha opcional
+                    t = t.replaceFirst('(?m)^\\s*package\\s+[^;]+;\\s*\\n?', '')
+                    f.setText(t, 'UTF-8')
+                }
+            }
+            println "sanearTestesUsuario → removido 'package ...;' dos testes (usuário em default package)."
+        }
+
+        // === IMPORT DE Assertions QUANDO USADO QUALIFICADO ===
+        // Se o teste usa 'Assertions.xxx(' mas não tem o import, injeta-o.
+        final java.util.regex.Pattern PAT_IMPORT_ASSERTIONS =
+                java.util.regex.Pattern.compile('(?m)^\\s*import\\s+org\\.junit\\.jupiter\\.api\\.Assertions\\s*;')
+        final java.util.regex.Pattern PAT_QUAL_ASSERTIONS =
+                java.util.regex.Pattern.compile('\\bAssertions\\s*\\.')
+
+        [file("$buildDir/usuario-src/src/test_raw/java"),
+        file("$buildDir/usuario-src/src/test/java")].each { dir ->
+            if (!dir.exists()) return
+            fileTree(dir) { include '**/*.java'; exclude '**/*.java.skip' }.each { File f ->
+                String src = f.getText('UTF-8')
+                boolean usaQualAssertions = PAT_QUAL_ASSERTIONS.matcher(src).find()
+                boolean temImportAssertions = PAT_IMPORT_ASSERTIONS.matcher(src).find()
+                if (usaQualAssertions && !temImportAssertions) {
+                    if ((src =~ /(?m)^\\s*package\\s+[^;]+;\\s*$/).find()) {
+                        src = src.replaceFirst(/(?m)^(\\s*package\\s+[^;]+;\\s*)/, "\$1\nimport org.junit.jupiter.api.Assertions;\n")
+                    } else {
+                        src = "import org.junit.jupiter.api.Assertions;\n" + src
+                    }
+                    f.setText(src, 'UTF-8')
+                }
+            }
+        }
+
+
+
         println "sanearTestesUsuario → testes (raw) higienizados."
     }
 }
@@ -1114,12 +1162,17 @@ tasks.register("preflightUsuarioTests") {
     }
 }
 
-// Copia testes válidos de RAW -> STAGE (exclui .java.skip)
+// (A) preflight só depois de sanear
+tasks.named('preflightUsuarioTests') {
+    dependsOn 'sanearTestesUsuario'
+    mustRunAfter 'sanearTestesUsuario'
+}
+
+// (B) copiar test_raw -> test (exclui .java.skip)
 tasks.register('promoverTestesParaStage') {
     group = 'verification'
     description = 'Move/sincroniza testes saneados de test_raw para test (stage).'
     dependsOn 'sanearTestesUsuario', 'preflightUsuarioTests'
-
     doLast {
         def srcDir = file("$buildDir/usuario-src/src/test_raw/java")
         def dstDir = file("$buildDir/usuario-src/src/test/java")
@@ -1133,22 +1186,15 @@ tasks.register('promoverTestesParaStage') {
             include '**/*.java'
             exclude '**/*.java.skip'
         }
-        println "promoverTestesParaStage → promovidos para STAGE: ${dstDir}"
+        def qtd = fileTree(dstDir){ include '**/*.java'; exclude '**/*.java.skip' }.files.size()
+        println "promoverTestesParaStage → promovidos para STAGE (${qtd} arquivos): ${dstDir}"
     }
 }
 
-
-// garanta ordem: preflight só depois de sanear
-tasks.named('preflightUsuarioTests') {
-    dependsOn 'sanearTestesUsuario'
-    mustRunAfter 'sanearTestesUsuario'
-}
-
-// compile de testes depende da promoção para STAGE
+// (C) compile dos testes depende da promoção
 tasks.named(sourceSets.usuarioTest.compileJavaTaskName) {
     dependsOn 'promoverTestesParaStage'
-    // E o NoOp só entra se, após a promoção, continuar vazio
-    dependsOn 'injectNoOpTestIfNeeded'
+    dependsOn 'injectNoOpTestIfNeeded' // NoOp só entra se continuar vazio
 }
 
 
@@ -1344,6 +1390,15 @@ tasks.register("coberturaMinimaUsuario") {
 
 
 /* ===================== NOVO FLUXO: ConsoleLauncher + JaCoCo ===================== */
+
+tasks.named("testUsuarioConsole", JavaExec) {
+    // já tem --details summary
+    args '--details-theme', 'ascii'
+    args '--reports-dir', file("$projectDir/entrada-usuario/junit-console").absolutePath
+    // opcional: falhar se nenhum teste for descoberto
+    // args '--fail-if-no-tests'
+}
+
 
 tasks.register("testUsuarioConsole", JavaExec) {
     group = "verification"
