@@ -1,23 +1,25 @@
-public class CalculadoraIMC {
+public class ConversorUnidades {
     
-    public static double calcularIMC(double peso, double altura) {
-        return peso / (altura * altura);
+    public static double metroParaCentimetro(double metro) {
+        return metro * 100;
     }
     
-    public static String classificarIMC(double imc) {
-        if (imc < 18.5) return "Abaixo do peso";
-        else if (imc < 25) return "Peso normal";
-        else if (imc < 30) return "Sobrepeso";
-        else if (imc < 35) return "Obesidade grau I";
-        else if (imc < 40) return "Obesidade grau II";
-        else return "Obesidade grau III";
+    public static double centimetroParaMetro(double centimetro) {
+        return centimetro / 100;
+    }
+    
+    public static double kilometroParaMetro(double kilometro) {
+        return kilometro * 1000;
+    }
+    
+    public static double litroParaMililitro(double litro) {
+        return litro * 1000;
     }
     
     public static void main(String[] args) {
-        double imc1 = calcularIMC(70, 1.75);
-        double imc2 = calcularIMC(90, 1.70);
-        
-        System.out.println("IMC 70kg/1.75m: " + imc1 + " - " + classificarIMC(imc1));
-        System.out.println("IMC 90kg/1.70m: " + imc2 + " - " + classificarIMC(imc2));
+        System.out.println("2 metros em centímetros: " + metroParaCentimetro(2));
+        System.out.println("150 cm em metros: " + centimetroParaMetro(150));
+        System.out.println("3.5 km em metros: " + kilometroParaMetro(3.5));
+        System.out.println("2 litros em ml: " + litroParaMililitro(2));
     }
 }
