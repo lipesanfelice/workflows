@@ -1114,10 +1114,41 @@ tasks.register("preflightUsuarioTests") {
     }
 }
 
+// Copia testes válidos de RAW -> STAGE (exclui .java.skip)
+tasks.register('promoverTestesParaStage') {
+    group = 'verification'
+    description = 'Move/sincroniza testes saneados de test_raw para test (stage).'
+    dependsOn 'sanearTestesUsuario', 'preflightUsuarioTests'
+
+    doLast {
+        def srcDir = file("$buildDir/usuario-src/src/test_raw/java")
+        def dstDir = file("$buildDir/usuario-src/src/test/java")
+        if (!srcDir.exists()) {
+            println "promoverTestesParaStage → não há test_raw/java; nada a promover."
+            return
+        }
+        copy {
+            from srcDir
+            into dstDir
+            include '**/*.java'
+            exclude '**/*.java.skip'
+        }
+        println "promoverTestesParaStage → promovidos para STAGE: ${dstDir}"
+    }
+}
+
+
 // garanta ordem: preflight só depois de sanear
 tasks.named('preflightUsuarioTests') {
     dependsOn 'sanearTestesUsuario'
     mustRunAfter 'sanearTestesUsuario'
+}
+
+// compile de testes depende da promoção para STAGE
+tasks.named(sourceSets.usuarioTest.compileJavaTaskName) {
+    dependsOn 'promoverTestesParaStage'
+    // E o NoOp só entra se, após a promoção, continuar vazio
+    dependsOn 'injectNoOpTestIfNeeded'
 }
 
 
