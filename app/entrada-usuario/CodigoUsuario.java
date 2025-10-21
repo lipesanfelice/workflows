@@ -1,25 +1,28 @@
-public class ConversorUnidades {
-    
-    public static double metroParaCentimetro(double metro) {
-        return metro * 100;
-    }
-    
-    public static double centimetroParaMetro(double centimetro) {
-        return centimetro / 100;
-    }
-    
-    public static double kilometroParaMetro(double kilometro) {
-        return kilometro * 1000;
-    }
-    
-    public static double litroParaMililitro(double litro) {
-        return litro * 1000;
-    }
-    
+import java.util.Scanner;
+
+public class ConversorHoras {
     public static void main(String[] args) {
-        System.out.println("2 metros em centímetros: " + metroParaCentimetro(2));
-        System.out.println("150 cm em metros: " + centimetroParaMetro(150));
-        System.out.println("3.5 km em metros: " + kilometroParaMetro(3.5));
-        System.out.println("2 litros em ml: " + litroParaMililitro(2));
+        Scanner scanner = new Scanner(System.in);
+        
+        System.out.print("Digite as horas (0-23): ");
+        int horas = scanner.nextInt();
+        
+        if (horas >= 0 && horas <= 23) {
+            String periodo;
+            if (horas < 12) {
+                periodo = "AM";
+            } else {
+                periodo = "PM";
+            }
+            
+            int horas12 = horas > 12 ? horas - 12 : horas;
+            if (horas12 == 0) horas12 = 12;
+            
+            System.out.println(horas + " horas = " + horas12 + " " + periodo);
+        } else {
+            System.out.println("Hora inválida!");
+        }
+        
+        scanner.close();
     }
 }
