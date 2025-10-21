@@ -1391,14 +1391,6 @@ tasks.register("coberturaMinimaUsuario") {
 
 /* ===================== NOVO FLUXO: ConsoleLauncher + JaCoCo ===================== */
 
-tasks.named("testUsuarioConsole", JavaExec) {
-    // já tem --details summary
-    args '--details-theme', 'ascii'
-    args '--reports-dir', file("$projectDir/entrada-usuario/junit-console").absolutePath
-    // opcional: falhar se nenhum teste for descoberto
-    // args '--fail-if-no-tests'
-}
-
 
 tasks.register("testUsuarioConsole", JavaExec) {
     group = "verification"
@@ -1446,6 +1438,14 @@ tasks.register("testUsuarioConsole", JavaExec) {
     }
 
     standardInput = System.in
+}
+
+tasks.named("testUsuarioConsole", JavaExec) {
+    // já tem --details summary
+    args '--details-theme', 'ascii'
+    args '--reports-dir', file("$projectDir/entrada-usuario/junit-console").absolutePath
+    // opcional: falhar se nenhum teste for descoberto
+    // args '--fail-if-no-tests'
 }
 
 // 2) Relatório JaCoCo a partir do .exec do ConsoleLauncher
