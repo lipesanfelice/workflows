@@ -1071,13 +1071,10 @@ tasks.register("prepUsuarioDirs") {
     }
 }
 
-// se o preflight é um DefaultTask já registrado:
-tasks.named("preflightUsuarioTests") {
-    dependsOn("organizarUsuario", "prepUsuarioDirs")
-    // se você declarou inputs.dir para esses caminhos, mantenha,
-}
-
 tasks.register("preflightUsuarioTests") {
+    // garanta que organizarUsuario e os diretórios existam antes
+    dependsOn("organizarUsuario", "prepUsuarioDirs")
+
     // Opcional: inputs/outputs para cache correto
     inputs.dir("$buildDir/usuario-src/src/test_raw/java")
     inputs.dir("$projectDir/entrada-usuario/testes_ai_patches")
@@ -1085,15 +1082,9 @@ tasks.register("preflightUsuarioTests") {
 
     doLast {
         // 1) Compilar REGEX com grupo não-capturante (corrige "Unclosed group")
-        Pattern ASSERT_THROWS_BAN
-        try {
-            ASSERT_THROWS_BAN = Pattern.compile(
-                "(?s)assertThrows\\s*\\(\\s*(?:ArithmeticException|IllegalArgumentException|NullPointerException)\\s*\\.class"
-            )
-        } catch (PatternSyntaxException e) {
-            logger.warn("preflightUsuarioTests: regex inválido; verificação ignorada: ${e.message}")
-            ASSERT_THROWS_BAN = null
-        }
+        java.util.regex.Pattern ASSERT_THROWS_BAN = java.util.regex.Pattern.compile(
+            "(?s)assertThrows\\s*\\(\\s*(?:ArithmeticException|IllegalArgumentException|NullPointerException)\\s*\\.class"
+        )
 
         // 2) Pastas onde os testes podem aparecer
         def roots = [
@@ -1104,13 +1095,11 @@ tasks.register("preflightUsuarioTests") {
 
         // 3) Varredura
         def offenders = []
-        if (ASSERT_THROWS_BAN != null) {
-            roots.each { root ->
-                fileTree(root).include("**/*.java").files.each { f ->
-                    def txt = f.getText("UTF-8")
-                    if (ASSERT_THROWS_BAN.matcher(txt).find()) {
-                        offenders << f
-                    }
+        roots.each { root ->
+            fileTree(root).include("**/*.java").files.each { f ->
+                def txt = f.getText("UTF-8")
+                if (ASSERT_THROWS_BAN.matcher(txt).find()) {
+                    offenders << f
                 }
             }
         }
