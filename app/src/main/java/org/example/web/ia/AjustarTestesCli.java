@@ -98,6 +98,7 @@ public class AjustarTestesCli {
         rules.add("- Evite @Disabled, sleeps, timeouts desnecessários ou dependências externas.");
         rules.add("- Estruture nome de arquivos como <NomeDaClasse>Test.java.");
         rules.add("- Garanta que os testes sejam determinísticos.");
+        rules.add("- IMPORTANTÍSSIMO: entregue arquivos de teste APENAS com nomes terminando em *Test.java; qualquer outro nome será ignorado pelo pipeline.");
 
         rules.add("");
         rules.add("Cobertura (objetivo principal):");
@@ -113,7 +114,7 @@ public class AjustarTestesCli {
             rules.add("  {\"path\": \"org/example/Foo.java\", \"content\": \"<codigo>\", \"kind\": \"main\"}");
         }
         rules.add("]}");
-        rules.add("Para TESTES, sempre grave apenas o nome do arquivo em 'path' (sem subpastas). Para PRODUÇÃO (FIX_MAIN), 'path' deve ser relativo a 'entrada-usuario/'.");
+        rules.add("Para TESTES, sempre grave apenas o nome do arquivo em 'path' (sem subpastas, e obrigatoriamente terminando em *Test.java). Para PRODUÇÃO (FIX_MAIN), 'path' deve ser relativo a 'entrada-usuario/'.");
         return String.join("\n", rules);
     }
 
@@ -167,10 +168,10 @@ public class AjustarTestesCli {
             String kind    = optText(f, "kind"); // "test" (default) | "main"
 
             if (content == null || content.isBlank()) continue;
-
             if (kind == null || kind.isBlank()) kind = "test";
 
             if ("main".equals(kind)) {
+                // ---- PATCHES DE PRODUÇÃO (apenas no modo fix_main) ----
                 if (!"fix_main".equals(modo)) {
                     System.out.println("[IA] Ignorando patch de produção (kind=main) fora do modo fix_main: " + path);
                     continue;
@@ -179,7 +180,6 @@ public class AjustarTestesCli {
                     System.out.println("[IA] Patch main ignorado (path inválido): " + path);
                     continue;
                 }
-                // grava dentro de entrada-usuario/ preservando subpastas
                 Path dest = entradaDir.resolve(path.replace("\\", "/"));
                 Files.createDirectories(dest.getParent());
                 Files.writeString(dest, normalizeJava(content), StandardCharsets.UTF_8,
@@ -187,11 +187,28 @@ public class AjustarTestesCli {
                 System.out.println("[IA] escrito (main): " + entradaDir.relativize(dest));
                 stats.mainWritten++;
             } else {
-                // TESTES: sempre flatten do nome para evitar colisão com testes do usuário
-                if (path == null || !path.endsWith(".java")) continue;
-                Path dest = outTestsDir.resolve(new File(path).getName());
+                // ---- TESTES (sempre em testes_ai_patches, flatten de nome) ----
+                if (path == null) continue;
+                String fileName = new File(path).getName();
+
+                // 1) Só aceitamos nomes terminando com *Test.java
+                if (!fileName.endsWith("Test.java")) {
+                    System.out.println("[IA] ignorado (test com nome inválido; precisa terminar com *Test.java): " + fileName);
+                    continue;
+                }
+                // 2) Checagem leve: conteúdo parece teste JUnit?
+                String norm = normalizeJava(content);
+                boolean looksLikeTest = norm.contains("@Test")
+                        || norm.contains("org.junit.jupiter.api")
+                        || norm.contains("import static org.junit.jupiter.api.Assertions");
+                if (!looksLikeTest) {
+                    System.out.println("[IA] ignorado (arquivo não aparenta ser um teste JUnit): " + fileName);
+                    continue;
+                }
+
+                Path dest = outTestsDir.resolve(fileName);
                 Files.createDirectories(dest.getParent());
-                Files.writeString(dest, normalizeJava(content), StandardCharsets.UTF_8,
+                Files.writeString(dest, norm, StandardCharsets.UTF_8,
                         StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
                 System.out.println("[IA] escrito (test): " + dest.getFileName());
                 stats.testsWritten++;

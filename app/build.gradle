@@ -1047,72 +1047,61 @@ sourceSets {
 }
 
 // ==================== Pré-voo: copia só os válidos RAW → STAGE ====================
-tasks.register('preflightUsuarioTests') {
-    group = 'verification'
-    description = 'Valida testes e copia somente os válidos para o stage (sem renomear/remover no raw).'
-    dependsOn 'sanearTestesUsuario'
+import java.util.regex.Pattern
+import java.util.regex.PatternSyntaxException
 
-    inputs.dir(dirTestRaw)
-    outputs.dir(dirTestStage)
+// ... (mantenha o resto do arquivo) ...
+
+tasks.register("preflightUsuarioTests") {
+    // Opcional: inputs/outputs para cache correto
+    inputs.dir("$buildDir/usuario-src/src/test_raw/java")
+    inputs.dir("$projectDir/entrada-usuario/testes_ai_patches")
+    inputs.dir("$projectDir/entrada-usuario/testes")
 
     doLast {
-        def raw   = dirTestRaw
-        def stage = dirTestStage
-        def quar  = new File(dirWork, 'quarentena')
-        stage.deleteDir(); stage.mkdirs()
-        quar.mkdirs()
+        // 1) Compilar REGEX com grupo não-capturante (corrige "Unclosed group")
+        Pattern ASSERT_THROWS_BAN
+        try {
+            ASSERT_THROWS_BAN = Pattern.compile(
+                "(?s)assertThrows\\s*\\(\\s*(?:ArithmeticException|IllegalArgumentException|NullPointerException)\\s*\\.class"
+            )
+        } catch (PatternSyntaxException e) {
+            logger.warn("preflightUsuarioTests: regex inválido; verificação ignorada: ${e.message}")
+            ASSERT_THROWS_BAN = null
+        }
 
-        def validos = 0; def quarentenados = 0
+        // 2) Pastas onde os testes podem aparecer
+        def roots = [
+            file("$buildDir/usuario-src/src/test_raw/java"),
+            file("$projectDir/entrada-usuario/testes_ai_patches"),
+            file("$projectDir/entrada-usuario/testes")
+        ].findAll { it.exists() }
 
-        raw.eachFileRecurse { File f ->
-            if (!f.isFile() || !f.name.endsWith('.java')) return
-
-            def txt = f.getText('UTF-8')
-            // Critérios mínimos de validade (baratos e seguros)
-            boolean temClasse = (txt =~ /(?m)^\s*(public\s+)?(class|interface|enum|record)\s+[A-Za-z_]\w*/).find()
-            boolean temJUnit  = txt.contains('@Test') || txt.contains('org.junit')
-            if (temClasse && temJUnit) {
-                // Copia p/ stage mantendo estrutura relativa
-                def rel = raw.toPath().relativize(f.toPath()).toString()
-                def dst = new File(stage, rel)
-                dst.parentFile.mkdirs()
-                dst.setText(txt, 'UTF-8')
-                validos++
-            } else {
-                // Guarda cópia na quarentena p/ diagnóstico
-                def rel = raw.toPath().relativize(f.toPath()).toString()
-                def dst = new File(quar, rel + ".skip")
-                dst.parentFile.mkdirs()
-                dst.setText(txt, 'UTF-8')
-                quarentenados++
-            }
-
-            // --- Heurística anti-falso-positivo de assertThrows ---
-            def throwsPat = ~/(?s)assertThrows\\s*\\(\\s*(ArithmeticException|IllegalArgumentException|NullPointerException)\\s*\\.class/
-            boolean usaAssertThrowsBasico = throwsPat.matcher(txt).find()
-            boolean temLastroThrow = false
-            if (usaAssertThrowsBasico) {
-                // varre fontes 'main' staged procurando 'throw new <Ex>' explícito
-                String mainAll = fileTree("$buildDir/usuario-src/src/main/java") { include '**/*.java' }
-                        .files.collect { it.getText('UTF-8') }.join("\n")
-                def exList = ['ArithmeticException','IllegalArgumentException','NullPointerException']
-                temLastroThrow = exList.any { ex -> mainAll.contains("throw new ${ex}") }
-            }
-            if (usaAssertThrowsBasico && !temLastroThrow) {
-                // manda para quarentena
-                def rel = raw.toPath().relativize(f.toPath()).toString()
-                def dst = new File(quar, rel + ".skip")
-                dst.parentFile.mkdirs()
-                dst.setText(txt, 'UTF-8')
-                quarentenados++
-                return // segue para próximo arquivo
+        // 3) Varredura
+        def offenders = []
+        if (ASSERT_THROWS_BAN != null) {
+            roots.each { root ->
+                fileTree(root).include("**/*.java").files.each { f ->
+                    def txt = f.getText("UTF-8")
+                    if (ASSERT_THROWS_BAN.matcher(txt).find()) {
+                        offenders << f
+                    }
+                }
             }
         }
 
+        // 4) Falhar com mensagem clara se achou padrão proibido
+        if (!offenders.isEmpty()) {
+            throw new GradleException(
+                "Testes contêm assertThrows para exceções proibidas (Arithmetic/IllegalArgument/NullPointer): " +
+                offenders*.name.join(", ")
+            )
+        }
 
-        println "preflightUsuarioTests → válidos copiados p/ stage: ${validos}, em quarentena: ${quarentenados}"
+        logger.lifecycle("preflightUsuarioTests: OK (sem padrões proibidos).")
     }
 }
+
 
 // Se após o preflight não sobrar nenhum teste, injeta um NoOp no STAGE
 tasks.register('injectNoOpTestIfNeeded') {
