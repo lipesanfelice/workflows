@@ -1073,10 +1073,10 @@ tasks.register("covUsuario") {
     finalizedBy "jacocoXmlGarantido"
 }
 
-/* --------- ♻️ covUsuarioLoop: tenta até o jacoco.xml “valer” (e opcionalmente atingir MIN_COVERAGE) --------- */
+/// ===== Loop resiliente: para ao gerar jacoco != empty (e opcionalmente cobre >= MIN_COVERAGE) =====
 tasks.register("covUsuarioLoop") {
     group = "verification"
-    description = "Repete até gerar jacoco.xml com cobertura > 0; para na 1ª vez que conseguir (ou quando atingir MIN_COVERAGE)."
+    description = "Tenta até gerar jacoco.xml com cobertura > 0; para na 1ª vez que conseguir."
 
     doLast {
         int maxTentativas = (System.getenv("COV_MAX_ATTEMPTS") ?: "5") as int
@@ -1087,7 +1087,12 @@ tasks.register("covUsuarioLoop") {
 
         for (int i = 1; i <= maxTentativas; i++) {
             println "== Tentativa ${i}/${maxTentativas} =="
-            exec { commandLine "./gradlew", ":app:covUsuario"; isIgnoreExitValue = true }
+
+            // 1) organiza/resolve/compila/roda testes instrumentados + gera relatório
+            exec {
+                commandLine "./gradlew", ":app:covUsuario"
+                ignoreExitValue = true   // <<<<<<<<<< AQUI (corrigido)
+            }
 
             boolean temContagem = false
             BigDecimal pct = 0.0
@@ -1097,7 +1102,8 @@ tasks.register("covUsuarioLoop") {
                 def sl = new groovy.xml.XmlSlurper(false, false).parseText(xmlText)
                 long missed = 0, covered = 0
                 sl.'**'.findAll { it.name() == 'counter' && it.@type?.text() == 'LINE' }.each { c ->
-                    missed += (c.@missed.text() as long); covered += (c.@covered.text() as long)
+                    missed += (c.@missed.text() as long)
+                    covered += (c.@covered.text() as long)
                 }
                 long total = missed + covered
                 temContagem = (total > 0 && covered > 0)
@@ -1117,15 +1123,21 @@ tasks.register("covUsuarioLoop") {
                 println "❌ Relatório vazio/sem linhas cobertas. Pedindo patches…"
             }
 
+            // 2) pedir patches para IA (tolerante a erro/429)
             try {
-                exec { commandLine "./gradlew", ":app:ajustarTestesIa"; isIgnoreExitValue = true }
+                exec {
+                    commandLine "./gradlew", ":app:ajustarTestesIa"
+                    ignoreExitValue = true   // <<<<<<<<<< E AQUI (corrigido)
+                }
             } catch (Throwable t) {
                 println "IA falhou (${t.class.simpleName}): seguindo para próxima tentativa."
             }
         }
-        println "🔚 Loop esgotado; verifique logs/patches em 'entrada-usuario/testes_ai_patches/'."
+
+        println "🔚 Loop esgotado; se ainda não há cobertura suficiente, verifique logs/patches em 'entrada-usuario/testes_ai_patches/'."
     }
 }
+
 
 /* ===================== Relatório geral (merge) ===================== */
 def _configJacocoRelatorioGeral = { JacocoReport t ->
