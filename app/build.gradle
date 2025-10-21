@@ -9,6 +9,7 @@ plugins {
 
 import org.gradle.testing.jacoco.plugins.JacocoTaskExtension
 import java.util.regex.Pattern
+import java.util.regex.PatternSyntaxException
 
 repositories {
     mavenCentral()
@@ -29,39 +30,35 @@ configurations {
 def ALLOW_RENAME = providers.provider { (System.getenv("ALLOW_RENAME") ?: "false").equalsIgnoreCase("true") }
 
 dependencies {
-    // Testes (JUnit)
-    testImplementation libs.junit.jupiter
-    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
-    // ConsoleLauncher – fica só no testRuntime; usuarioTest herda via extendsFrom
-    testRuntimeOnly 'org.junit.platform:junit-platform-console-standalone:1.10.2'
-
-    // Utilitários
+    // ===== App / Main =====
     implementation libs.guava
     implementation 'org.json:json:20240303'
     implementation 'com.fasterxml.jackson.core:jackson-databind:2.17.1'
     implementation 'commons-io:commons-io:2.16.1'
-
-    // HTTP client p/ Groq (já usado em outras partes também)
     implementation 'com.squareup.okhttp3:okhttp:4.12.0'
-
-    // Spring Boot Web
     implementation 'org.springframework.boot:spring-boot-starter-web'
     implementation 'org.springframework.boot:spring-boot-starter-validation'
 
-    // Testes Spring Boot
-    testImplementation 'org.springframework.boot:spring-boot-starter-test'
-
+    // ===== Teste padrão =====
     testImplementation platform('org.junit:junit-bom:5.10.2')
     testImplementation 'org.junit.jupiter:junit-jupiter'
+    testImplementation 'org.springframework.boot:spring-boot-starter-test'
+    testImplementation 'org.mockito:mockito-core:5.13.0'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+    testRuntimeOnly 'org.junit.platform:junit-platform-console-standalone:1.10.2'
 
-    // ✅ agente correto (resolve o erro Premain-Class):
+    // ===== usuarioTest (herda de cima via extendsFrom, mas garantimos engine) =====
+    usuarioTestRuntimeOnly 'org.junit.jupiter:junit-jupiter-engine'
+
+    // ===== JaCoCo agent correto =====
     jacocoAgentRuntime "org.jacoco:org.jacoco.agent:0.8.12:runtime@jar"
+
+    // ===== libs resolvidas dinamicamente do usuário =====
+    usuarioImplementation fileTree('entrada-usuario/libs') { include '*.jar' }
 }
 
 java {
-    toolchain {
-        languageVersion = JavaLanguageVersion.of(21)
-    }
+    toolchain { languageVersion = JavaLanguageVersion.of(21) }
 }
 
 application {
@@ -97,7 +94,6 @@ tasks.register('salvarRelatorioSonar', JavaExec) {
     args "lipesanfelice_workflows", System.getenv('SONAR_TOKEN') ?: '', "$projectDir/entrada-usuario/relatorio-sonar.json"
 }
 
-// app/build.gradle
 tasks.register('gerarTestesIa', JavaExec) {
     classpath = sourceSets.main.runtimeClasspath
     mainClass = 'org.example.web.cli.GerarTestesCli'
@@ -114,108 +110,77 @@ tasks.register('ajustarTestesIa', JavaExec) {
     environment "GROQ_API_KEY", System.getenv("GROQ_API_KEY") ?: ""
 }
 
-configurations {
-    usuarioImplementation.extendsFrom implementation
-    usuarioRuntimeOnly.extendsFrom runtimeOnly
-    usuarioTestImplementation.extendsFrom testImplementation
-    usuarioTestRuntimeOnly.extendsFrom testRuntimeOnly
-}
-
-def dirEntrada = file('entrada-usuario')
-def dirTestsIA = file('entrada-usuario/testes_explicações/tests')
-def dirTestsUsuario = file('entrada-usuario/testes')
-// 👇 NOVO: diretório onde a IA gravará patches de testes durante o loop
+/* ====================== Caminhos e diretórios ====================== */
+def dirEntrada        = file('entrada-usuario')
+def dirTestsIA        = file('entrada-usuario/testes_explicações/tests')
+def dirTestsUsuario   = file('entrada-usuario/testes')
+// 👇 patches que a IA cria a cada tentativa
 def dirTestsAIPatches = file('entrada-usuario/testes_ai_patches')
 
-def dirWork = layout.buildDirectory.dir('usuario-src').get().asFile
-def dirMain = new File(dirWork, 'src/main/java')
-
-// 🎯 NOVO: separa testes “raw” (entrada) e “stage” (válidos p/ compilar)
-def dirTestRaw   = new File(dirWork, 'src/test_raw/java')
+def dirWork    = layout.buildDirectory.dir('usuario-src').get().asFile
+def dirMain    = new File(dirWork, 'src/main/java')
+def dirTestRaw = new File(dirWork, 'src/test_raw/java')
 def dirTestStage = new File(dirWork, 'src/test/java')
 
-// Mapeia imports -> coordenadas Maven padrão (versões estáveis p/ Java 21 / Spring Boot 3.x)
+/* ================== Mapa heurístico de imports → coord. Maven ================== */
 def mapaImports = [
-    // === Apache Commons ===
-    'org.apache.commons.lang3'         : 'org.apache.commons:commons-lang3:3.14.0',
-    'org.apache.commons.io'            : 'commons-io:commons-io:2.16.1',
-    'org.apache.commons.text'          : 'org.apache.commons:commons-text:1.11.0',
-    'org.apache.commons.collections4'  : 'org.apache.commons:commons-collections4:4.4',
-    'org.apache.commons.csv'           : 'org.apache.commons:commons-csv:1.10.0',
-    'org.apache.commons.codec'         : 'commons-codec:commons-codec:1.16.1',
-    'org.apache.commons.compress'      : 'org.apache.commons:commons-compress:1.26.2',
-    'org.apache.commons.math3'         : 'org.apache.commons:commons-math3:3.6.1',
-    'org.apache.commons.beanutils'     : 'commons-beanutils:commons-beanutils:1.9.4',
-    'org.apache.commons.validator'     : 'commons-validator:1.9.0',
-
-    // === Google / JSON / Utils ===
-    'com.google.common'                : 'com.google.guava:guava:33.2.1-jre',
-    'com.google.gson'                  : 'com.google.code.gson:gson:2.11.0',
-    'com.google.protobuf'              : 'com.google.protobuf:protobuf-java:3.25.3',
-    'com.google.truth'                 : 'com.google.truth:truth:1.4.2',
-    'org.yaml.snakeyaml'               : 'org.yaml:snakeyaml:2.2',
-
-    // === Jackson (core + módulos comuns) ===
-    'com.fasterxml.jackson.core'       : 'com.fasterxml.jackson.core:jackson-core:2.17.1',
-    'com.fasterxml.jackson.annotation' : 'com.fasterxml.jackson.core:jackson-annotations:2.17.1',
-    'com.fasterxml.jackson.databind'   : 'com.fasterxml.jackson.core:jackson-databind:2.17.1',
-    'com.fasterxml.jackson.dataformat' : 'com.fasterxml.jackson.dataformat:jackson-dataformat-xml:2.17.1',
-    'com.fasterxml.jackson.datatype'   : 'com.fasterxml.jackson.datatype:jackson-datatype-jsr310:2.17.1',
-
-    // === Logging ===
-    'org.slf4j'                        : 'org.slf4j:slf4j-api:2.0.13',
-    'org.slf4j.simple'                 : 'org.slf4j:slf4j-simple:2.0.13',
-    'ch.qos.logback'                   : 'ch.qos.logback-classic:1.5.6',
-    'org.apache.logging.log4j'         : 'org.apache.logging.log4j:log4j-api:2.23.1',
-    'org.apache.logging.log4j.core'    : 'org.apache.logging.log4j:log4j-core:2.23.1',
-
-    // === HTTP / Cliente Web ===
-    'org.apache.http'                  : 'org.apache.httpcomponents.client5:httpclient5:5.3.1',
-    'org.apache.http.client'           : 'org.apache.httpcomponents:httpclient:4.5.14',
-    'okhttp3'                          : 'com.squareup.okhttp3:okhttp:4.12.0',
-    'retrofit2'                        : 'com.squareup.retrofit2:retrofit:2.11.0',
-    'okio'                             : 'com.squareup.okio:okio:3.9.0',
-    'org.jsoup'                        : 'org.jsoup:jsoup:1.18.1',
-
-    // === Banco de dados / JDBC ===
-    'org.xerial.sqlitejdbc'            : 'org.xerial:sqlite-jdbc:3.45.3.0',
-    'com.h2database'                   : 'com.h2database:h2:2.2.224',
-    'org.postgresql'                   : 'org.postgresql:postgresql:42.7.3',
-    'com.mysql'                        : 'com.mysql:mysql-connector-j:8.3.0',
-
-    // === ORM / Jakarta ===
-    'org.hibernate'                    : 'org.hibernate.orm:hibernate-core:6.5.3.Final',
-    'jakarta.persistence'              : 'jakarta.persistence:jakarta.persistence-api:3.1.0',
-    'jakarta.validation'               : 'jakarta.validation:jakarta.validation-api:3.0.2',
-    'jakarta.xml.bind'                 : 'jakarta.xml.bind:jakarta.xml.bind-api:4.0.2',
-
-    // === Arquivos Office / CSV ===
-    'org.apache.poi'                   : 'org.apache.poi:poi-ooxml:5.2.5',
-    'com.opencsv'                      : 'com.opencsv:opencsv:5.9',
-
-    // === Segurança / Cripto ===
-    'org.jose4j'                       : 'org.bitbucket_b_c:jose4j:0.9.6',
-    'org.mindrot.jbcrypt'              : 'org.mindrot:jbcrypt:0.4',
-
-    // === Mapping / Utils extras ===
-    'org.mapstruct'                    : 'org.mapstruct:mapstruct:1.5.5.Final',
-    'org.modelmapper'                  : 'org.modelmapper:modelmapper:3.2.0',
-    'org.jetbrains.annotations'        : 'org.jetbrains:annotations:24.1.0',
-
-    // === Testes ===
-    'org.junit.jupiter'                : 'org.junit.jupiter:junit-jupiter:5.10.2',
-    'org.junit.platform'               : 'org.junit.platform:junit-platform-launcher:1.10.2',
-    'org.mockito'                      : 'org.mockito:mockito-core:5.13.0',
-    'org.hamcrest'                     : 'org.hamcrest:hamcrest:2.2',
-    'org.assertj'                      : 'org.assertj:assertj-core:3.26.0',
-
-    // === Outras utilidades ===
-    'org.json'                         : 'org.json:json:20240303',
-    'org.joda.time'                    : 'joda-time:joda-time:2.12.7',
-    'javax.annotation'                 : 'com.google.code.findbugs:jsr305:3.0.2',
+    'org.apache.commons.lang3': 'org.apache.commons:commons-lang3:3.14.0',
+    'org.apache.commons.io': 'commons-io:commons-io:2.16.1',
+    'org.apache.commons.text': 'org.apache.commons:commons-text:1.11.0',
+    'org.apache.commons.collections4': 'org.apache.commons:commons-collections4:4.4',
+    'org.apache.commons.csv': 'org.apache.commons:commons-csv:1.10.0',
+    'org.apache.commons.codec': 'commons-codec:commons-codec:1.16.1',
+    'org.apache.commons.compress': 'org.apache.commons:commons-compress:1.26.2',
+    'org.apache.commons.math3': 'org.apache.commons:commons-math3:3.6.1',
+    'org.apache.commons.beanutils': 'commons-beanutils:commons-beanutils:1.9.4',
+    'org.apache.commons.validator': 'commons-validator:1.9.0',
+    'com.google.common': 'com.google.guava:guava:33.2.1-jre',
+    'com.google.gson': 'com.google.code.gson:gson:2.11.0',
+    'com.google.protobuf': 'com.google.protobuf:protobuf-java:3.25.3',
+    'com.google.truth': 'com.google.truth:truth:1.4.2',
+    'org.yaml.snakeyaml': 'org.yaml:snakeyaml:2.2',
+    'com.fasterxml.jackson.core': 'com.fasterxml.jackson.core:jackson-core:2.17.1',
+    'com.fasterxml.jackson.annotation': 'com.fasterxml.jackson.core:jackson-annotations:2.17.1',
+    'com.fasterxml.jackson.databind': 'com.fasterxml.jackson.core:jackson-databind:2.17.1',
+    'com.fasterxml.jackson.dataformat': 'com.fasterxml.jackson.dataformat:jackson-dataformat-xml:2.17.1',
+    'com.fasterxml.jackson.datatype': 'com.fasterxml.jackson.datatype:jackson-datatype-jsr310:2.17.1',
+    'org.slf4j': 'org.slf4j:slf4j-api:2.0.13',
+    'org.slf4j.simple': 'org.slf4j:slf4j-simple:2.0.13',
+    'ch.qos.logback': 'ch.qos.logback-classic:1.5.6',
+    'org.apache.logging.log4j': 'org.apache.logging.log4j:log4j-api:2.23.1',
+    'org.apache.logging.log4j.core': 'org.apache.logging.log4j:log4j-core:2.23.1',
+    'org.apache.http': 'org.apache.httpcomponents.client5:httpclient5:5.3.1',
+    'org.apache.http.client': 'org.apache.httpcomponents:httpclient:4.5.14',
+    'okhttp3': 'com.squareup.okhttp3:okhttp:4.12.0',
+    'retrofit2': 'com.squareup.retrofit2:retrofit:2.11.0',
+    'okio': 'com.squareup.okio:okio:3.9.0',
+    'org.jsoup': 'org.jsoup:jsoup:1.18.1',
+    'org.xerial.sqlitejdbc': 'org.xerial:sqlite-jdbc:3.45.3.0',
+    'com.h2database': 'com.h2database:h2:2.2.224',
+    'org.postgresql': 'org.postgresql:postgresql:42.7.3',
+    'com.mysql': 'com.mysql:mysql-connector-j:8.3.0',
+    'org.hibernate': 'org.hibernate.orm:hibernate-core:6.5.3.Final',
+    'jakarta.persistence': 'jakarta.persistence:jakarta.persistence-api:3.1.0',
+    'jakarta.validation': 'jakarta.validation:jakarta.validation-api:3.0.2',
+    'jakarta.xml.bind': 'jakarta.xml.bind:jakarta.xml.bind-api:4.0.2',
+    'org.apache.poi': 'org.apache.poi:poi-ooxml:5.2.5',
+    'com.opencsv': 'com.opencsv:opencsv:5.9',
+    'org.jose4j': 'org.bitbucket_b_c:jose4j:0.9.6',
+    'org.mindrot.jbcrypt': 'org.mindrot:jbcrypt:0.4',
+    'org.mapstruct': 'org.mapstruct:mapstruct:1.5.5.Final',
+    'org.modelmapper': 'org.modelmapper:modelmapper:3.2.0',
+    'org.jetbrains.annotations': 'org.jetbrains:annotations:24.1.0',
+    'org.junit.jupiter': 'org.junit.jupiter:junit-jupiter:5.10.2',
+    'org.junit.platform': 'org.junit.platform:junit-platform-launcher:1.10.2',
+    'org.mockito': 'org.mockito:mockito-core:5.13.0',
+    'org.hamcrest': 'org.hamcrest:hamcrest:2.2',
+    'org.assertj': 'org.assertj:assertj-core:3.26.0',
+    'org.json': 'org.json:json:20240303',
+    'org.joda.time': 'joda-time:joda-time:2.12.7',
+    'javax.annotation': 'com.google.code.findbugs:jsr305:3.0.2',
 ]
 
-// ================== JACOCO “IMUNE” A SÍMBOLOS/CHARSET ==================
+/* ================== JACOCO “IMUNE” A SÍMBOLOS/CHARSET ================== */
 tasks.withType(JavaCompile).configureEach {
     options.encoding = 'UTF-8'
     options.debug = true
@@ -224,47 +189,36 @@ tasks.withType(JavaCompile).configureEach {
 tasks.withType(Test).configureEach {
     systemProperty "file.encoding", "UTF-8"
 }
-// =======================================================================
+/* ====================================================================== */
 
+/* ======================== resolverDepsUsuario ======================== */
 tasks.register('resolverDepsUsuario') {
-    // varre fontes do usuário
     inputs.files(fileTree(dirEntrada) { include '**/*.java' })
-
-    // deps.txt opcional
     inputs.files(provider {
         def f = file('entrada-usuario/deps.txt')
         f.exists() ? [f] : []
     })
-
-    // vendor/*.jar opcional (use files, não dir)
     inputs.files(provider {
         def v = file('entrada-usuario/vendor')
         v.exists() ? fileTree(v) { include '*.jar' } : []
     })
-
     outputs.dir(file('entrada-usuario/libs'))
 
     doLast {
-        def libsDir = file('entrada-usuario/libs')
-        libsDir.mkdirs()
+        def libsDir = file('entrada-usuario/libs'); libsDir.mkdirs()
 
         // 1) JARs locais do usuário
         def vendorDir = file('entrada-usuario/vendor')
         if (vendorDir.exists()) {
-            copy {
-                from(vendorDir)
-                include '*.jar'
-                into libsDir
-            }
+            copy { from(vendorDir); include '*.jar'; into libsDir }
         }
 
-        // 2) deps.txt (coordenadas explícitas)
+        // 2) deps.txt
         def coords = [] as Set
         def depsTxt = file('entrada-usuario/deps.txt')
         if (depsTxt.exists()) {
             depsTxt.readLines('UTF-8').each { line ->
-                def s = line.trim()
-                if (s && !s.startsWith('#')) coords << s
+                def s = line.trim(); if (s && !s.startsWith('#')) coords << s
             }
         }
 
@@ -283,13 +237,9 @@ tasks.register('resolverDepsUsuario') {
         // 4) Resolve e copia jars
         if (!coords.isEmpty()) {
             def depObjs = coords.collect { dependencies.create(it) } as org.gradle.api.artifacts.Dependency[]
-            def conf = configurations.detachedConfiguration(depObjs)
-            conf.setTransitive(true)
+            def conf = configurations.detachedConfiguration(depObjs); conf.setTransitive(true)
             def filesResolved = conf.resolve()
-            copy {
-                from filesResolved
-                into libsDir
-            }
+            copy { from filesResolved; into libsDir }
         }
 
         new File(libsDir, 'RESOLVIDO.txt').setText((coords.join('\n') + '\n'), 'UTF-8')
@@ -297,22 +247,18 @@ tasks.register('resolverDepsUsuario') {
     }
 }
 
+/* ========================== organizarUsuario ========================== */
 tasks.register('organizarUsuario') {
     inputs.files(fileTree(dirEntrada) { include '**/*.java' })
     inputs.files(fileTree(dirTestsIA) { include '**/*.java' })
     inputs.files(fileTree(dirTestsUsuario) { include '**/*.java' })
-    inputs.files(fileTree(dirTestsAIPatches) { include '**/*.java' }) // 👈 NOVO: inclui patches da IA
+    inputs.files(fileTree(dirTestsAIPatches) { include '**/*.java' })
     outputs.dir(dirWork)
 
     doLast {
-        if (dirWork.exists()) {
-            dirWork.deleteDir()
-        }
-        dirMain.mkdirs()
-        dirTestRaw.mkdirs()
-        dirTestStage.mkdirs() // pode existir vazio; o preflight vai popular
+        if (dirWork.exists()) dirWork.deleteDir()
+        dirMain.mkdirs(); dirTestRaw.mkdirs(); dirTestStage.mkdirs()
 
-        // helpers
         def extrairPacote = { String src ->
             def m = (src =~ /(?m)^\s*package\s+([a-zA-Z0-9_.]+)\s*;/)
             m.find() ? m.group(1) : ''
@@ -329,53 +275,33 @@ tasks.register('organizarUsuario') {
             def nomes = [] as Set
             def pat = ~/(?m)([A-Z][A-Za-z0-9_]*)\s*\.\s*[A-Za-z_][A-Za-z0-9_]*\s*\(/
             def matcher = pat.matcher(src)
-            while (matcher.find()) {
-                def c = matcher.group(1)
-                if (!ignora.contains(c)) nomes << c
-            }
-            return nomes
+            while (matcher.find()) { def c = matcher.group(1); if (!ignora.contains(c)) nomes << c }
+            nomes
         }
-
         def sanitizeJavaTest = { String s ->
             if (s == null) return s
             s = s.replaceAll('(?m)^```\\w*\\s*\\r?\\n?', '')
             s = s.replaceAll('(?m)^```\\s*$', '')
             s = s.replace('\uFEFF', '')
-
             def lines = s.readLines()
-
             def isValidStart = { String ln ->
-                return (ln ==~ /\s*/) ||                        // vazia
-                       (ln ==~ /\s*package\s+.*/) ||
-                       (ln ==~ /\s*import\s+.*/)  ||
-                       (ln ==~ /\s*@.*/)          ||
-                       (ln ==~ /\s*(public\s+)?(class|interface|enum|record)\b.*/) ||
-                       (ln ==~ /\s*\/\/.*/) || (ln ==~ /\s*\/\*.*/) || (ln ==~ /\s*\*.*/)
+                (ln ==~ /\s*/) || (ln ==~ /\s*package\s+.*/) || (ln ==~ /\s*import\s+.*/) ||
+                (ln ==~ /\s*@.*/) || (ln ==~ /\s*(public\s+)?(class|interface|enum|record)\b.*/) ||
+                (ln ==~ /\s*\/\/.*/) || (ln ==~ /\s*\/\*.*/) || (ln ==~ /\s*\*.*/)
             }
-
-            // ✅ Regex sem slashy: evita erro do parser
             def fileNameOnly = Pattern.compile('^[A-Za-z0-9_.\\/\\-]+\\.java$')
-
             while (!lines.isEmpty() && !isValidStart(lines[0])) {
                 def head = lines[0].trim()
-                if (fileNameOnly.matcher(head).matches()) {  // "Algo.java" sozinho no topo
-                    lines.remove(0)
-                    continue
-                }
-                lines.remove(0) // qualquer lixo antes do primeiro token Java válido
+                if (fileNameOnly.matcher(head).matches()) { lines.remove(0); continue }
+                lines.remove(0)
             }
-            return lines.join('\n')
+            lines.join('\n')
         }
 
-        // ===================== CARREGAR TESTES COM PRECEDÊNCIA ======================
         def lerTests = { File raiz ->
             def res = []
-            if (raiz.exists()) {
-                fileTree(raiz) { include '**/*.java' }.each { f ->
-                    res << [file: f, text: f.getText('UTF-8')]
-                }
-            }
-            return res
+            if (raiz.exists()) fileTree(raiz) { include '**/*.java' }.each { f -> res << [file: f, text: f.getText('UTF-8')] }
+            res
         }
         def testesUser      = lerTests(dirTestsUsuario)
         def testesAIPatches = lerTests(dirTestsAIPatches)
@@ -386,33 +312,25 @@ tasks.register('organizarUsuario') {
             m.find() ? m.group(1) : null
         }
         def porNome = [:]
-
-        // Carregue do menor p/ maior para o último sobrescrever:
-        // explicações -> patches (IA) -> usuário (vence sempre)
         [testesIAExp, testesAIPatches, testesUser].each { lista ->
-            lista.each { t ->
-                def n = nomePublicoTeste(t.text) ?: ("Anon_" + t.file.name)
-                porNome[n] = t
-            }
+            lista.each { t -> def n = nomePublicoTeste(t.text) ?: ("Anon_" + t.file.name); porNome[n] = t }
         }
         def testesIA = porNome.values().toList()
         println "organizarUsuario → testes recebidos (raw):  ${testesIA.size()}"
-        // ============================================================================
 
-        // Agora carregue os FONTES (produção) do usuário
+        // fontes do usuário (produção)
         def fontesUsuario = []
         fileTree(dirEntrada) {
             include '**/*.java'
-            // evite trazer os testes para cá
             exclude 'testes/**', 'testes_explicações/**', 'testes_ai_patches/**'
         }.each { f -> fontesUsuario << [file: f, text: f.getText('UTF-8')] }
 
-        // =============== AUTOCORREÇÃO DE CHAMADAS ESTÁTICAS NOS TESTES ===============
+        // autocorreção de chamadas estáticas nos testes (Levenshtein)
         def extrairMetodosPublicosEstaticos = { String src ->
             def met = [] as Set
             def m = (src =~ /(?m)^\s*public\s+static\s+[A-Za-z0-9_<>\[\]\.?]+\s+([A-Za-z_]\w*)\s*\(/)
             while (m.find()) met << m.group(1)
-            return met
+            met
         }
         def extrairNomeClassePublica = { String src ->
             def m = (src =~ /(?m)^\s*public\s+(?:class|record|interface)\s+([A-Za-z_]\w*)\b/)
@@ -422,9 +340,7 @@ tasks.register('organizarUsuario') {
         def mapaClasseMetodos = [:].withDefault { [] as Set }
         fontesUsuario.each { f ->
             def cls = extrairNomeClassePublica(f.text)
-            if (cls) {
-                mapaClasseMetodos[cls] += extrairMetodosPublicosEstaticos(f.text)
-            }
+            if (cls) { mapaClasseMetodos[cls] += extrairMetodosPublicosEstaticos(f.text) }
         }
         def lev = { String a, String b ->
             if (a == b) return 0
@@ -433,147 +349,93 @@ tasks.register('organizarUsuario') {
             def d = new int[a.length()+1][b.length()+1]
             for (int i=0;i<=a.length();i++) d[i][0]=i
             for (int j=0;j<=b.length();j++) d[0][j]=j
-            for (int i=1;i<=a.length();i++) {
+            for (int i=1;i<=a.length();i++)
                 for (int j=1;j<=b.length();j++) {
                     int cost = (a.charAt(i-1)==b.charAt(j-1)) ? 0 : 1
                     d[i][j] = Math.min(Math.min(d[i-1][j]+1, d[i][j-1]+1), d[i-1][j-1]+cost)
                 }
-            }
-            return d[a.length()][b.length()]
+            d[a.length()][b.length()]
         }
-        def substituicoesConhecidas = [
-            'kilmetroParaMetro':'kilometroParaMetro',
-            'quilometroParaMetro':'kilometroParaMetro'
-        ]
+        def substituicoesConhecidas = [ 'kilmetroParaMetro':'kilometroParaMetro', 'quilometroParaMetro':'kilometroParaMetro' ]
         testesIA = testesIA.collect { ti ->
             String t = ti.text
-            substituicoesConhecidas.each { de, para ->
-                t = t.replaceAll("\\b" + java.util.regex.Pattern.quote(de) + "\\b", para)
-            }
+            substituicoesConhecidas.each { de, para -> t = t.replaceAll("\\b" + java.util.regex.Pattern.quote(de) + "\\b", para) }
             def m = chamadasEstaticas.matcher(t)
             def sb = new StringBuffer()
             while (m.find()) {
-                def cls = m.group(1)
-                def met = m.group(2)
+                def cls = m.group(1); def met = m.group(2)
                 def candidatos = (mapaClasseMetodos[cls] as Set) ?: [] as Set
                 if (candidatos && !candidatos.contains(met)) {
                     def melhor = null; def dist = Integer.MAX_VALUE
-                    candidatos.each { c ->
-                        def d = lev(met, c)
-                        if (d < dist) { dist = d; melhor = c }
-                    }
-                    if (melhor != null && dist <= 2) {
-                        m.appendReplacement(sb, java.util.regex.Matcher.quoteReplacement("${cls}.${melhor}("))
-                        continue
-                    }
+                    candidatos.each { c -> def d = lev(met, c); if (d < dist) { dist = d; melhor = c } }
+                    if (melhor != null && dist <= 2) { m.appendReplacement(sb, java.util.regex.Matcher.quoteReplacement("${cls}.${melhor}(")); continue }
                 }
                 m.appendReplacement(sb, java.util.regex.Matcher.quoteReplacement(m.group(0)))
             }
             m.appendTail(sb)
             [file: ti.file, text: sb.toString()]
         }
-        // ==============================================================================
 
-        // Detecta pacote(s) do usuário
+        // pacote & rename opcional (com ponte), protegido por ALLOW_RENAME
         def pacotesUsuario = fontesUsuario.collect { extrairPacote(it.text) }.toSet()
-        String pacoteUsuario = (pacotesUsuario.size() == 1) ? pacotesUsuario.first() : ''  // se múltiplos, tratamos como default
-
-        // Renome de classe pública se teste espera outro nome
+        String pacoteUsuario = (pacotesUsuario.size() == 1) ? pacotesUsuario.first() : ''
         def nomesPublicosUsuario = fontesUsuario.collect { extrairNomePublico(it.text) }.findAll { it }
         def nomesReferenciadosTestes = classesReferenciadasEmTestes(testesIA.collect { it.text }.join("\n"))
         String nomePublico = (nomesPublicosUsuario ?: [null]).first()
         String nomeEsperado = (nomesReferenciadosTestes ?: [null]).first()
         boolean deveRenomear = (nomePublico && nomeEsperado && nomePublico != nomeEsperado &&
                                 nomesPublicosUsuario.size()==1 && nomesReferenciadosTestes.size()==1)
-
-        // 🔒 Proteção para NÃO renomear produção (default)
         if (ALLOW_RENAME.get() && deveRenomear) {
             fontesUsuario = fontesUsuario.collect { f ->
                 if (extrairNomePublico(f.text) == nomePublico) {
                     def novoTexto = f.text
-                        // renomeia o identificador da classe
                         .replaceFirst(
                             /(?m)(^\s*public\s+(?:class|interface|enum|record)\s+)${java.util.regex.Pattern.quote(nomePublico)}\b/,
                             "\$1${nomeEsperado}"
                         )
-                        // ✅ renomeia construtores antigos (public OldName(...)) para o novo nome
                         .replaceAll(
                             "(?m)(^\\s*public\\s+)${java.util.regex.Pattern.quote(nomePublico)}\\s*\\(",
                             "\$1${nomeEsperado}("
                         )
-
                     def pacote = extrairPacote(novoTexto)
                     def caminhoPacote = pacote ? pacote.replace('.', File.separator) : ''
-                    def repoDir = new File(dirEntrada, caminhoPacote)
-                    repoDir.mkdirs()
+                    def repoDir = new File(dirEntrada, caminhoPacote); repoDir.mkdirs()
                     new File(repoDir, "${nomeEsperado}.java").setText(novoTexto, 'UTF-8')
-                    def antigo = new File(repoDir, "${nomePublico}.java")
-                    if (antigo.exists()) {
-                        antigo.delete()
-                    }
-
+                    def antigo = new File(repoDir, "${nomePublico}.java"); if (antigo.exists()) antigo.delete()
                     [file: f.file, text: novoTexto]
-                } else {
-                    f
+                } else { f }
+            }
+            println "organizarUsuario → renomeado classe pública '${nomePublico}' → '${nomeEsperado}'"
+            testesIA = testesIA.collect { ti -> [file: ti.file, text: ti.text?.replaceAll("\\b${java.util.regex.Pattern.quote(nomePublico)}\\b", nomeEsperado)] }
+            boolean precisaBridge = false
+            String pacoteDoUsuario = pacoteUsuario ?: ''
+            fontesUsuario.each { fu ->
+                def t = fu.text
+                def mClass = (t =~ /(?m)^\s*public\s+(?:class)\s+${java.util.regex.Pattern.quote(nomeEsperado)}\b/)
+                def mFinal = (t =~ /(?m)^\s*public\s+final\s+class\s+${java.util.regex.Pattern.quote(nomeEsperado)}\b/)
+                if (mClass.find() && !mFinal.find()) precisaBridge = true
+            }
+            if (precisaBridge) {
+                File baseDestino = dirMain
+                if (pacoteDoUsuario) { baseDestino = new File(dirMain, pacoteDoUsuario.replace('.', File.separator)); baseDestino.mkdirs() }
+                File bridge = new File(baseDestino, "${nomePublico}.java")
+                if (!bridge.exists()) {
+                    def headerPkg = pacoteDoUsuario ? "package ${pacoteDoUsuario};\n" : ""
+                    bridge.setText(
+                        """${headerPkg}
+/** Classe-ponte para compat com testes antigos. */
+public class ${nomePublico} extends ${nomeEsperado} {
+    public ${nomePublico}() { super(); }
+}
+""".stripIndent(), "UTF-8")
+                    println "organizarUsuario → compat: criada classe-ponte '${nomePublico}' → '${nomeEsperado}'."
                 }
             }
-
-            println "organizarUsuario → renomeado classe pública '${nomePublico}' → '${nomeEsperado}' para alinhar com os testes"
-
-            // === Após renomear nomePublico -> nomeEsperado, garanta compatibilidade ===
-            if (deveRenomear) {
-                // 1) Atualiza referências nos testes (testesIA) para o novo nome
-                testesIA = testesIA.collect { ti ->
-                    def txt = ti.text?.replaceAll("\\b${java.util.regex.Pattern.quote(nomePublico)}\\b", nomeEsperado)
-                    [file: ti.file, text: txt]
-                }
-
-                // 2) Se o artefato renomeado é uma CLASSE (não final), cria classe-ponte
-                boolean precisaBridge = false
-                String pacoteDoUsuario = pacoteUsuario ?: ''
-                String headerPkg = pacoteDoUsuario ? "package ${pacoteDoUsuario};\n" : ""
-
-                // Descobre se a definição pós-rename é "public class <nomeEsperado>" e não é final
-                fontesUsuario.each { fu ->
-                    def t = fu.text
-                    def mClass = (t =~ /(?m)^\s*public\s+(?:class)\s+${java.util.regex.Pattern.quote(nomeEsperado)}\b/)
-                    def mFinal = (t =~ /(?m)^\s*public\s+final\s+class\s+${java.util.regex.Pattern.quote(nomeEsperado)}\b/)
-                    if (mClass.find() && !mFinal.find()) {
-                        precisaBridge = true
-                    }
-                }
-
-                if (precisaBridge) {
-                    File baseDestino = dirMain
-                    if (pacoteDoUsuario) {
-                        baseDestino = new File(dirMain, pacoteDoUsuario.replace('.', File.separator))
-                        baseDestino.mkdirs()
-                    }
-                    File bridge = new File(baseDestino, "${nomePublico}.java")
-                    if (!bridge.exists()) {
-                        bridge.setText(
-                            """${headerPkg}
-                            /**
-                            * Classe-ponte para compatibilidade com testes antigos.
-                            * Mantém o nome anterior e delega para ${nomeEsperado}.
-                            */
-                            public class ${nomePublico} extends ${nomeEsperado} {
-                                public ${nomePublico}() { super(); }
-                            }
-                            """.stripIndent(), "UTF-8")
-                        println "organizarUsuario → compat: criada classe-ponte '${nomePublico}' estendendo '${nomeEsperado}'."
-                    }
-                } else {
-                    println "organizarUsuario → compat: sem classe-ponte (tipo não é 'class' ou é 'final'); apenas reescrevi referências nos testes."
-                }
-            }
-
         } else if (deveRenomear) {
-            println "organizarUsuario → ⚠️ rename AUTOMÁTICO DESLIGADO (regra: não renomear produção). Ajuste os TESTES para referenciar '${nomePublico}'."
+            println "organizarUsuario → ⚠️ rename automático desligado. Ajuste os TESTES para referenciar '${nomePublico}'."
         }
 
         def ajustarTesteParaPacoteUsuario = { String texto ->
-            // 1) alinhar pacote
             String pkgTeste = extrairPacote(texto)
             if (pacoteUsuario == '') {
                 texto = texto.replaceFirst(/(?m)^\s*package\s+[^;]+;\s*/, '')
@@ -581,98 +443,52 @@ tasks.register('organizarUsuario') {
                 if (pkgTeste == '') {
                     texto = "package ${pacoteUsuario};\n" + texto
                     pkgTeste = pacoteUsuario
-                } else {
-                    if (!texto.contains("import ${pacoteUsuario}.")) {
-                        texto = texto.replaceFirst(/(?m)^(package\s+[^;]+;\s*)/, "\$1\nimport ${pacoteUsuario}.*;\n")
-                    }
+                } else if (!texto.contains("import ${pacoteUsuario}.")) {
+                    texto = texto.replaceFirst(/(?m)^(package\s+[^;]+;\s*)/, "\$1\nimport ${pacoteUsuario}.*;\n")
                 }
             }
 
-            // 2) injetar imports JDK comuns se faltarem
             def candidatos = [
-                [sym: 'Random',              fqcn: 'java.util.Random'],
-                [sym: 'Scanner',             fqcn: 'java.util.Scanner'],
-                [sym: 'Arrays',              fqcn: 'java.util.Arrays'],
-                [sym: 'List',                fqcn: 'java.util.List'],
-                [sym: 'ArrayList',           fqcn: 'java.util.ArrayList'],
-                [sym: 'LinkedList',          fqcn: 'java.util.LinkedList'],
-                [sym: 'Deque',               fqcn: 'java.util.Deque'],
-                [sym: 'ArrayDeque',          fqcn: 'java.util.ArrayDeque'],
-                [sym: 'Queue',               fqcn: 'java.util.Queue'],
-                [sym: 'Set',                 fqcn: 'java.util.Set'],
-                [sym: 'HashSet',             fqcn: 'java.util.HashSet'],
-                [sym: 'TreeSet',             fqcn: 'java.util.TreeSet'],
-                [sym: 'Map',                 fqcn: 'java.util.Map'],
-                [sym: 'HashMap',             fqcn: 'java.util.HashMap'],
-                [sym: 'LinkedHashMap',       fqcn: 'java.util.LinkedHashMap'],
-                [sym: 'TreeMap',             fqcn: 'java.util.TreeMap'],
-                [sym: 'Collections',         fqcn: 'java.util.Collections'],
-                [sym: 'Optional',            fqcn: 'java.util.Optional'],
-                [sym: 'OptionalInt',         fqcn: 'java.util.OptionalInt'],
-                [sym: 'OptionalLong',        fqcn: 'java.util.OptionalLong'],
-                [sym: 'OptionalDouble',      fqcn: 'java.util.OptionalDouble'],
-                [sym: 'Comparator',          fqcn: 'java.util.Comparator'],
-                [sym: 'UUID',                fqcn: 'java.util.UUID'],
-                [sym: 'Properties',          fqcn: 'java.util.Properties'],
-                [sym: 'BitSet',              fqcn: 'java.util.BitSet'],
-                [sym: 'Stream',              fqcn: 'java.util.stream.Stream'],
-                [sym: 'IntStream',           fqcn: 'java.util.stream.IntStream'],
-                [sym: 'LongStream',          fqcn: 'java.util.stream.LongStream'],
-                [sym: 'DoubleStream',        fqcn: 'java.util.stream.DoubleStream'],
-                [sym: 'Instant',             fqcn: 'java.time.Instant'],
-                [sym: 'Duration',            fqcn: 'java.time.Duration'],
-                [sym: 'Period',              fqcn: 'java.time.Period'],
-                [sym: 'LocalDate',           fqcn: 'java.time.LocalDate'],
-                [sym: 'LocalTime',           fqcn: 'java.time.LocalTime'],
-                [sym: 'LocalDateTime',       fqcn: 'java.time.LocalDateTime'],
-                [sym: 'ZonedDateTime',       fqcn: 'java.time.ZonedDateTime'],
-                [sym: 'OffsetDateTime',      fqcn: 'java.time.OffsetDateTime'],
-                [sym: 'ZoneId',              fqcn: 'java.time.ZoneId'],
-                [sym: 'DateTimeFormatter',   fqcn: 'java.time.format.DateTimeFormatter'],
-                [sym: 'Path',                fqcn: 'java.nio.file.Path'],
-                [sym: 'Paths',               fqcn: 'java.nio.file.Paths'],
-                [sym: 'Files',               fqcn: 'java.nio.file.Files'],
-                [sym: 'StandardOpenOption',  fqcn: 'java.nio.file.StandardOpenOption'],
-                [sym: 'Charset',             fqcn: 'java.nio.charset.Charset'],
-                [sym: 'StandardCharsets',    fqcn: 'java.nio.charset.StandardCharsets'],
-                [sym: 'File',                fqcn: 'java.io.File'],
-                [sym: 'IOException',         fqcn: 'java.io.IOException'],
-                [sym: 'InputStream',         fqcn: 'java.io.InputStream'],
-                [sym: 'OutputStream',        fqcn: 'java.io.OutputStream'],
-                [sym: 'FileInputStream',     fqcn: 'java.io.FileInputStream'],
-                [sym: 'FileOutputStream',    fqcn: 'java.io.FileOutputStream'],
-                [sym: 'Reader',              fqcn: 'java.io.Reader'],
-                [sym: 'Writer',              fqcn: 'java.io.Writer'],
-                [sym: 'BufferedReader',      fqcn: 'java.io.BufferedReader'],
-                [sym: 'BufferedWriter',      fqcn: 'java.io.BufferedWriter'],
-                [sym: 'InputStreamReader',   fqcn: 'java.io.InputStreamReader'],
-                [sym: 'OutputStreamWriter',  fqcn: 'java.io.OutputStreamWriter'],
-                [sym: 'FileReader',          fqcn: 'java.io.FileReader'],
-                [sym: 'FileWriter',          fqcn: 'java.io.FileWriter'],
-                [sym: 'PrintWriter',         fqcn: 'java.io.PrintWriter'],
-                [sym: 'BigDecimal',          fqcn: 'java.math.BigDecimal'],
-                [sym: 'BigInteger',          fqcn: 'java.math.BigInteger'],
-                [sym: 'RoundingMode',        fqcn: 'java.math.RoundingMode'],
-                [sym: 'Pattern',             fqcn: 'java.util.regex.Pattern'],
-                [sym: 'Matcher',             fqcn: 'java.util.regex.Matcher'],
-                [sym: 'URI',                 fqcn: 'java.net.URI'],
-                [sym: 'URL',                 fqcn: 'java.net.URL'],
-                [sym: 'URLEncoder',          fqcn: 'java.net.URLEncoder'],
-                [sym: 'URLDecoder',          fqcn: 'java.net.URLDecoder'],
-                [sym: 'HttpClient',          fqcn: 'java.net.http.HttpClient'],
-                [sym: 'HttpRequest',         fqcn: 'java.net.http.HttpRequest'],
-                [sym: 'HttpResponse',        fqcn: 'java.net.http.HttpResponse'],
-                [sym: 'Objects',             fqcn: 'java.util.Objects'],
-                [sym: 'StringJoiner',        fqcn: 'java.util.StringJoiner'],
-                [sym: 'Spliterator',         fqcn: 'java.util.Spliterator'],
+                [sym:'Random', fqcn:'java.util.Random'], [sym:'Scanner', fqcn:'java.util.Scanner'],
+                [sym:'Arrays', fqcn:'java.util.Arrays'], [sym:'List', fqcn:'java.util.List'],
+                [sym:'ArrayList', fqcn:'java.util.ArrayList'], [sym:'LinkedList', fqcn:'java.util.LinkedList'],
+                [sym:'Deque', fqcn:'java.util.Deque'], [sym:'ArrayDeque', fqcn:'java.util.ArrayDeque'],
+                [sym:'Queue', fqcn:'java.util.Queue'], [sym:'Set', fqcn:'java.util.Set'],
+                [sym:'HashSet', fqcn:'java.util.HashSet'], [sym:'TreeSet', fqcn:'java.util.TreeSet'],
+                [sym:'Map', fqcn:'java.util.Map'], [sym:'HashMap', fqcn:'java.util.HashMap'],
+                [sym:'LinkedHashMap', fqcn:'java.util.LinkedHashMap'], [sym:'TreeMap', fqcn:'java.util.TreeMap'],
+                [sym:'Collections', fqcn:'java.util.Collections'], [sym:'Optional', fqcn:'java.util.Optional'],
+                [sym:'Comparator', fqcn:'java.util.Comparator'], [sym:'UUID', fqcn:'java.util.UUID'],
+                [sym:'Properties', fqcn:'java.util.Properties'], [sym:'BitSet', fqcn:'java.util.BitSet'],
+                [sym:'Stream', fqcn:'java.util.stream.Stream'], [sym:'IntStream', fqcn:'java.util.stream.IntStream'],
+                [sym:'LongStream', fqcn:'java.util.stream.LongStream'], [sym:'DoubleStream', fqcn:'java.util.stream.DoubleStream'],
+                [sym:'Instant', fqcn:'java.time.Instant'], [sym:'Duration', fqcn:'java.time.Duration'],
+                [sym:'Period', fqcn:'java.time.Period'], [sym:'LocalDate', fqcn:'java.time.LocalDate'],
+                [sym:'LocalTime', fqcn:'java.time.LocalTime'], [sym:'LocalDateTime', fqcn:'java.time.LocalDateTime'],
+                [sym:'ZonedDateTime', fqcn:'java.time.ZonedDateTime'], [sym:'OffsetDateTime', fqcn:'java.time.OffsetDateTime'],
+                [sym:'ZoneId', fqcn:'java.time.ZoneId'], [sym:'DateTimeFormatter', fqcn:'java.time.format.DateTimeFormatter'],
+                [sym:'Path', fqcn:'java.nio.file.Path'], [sym:'Paths', fqcn:'java.nio.file.Paths'],
+                [sym:'Files', fqcn:'java.nio.file.Files'], [sym:'StandardOpenOption', fqcn:'java.nio.file.StandardOpenOption'],
+                [sym:'Charset', fqcn:'java.nio.charset.Charset'], [sym:'StandardCharsets', fqcn:'java.nio.charset.StandardCharsets'],
+                [sym:'File', fqcn:'java.io.File'], [sym:'IOException', fqcn:'java.io.IOException'],
+                [sym:'InputStream', fqcn:'java.io.InputStream'], [sym:'OutputStream', fqcn:'java.io.OutputStream'],
+                [sym:'FileInputStream', fqcn:'java.io.FileInputStream'], [sym:'FileOutputStream', fqcn:'java.io.FileOutputStream'],
+                [sym:'Reader', fqcn:'java.io.Reader'], [sym:'Writer', fqcn:'java.io.Writer'],
+                [sym:'BufferedReader', fqcn:'java.io.BufferedReader'], [sym:'BufferedWriter', fqcn:'java.io.BufferedWriter'],
+                [sym:'InputStreamReader', fqcn:'java.io.InputStreamReader'], [sym:'OutputStreamWriter', fqcn:'java.io.OutputStreamWriter'],
+                [sym:'FileReader', fqcn:'java.io.FileReader'], [sym:'FileWriter', fqcn:'java.io.FileWriter'],
+                [sym:'PrintWriter', fqcn:'java.io.PrintWriter'], [sym:'BigDecimal', fqcn:'java.math.BigDecimal'],
+                [sym:'BigInteger', fqcn:'java.math.BigInteger'], [sym:'RoundingMode', fqcn:'java.math.RoundingMode'],
+                [sym:'Pattern', fqcn:'java.util.regex.Pattern'], [sym:'Matcher', fqcn:'java.util.regex.Matcher'],
+                [sym:'URI', fqcn:'java.net.URI'], [sym:'URL', fqcn:'java.net.URL'],
+                [sym:'URLEncoder', fqcn:'java.net.URLEncoder'], [sym:'URLDecoder', fqcn:'java.net.URLDecoder'],
+                [sym:'HttpClient', fqcn:'java.net.http.HttpClient'], [sym:'HttpRequest', fqcn:'java.net.http.HttpRequest'],
+                [sym:'HttpResponse', fqcn:'java.net.http.HttpResponse'], [sym:'Objects', fqcn:'java.util.Objects'],
+                [sym:'StringJoiner', fqcn:'java.util.StringJoiner'], [sym:'Spliterator', fqcn:'java.util.Spliterator'],
             ]
-
             def importados = [] as Set
             def impMatcher = (texto =~ /(?m)^\s*import\s+([a-zA-Z0-9_.]+)\s*;/)
-            while (impMatcher.find()) {
-                importados << impMatcher.group(1)
-            }
-
+            while (impMatcher.find()) importados << impMatcher.group(1)
             def paraInserir = []
             candidatos.each { c ->
                 def usaSimbolo = (texto =~ /\b${c.sym}\b/).find()
@@ -680,34 +496,27 @@ tasks.register('organizarUsuario') {
                 def jaTemWildcard = importados.any { it == c.fqcn.replaceAll(/\.[^.]+$/, '.*') }
                 def jaUsaQualificado = (texto =~ /\b${java.util.regex.Pattern.quote(c.fqcn)}\b/).find()
                 if (usaSimbolo && !jaTemImportDireto && !jaTemWildcard && !jaUsaQualificado) {
-                    paraInserir << "import ${c.fqcn};"
-                    importados << c.fqcn
+                    paraInserir << "import ${c.fqcn}"; importados << c.fqcn
                 }
             }
-
             if (!paraInserir.isEmpty()) {
                 if ((texto =~ /(?m)^\s*package\s+[^;]+;\s*$/).find()) {
-                    texto = texto.replaceFirst(/(?m)^(package\s+[^;]+;\s*)/, "\$1\n" + paraInserir.join("\n") + "\n")
+                    texto = texto.replaceFirst(/(?m)^(package\s+[^;]+;\s*)/, "\$1\n" + paraInserir.join(";\n") + ";\n")
                 } else {
-                    texto = paraInserir.join("\n") + "\n" + texto
+                    texto = paraInserir.join(";\n") + ";\n" + texto
                 }
             }
-
-            return texto
+            texto
         }
-
         def espelharParaRepo = { String texto ->
             String pacote = extrairPacote(texto)
             String caminhoPacote = pacote ? pacote.replace('.', File.separator) : ''
             File repoDir = caminhoPacote ? new File(dirEntrada, caminhoPacote) : dirEntrada
             repoDir.mkdirs()
-
             String nomePublicoLocal = extrairNomePublico(texto)
             String nomeArquivo = nomePublicoLocal ? "${nomePublicoLocal}.java" : "Arquivo_${System.nanoTime()}.java"
             new File(repoDir, nomeArquivo).setText(texto, 'UTF-8')
         }
-
-        // --- Helpers p/ testes: stub + hook por reflexão ---
         def injetarStubLoginAttempt = {
             String pacote = pacoteUsuario ?: ''
             String header = pacote ? "package ${pacote};\n" : ""
@@ -715,19 +524,18 @@ tasks.register('organizarUsuario') {
             destinoDir.mkdirs()
             new File(destinoDir, "LoginAttempt.java").setText(
                 """${header}
-                public class LoginAttempt {
-                    public String user;
-                    public boolean success;
-                    public long timestamp;
-                    public LoginAttempt() {}
-                    public LoginAttempt(String user, boolean success, long ts){
-                        this.user = user; this.success = success; this.timestamp = ts;
-                    }
-                }
-                """.stripIndent(), "UTF-8")
+public class LoginAttempt {
+    public String user;
+    public boolean success;
+    public long timestamp;
+    public LoginAttempt() {}
+    public LoginAttempt(String user, boolean success, long ts){
+        this.user = user; this.success = success; this.timestamp = ts;
+    }
+}
+""".stripIndent(), "UTF-8")
             println "organizarUsuario → stub LoginAttempt injetado em testes (stage)"
         }
-
         def injetarTestHooks = {
             String pacote = pacoteUsuario ?: ''
             String header = pacote ? "package ${pacote};\n" : ""
@@ -735,51 +543,41 @@ tasks.register('organizarUsuario') {
             destinoDir.mkdirs()
             new File(destinoDir, "TestHooks.java").setText(
                 """${header}
-                import java.lang.reflect.Field;
-                import java.util.Map;
-
-                public final class TestHooks {
-                    private TestHooks() {}
-
-                    @SuppressWarnings("unchecked")
-                    public static void setActive(Object ums, String username, boolean active) {
-                        try {
-                            Class<?> cls = ums.getClass();
-                            Field fUsers = cls.getDeclaredField("users");
-                            fUsers.setAccessible(true);
-                            Object mapObj = fUsers.get(ums);
-                            Object userObj = ((Map<String, ?>) mapObj).get(username);
-                            if (userObj == null) return;
-                            Field fActive = userObj.getClass().getDeclaredField("isActive");
-                            fActive.setAccessible(true);
-                            fActive.setBoolean(userObj, active);
-                        } catch (Exception e) {
-                            throw new RuntimeException("TestHooks.setActive falhou", e);
-                        }
-                    }
-                }
-                """.stripIndent(), "UTF-8")
+import java.lang.reflect.Field;
+import java.util.Map;
+public final class TestHooks {
+    private TestHooks() {}
+    @SuppressWarnings("unchecked")
+    public static void setActive(Object ums, String username, boolean active) {
+        try {
+            Class<?> cls = ums.getClass();
+            Field fUsers = cls.getDeclaredField("users");
+            fUsers.setAccessible(true);
+            Object mapObj = fUsers.get(ums);
+            Object userObj = ((Map<String, ?>) mapObj).get(username);
+            if (userObj == null) return;
+            Field fActive = userObj.getClass().getDeclaredField("isActive");
+            fActive.setAccessible(true);
+            fActive.setBoolean(userObj, active);
+        } catch (Exception e) {
+            throw new RuntimeException("TestHooks.setActive falhou", e);
+        }
+    }
+}
+""".stripIndent(), "UTF-8")
             println "organizarUsuario → TestHooks injetado em testes (stage)"
         }
-
         def gravar = { String texto, boolean isTeste ->
-            if (isTeste) {
-                texto = sanitizeJavaTest(texto)
-                texto = ajustarTesteParaPacoteUsuario(texto)
-            }
+            if (isTeste) { texto = sanitizeJavaTest(texto); texto = ajustarTesteParaPacoteUsuario(texto) }
             String pacote = extrairPacote(texto)
             String caminhoPacote = pacote ? pacote.replace('.', File.separator) : ''
             File baseDestino = isTeste ? dirTestRaw : dirMain
             File destinoDir = caminhoPacote ? new File(baseDestino, caminhoPacote) : baseDestino
             destinoDir.mkdirs()
-
             String nomePublicoLocal = extrairNomePublico(texto)
             String nomeArquivo = nomePublicoLocal ? "${nomePublicoLocal}.java" : "Arquivo_${System.nanoTime()}.java"
             new File(destinoDir, nomeArquivo).setText(texto, 'UTF-8')
-
-            if (!isTeste) {
-                espelharParaRepo(texto)
-            }
+            if (!isTeste) espelharParaRepo(texto)
         }
 
         testesIA = testesIA.collect { ti ->
@@ -788,139 +586,82 @@ tasks.register('organizarUsuario') {
                 /(\\b[A-Za-z_][A-Za-z0-9_]*)\\.users\\.get\\(([^)]+)\\)\\.isActive\\s*=\\s*(true|false)\\s*;/,
                 'TestHooks.setActive($1, $2, $3);'
             )
-            if (patched.contains("LoginAttempt")) {
-                injetarStubLoginAttempt()
-            }
-            if (!patched.equals(t) || patched.contains("TestHooks.setActive(")) {
-                injetarTestHooks()
-            }
+            if (patched.contains("LoginAttempt")) injetarStubLoginAttempt()
+            if (!patched.equals(t) || patched.contains("TestHooks.setActive(")) injetarTestHooks()
             [file: ti.file, text: patched]
         }
 
-        // --- SANEAMENTO DE FONTES DE PRODUÇÃO (robusto contra "lixo" fora da classe) ---
+        // sanitize main robusto
         def sanitizeJavaMain = { String s ->
             if (s == null) return s
-            // Remove BOM e cercas de markdown
-            s = s.replace('\uFEFF','')
-            s = s.replaceAll('(?m)^```\\w*\\s*\\r?\\n?', '')
-            s = s.replaceAll('(?m)^```\\s*$', '')
-
-            // Remove linhas iniciais não-Java até o primeiro token válido
+            s = s.replace('\uFEFF','').replaceAll('(?m)^```\\w*\\s*\\r?\\n?', '').replaceAll('(?m)^```\\s*$', '')
             def lines = s.readLines()
             def inicioValido = { String ln ->
-                ln ==~ /\s*/ ||
-                ln ==~ /\s*package\s+.*/ ||
-                ln ==~ /\s*import\s+.*/  ||
-                ln ==~ /\s*@.*/          ||
-                ln ==~ /\s*(public\s+)?(class|interface|enum|record)\b.*/ ||
+                ln ==~ /\s*/ || ln ==~ /\s*package\s+.*/ || ln ==~ /\s*import\s+.*/ ||
+                ln ==~ /\s*@.*/ || ln ==~ /\s*(public\s+)?(class|interface|enum|record)\b.*/ ||
                 ln ==~ /\s*\/\/.*/ || ln ==~ /\s*\/\*.*/ || ln ==~ /\s*\*.*/
             }
-            while (!lines.isEmpty() && !inicioValido(lines[0])) { lines.remove(0) }
+            while (!lines.isEmpty() && !inicioValido(lines[0])) lines.remove(0)
             s = lines.join('\n')
-
-            // Localiza a primeira declaração pública de tipo
             def m = (s =~ /(?m)^\s*public\s+(?:class|interface|enum|record)\s+[A-Za-z_]\w*\b/)
-            if (!m.find()) {
-                // Sem tipo público — devolve o que temos (não vamos arriscar cortar demais)
-                return s
-            }
+            if (!m.find()) return s
             int declStart = m.start()
-            // Acha a primeira '{' depois da declaração
             int braceOpen = s.indexOf('{', declStart)
-            if (braceOpen == -1) {
-                return s // sem '{' — não há o que balancear
-            }
-
-            // Varre contando chaves até fechar o bloco do tipo
-            int depth = 0
-            int endIdx = -1
+            if (braceOpen == -1) return s
+            int depth = 0, endIdx = -1
             for (int i = braceOpen; i < s.length(); i++) {
                 char c = s.charAt(i)
                 if (c == '{') depth++
                 else if (c == '}') depth--
                 if (depth == 0) { endIdx = i; break }
             }
-
-            if (endIdx != -1) {
-                // Corta qualquer coisa após o fechamento do tipo (remove statements soltos como "scanner.close();")
-                s = s.substring(0, endIdx + 1)
-            } else {
-                // Arquivo termina sem fechar — completa com as chaves necessárias
-                s = s + ("\n" + ("}" * depth) + "\n")
-            }
-
-            return s
+            if (endIdx != -1) s = s.substring(0, endIdx + 1)
+            else s = s + ("\n" + ("}" * depth) + "\n")
+            s
         }
-
-        def fontesUsuarioSan = fontesUsuario.collect { f ->
-            [file: f.file, text: sanitizeJavaMain(f.text)]
-        }
+        def fontesUsuarioSan = fontesUsuario.collect { f -> [file: f.file, text: sanitizeJavaMain(f.text)] }
         fontesUsuario = fontesUsuarioSan
 
         fontesUsuario.each { gravar(it.text, false) }
-        def testesIALista = testesIA.collect { gravar(it.text, true); it } // grava e retorna
+        def testesIALista = testesIA.collect { gravar(it.text, true); it }
 
-        // --- [INÍCIO: injeção condicional de stubs do modelo] ---
+        // stubs condicional em org.example.model
         def modeloPkgPath = new File(dirMain, "org/example/model")
         def modeloJaExiste = { String nome ->
             def f1 = new File(modeloPkgPath, "${nome}.java")
             if (f1.exists()) return true
-            return fileTree(dirEntrada) {
-                include "**/${nome}.java"
-            }.any { it.text.contains("package org.example.model") }
+            return fileTree(dirEntrada) { include "**/${nome}.java" }.any { it.text.contains("package org.example.model") }
         }
-
         def allText = (fontesUsuario.collect{it.text} + testesIALista.collect{it.text}).join("\n")
         def precisaRel   = allText.contains("RelatorioCobertura") && !modeloJaExiste("RelatorioCobertura")
         def precisaClasse= allText.contains("ClasseCoberta")      && !modeloJaExiste("ClasseCoberta")
         def precisaMetodo= allText.contains("MetodoCoberto")      && !modeloJaExiste("MetodoCoberto")
-
         if (precisaRel || precisaClasse || precisaMetodo) {
             modeloPkgPath.mkdirs()
-
-            if (precisaMetodo) {
-                new File(modeloPkgPath, "MetodoCoberto.java").setText("""
-                    package org.example.model;
-                    public record MetodoCoberto(String nome, int linhaInicio, int linhaFim, double cobertura) {}
-                """.stripIndent(), "UTF-8")
-            }
-
-            if (precisaClasse) {
-                new File(modeloPkgPath, "ClasseCoberta.java").setText("""
-                    package org.example.model;
-                    import java.util.List;
-                    public record ClasseCoberta(String nome, String caminho, List<MetodoCoberto> metodos) {}
-                """.stripIndent(), "UTF-8")
-            }
-
-            if (precisaRel) {
-                new File(modeloPkgPath, "RelatorioCobertura.java").setText("""
-                    package org.example.model;
-                    import java.util.List;
-                    public final class RelatorioCobertura {
-                        public enum Ferramenta { JACOCO, OUTRA }
-                        private final String caminhoRelatorio;
-                        private final List<ClasseCoberta> classes;
-                        private final Ferramenta ferramenta;
-                        public RelatorioCobertura(String caminhoRelatorio, List<ClasseCoberta> classes, Ferramenta ferramenta) {
-                            this.caminhoRelatorio = caminhoRelatorio;
-                            this.classes = classes;
-                            this.ferramenta = ferramenta;
-                        }
-                        public String caminhoRelatorio() { return caminhoRelatorio; }
-                        public List<ClasseCoberta> classes() { return classes; }
-                        public Ferramenta ferramenta() { return ferramenta; }
-                    }
-                """.stripIndent(), "UTF-8")
-            }
-
-            println "organizarUsuario → stubs injetados em org.example.model: " +
-                    [(precisaMetodo?'MetodoCoberto':null),(precisaClasse?'ClasseCoberta':null),(precisaRel?'RelatorioCobertura':null)]
-                    .findAll{it!=null}.join(", ")
+            if (precisaMetodo) new File(modeloPkgPath, "MetodoCoberto.java").setText(
+                "package org.example.model;\npublic record MetodoCoberto(String nome, int linhaInicio, int linhaFim, double cobertura) {}\n", "UTF-8")
+            if (precisaClasse) new File(modeloPkgPath, "ClasseCoberta.java").setText(
+                "package org.example.model;\nimport java.util.List;\npublic record ClasseCoberta(String nome, String caminho, List<MetodoCoberto> metodos) {}\n", "UTF-8")
+            if (precisaRel) new File(modeloPkgPath, "RelatorioCobertura.java").setText(
+                """package org.example.model;
+import java.util.List;
+public final class RelatorioCobertura {
+    public enum Ferramenta { JACOCO, OUTRA }
+    private final String caminhoRelatorio;
+    private final List<ClasseCoberta> classes;
+    private final Ferramenta ferramenta;
+    public RelatorioCobertura(String caminhoRelatorio, List<ClasseCoberta> classes, Ferramenta ferramenta) {
+        this.caminhoRelatorio = caminhoRelatorio; this.classes = classes; this.ferramenta = ferramenta;
+    }
+    public String caminhoRelatorio() { return caminhoRelatorio; }
+    public List<ClasseCoberta> classes() { return classes; }
+    public Ferramenta ferramenta() { return ferramenta; }
+}
+""".stripIndent(), "UTF-8")
+            println "organizarUsuario → stubs injetados em org.example.model"
         }
-        // --- [FIM: injeção condicional de stubs do modelo] ---
 
-        // 🔎 META: grava package e classe pública detectados (p/ a CLI da IA usar)
+        // meta para a IA
         def metaDir = file("$projectDir/entrada-usuario/meta"); metaDir.mkdirs()
         def meta = new File(metaDir, "nome_classe.env")
         meta.text = """USUARIO_PACKAGE=${pacoteUsuario ?: ""}
@@ -934,17 +675,13 @@ USUARIO_PUBLIC_CLASS=${nomePublico ?: ""}
         if (nomePublico)  println "organizarUsuario → nome público (usuario): ${nomePublico}"
         if (nomeEsperado) println "organizarUsuario → nome esperado (testes): ${nomeEsperado}"
         if (pacoteUsuario) println "organizarUsuario → pacote do usuário detectado: ${pacoteUsuario}"
-
-        // === [SMOKE TEST] Gera um teste mínimo no STAGE se nenhum válido existir depois ===
-        // (deixamos aqui apenas para fallback; o NoOp final também cobre)
     }
 }
 
-// === Sanear testes do usuário (em RAW) ===
+/* ==================== Sanear testes (RAW) ==================== */
 tasks.register('sanearTestesUsuario') {
     group = 'verification'
-    description = 'Limpa testes: remove marcas ====CODIGO====, ajusta imports JUnit e fecha chaves faltantes'
-
+    description = 'Limpa testes: remove marcas, ajusta imports JUnit e fecha chaves faltantes'
     dependsOn 'organizarUsuario'
     inputs.dir("$buildDir/usuario-src/src/test_raw/java")
     outputs.dir("$buildDir/usuario-src/src/test_raw/java")
@@ -955,19 +692,15 @@ tasks.register('sanearTestesUsuario') {
         File baseTest = file("$buildDir/usuario-src/src/test_raw/java")
         if (!baseTest.exists()) return
 
-        // Padrões pré-compilados (seguros)
-        final java.util.regex.Pattern PAT_FILEHEADER     = java.util.regex.Pattern.compile('(?m)^[A-Za-z0-9_.\\\\/\\-]+\\.java$')
-        final java.util.regex.Pattern PAT_IMPORT_TEST    = java.util.regex.Pattern.compile('(?m)^\\s*import\\s+org\\.junit\\.jupiter\\.api\\.Test\\s*;')
-        final java.util.regex.Pattern PAT_IMPORT_ASSERT  = java.util.regex.Pattern.compile('(?m)^\\s*import\\s+static\\s+org\\.junit\\.jupiter\\.api\\.Assertions\\.\\*\\s*;')
-        final java.util.regex.Pattern PAT_HAS_TEST_ANN   = java.util.regex.Pattern.compile('@Test')
-        final java.util.regex.Pattern PAT_HAS_ASSERTCALL = java.util.regex.Pattern.compile('\\bassert\\w*\\s*\\(')
+        final Pattern PAT_FILEHEADER     = Pattern.compile('(?m)^[A-Za-z0-9_.\\\\/\\-]+\\.java$')
+        final Pattern PAT_IMPORT_TEST    = Pattern.compile('(?m)^\\s*import\\s+org\\.junit\\.jupiter\\.api\\.Test\\s*;')
+        final Pattern PAT_IMPORT_ASSERT  = Pattern.compile('(?m)^\\s*import\\s+static\\s+org\\.junit\\.jupiter\\.api\\.Assertions\\.\\*\\s*;')
+        final Pattern PAT_HAS_TEST_ANN   = Pattern.compile('@Test')
+        final Pattern PAT_HAS_ASSERTCALL = Pattern.compile('\\bassert\\w*\\s*\\(')
 
         baseTest.eachFileRecurse { File f ->
             if (!(f.isFile() && f.name.endsWith('.java'))) return
-
             String src = f.getText('UTF-8')
-
-            // 1) Lixo de cabeçalho
             src = src
                 .replace('\uFEFF','')
                 .replaceAll('(?m)^```\\w*\\s*\\r?\\n?', '')
@@ -976,51 +709,37 @@ tasks.register('sanearTestesUsuario') {
                 .replaceAll(PAT_FILEHEADER, '')
                 .trim()
 
-            // 2) Imports JUnit 5, se necessário
-            boolean temTest       = PAT_HAS_TEST_ANN.matcher(src).find()
+            boolean temTest = PAT_HAS_TEST_ANN.matcher(src).find()
             boolean usaAssertions = PAT_HAS_ASSERTCALL.matcher(src).find()
             if (temTest && !PAT_IMPORT_TEST.matcher(src).find()) {
                 if ((src =~ /(?m)^\s*package\s+[^;]+;\s*$/).find()) {
                     src = src.replaceFirst(/(?m)^(\s*package\s+[^;]+;\s*)/, "\$1\nimport org.junit.jupiter.api.Test;\n")
-                } else {
-                    src = "import org.junit.jupiter.api.Test;\n" + src
-                }
+                } else { src = "import org.junit.jupiter.api.Test;\n" + src }
             }
             if (usaAssertions && !PAT_IMPORT_ASSERT.matcher(src).find()) {
                 if ((src =~ /(?m)^\s*package\s+[^;]+;\s*$/).find()) {
                     src = src.replaceFirst(/(?m)^(\s*package\s+[^;]+;\s*)/, "\$1\nimport static org.junit.jupiter.api.Assertions.*;\n")
-                } else {
-                    src = "import static org.junit.jupiter.api.Assertions.*;\n" + src
-                }
+                } else { src = "import static org.junit.jupiter.api.Assertions.*;\n" + src }
             }
 
-            // 3b) Declarações (com ou sem modificadores/anotações) sem ';'
             def out = new StringBuilder()
             def patSemipadrao = java.util.regex.Pattern.compile(
                 '^\\s*(?:@\\w+(?:\\([^)]*\\))?\\s+)*' +
                 '(?:(?:public|private|protected|static|final|abstract|transient|volatile|synchronized)\\s+)*' +
                 '([A-Za-z_][\\w.<>\\[\\]]*)\\s+([A-Za-z_]\\w*)\\s*$'
             )
-
             src.readLines().each { ln ->
                 String t = ln.trim()
-                boolean comentario   = t.startsWith('//') || t.startsWith('/*') || t.startsWith('*')
+                boolean comentario = t.startsWith('//') || t.startsWith('/*') || t.startsWith('*')
                 boolean ehAssinatura = t.contains('(') || t.endsWith('{')
                 boolean precisaPV = !(comentario || ehAssinatura || t.endsWith(';') || t.endsWith('}')) && patSemipadrao.matcher(t).matches()
                 out.append(precisaPV ? (ln + ';') : ln).append('\n')
             }
             src = out.toString()
 
-            // 4) Fecha chaves faltantes no fim
             int abre = 0, fecha = 0
-            for (int i = 0; i < src.length(); i++) {
-                char c = src.charAt(i)
-                if (c == '{') abre++
-                else if (c == '}') fecha++
-            }
-            if (abre > fecha) {
-                src = src + ("\n" + ("}" * (abre - fecha)) + "\n")
-            }
+            for (int i = 0; i < src.length(); i++) { char c = src.charAt(i); if (c == '{') abre++; else if (c == '}') fecha++ }
+            if (abre > fecha) src = src + ("\n" + ("}" * (abre - fecha)) + "\n")
 
             f.setText(src, 'UTF-8')
         }
@@ -1028,16 +747,15 @@ tasks.register('sanearTestesUsuario') {
     }
 }
 
+/* ======================= sourceSets usuario ======================= */
 sourceSets {
     usuario {
         java { srcDirs = [dirMain] }
         resources.srcDirs = []
     }
     usuarioTest {
-        // AGORA compila a partir do STAGE
         java {
             srcDirs = [dirTestStage]
-            // ⛔️ por precaução, mas stage não deve ter .skip
             exclude '**/*.java.skip'
         }
         resources.srcDirs = []
@@ -1046,16 +764,9 @@ sourceSets {
     }
 }
 
-// ==================== Pré-voo: copia só os válidos RAW → STAGE ====================
-import java.util.regex.Pattern
-import java.util.regex.PatternSyntaxException
-
-// ... (mantenha o resto do arquivo) ...
-
-
+/* ====================== Pré-flight + NoOp ====================== */
 def entradaUsuario = "${projectDir}/entrada-usuario"
 
-// garante os dirs antes do preflight
 tasks.register("prepUsuarioDirs") {
     doLast {
         file("${entradaUsuario}/testes_ai_patches").mkdirs()
@@ -1063,20 +774,14 @@ tasks.register("prepUsuarioDirs") {
     }
 }
 
-// se o preflight é um DefaultTask já registrado:
-tasks.named("preflightUsuarioTests") {
-    dependsOn("organizarUsuario", "prepUsuarioDirs")
-    // se você declarou inputs.dir para esses caminhos, mantenha,
-}
-
 tasks.register("preflightUsuarioTests") {
-    // Opcional: inputs/outputs para cache correto
+    dependsOn("organizarUsuario", "prepUsuarioDirs")
+
     inputs.dir("$buildDir/usuario-src/src/test_raw/java")
     inputs.dir("$projectDir/entrada-usuario/testes_ai_patches")
     inputs.dir("$projectDir/entrada-usuario/testes")
 
     doLast {
-        // 1) Compilar REGEX com grupo não-capturante (corrige "Unclosed group")
         Pattern ASSERT_THROWS_BAN
         try {
             ASSERT_THROWS_BAN = Pattern.compile(
@@ -1087,52 +792,42 @@ tasks.register("preflightUsuarioTests") {
             ASSERT_THROWS_BAN = null
         }
 
-        // 2) Pastas onde os testes podem aparecer
         def roots = [
             file("$buildDir/usuario-src/src/test_raw/java"),
             file("$projectDir/entrada-usuario/testes_ai_patches"),
             file("$projectDir/entrada-usuario/testes")
         ].findAll { it.exists() }
 
-        // 3) Varredura
         def offenders = []
         if (ASSERT_THROWS_BAN != null) {
             roots.each { root ->
                 fileTree(root).include("**/*.java").files.each { f ->
                     def txt = f.getText("UTF-8")
-                    if (ASSERT_THROWS_BAN.matcher(txt).find()) {
-                        offenders << f
-                    }
+                    if (ASSERT_THROWS_BAN.matcher(txt).find()) offenders << f
                 }
             }
         }
 
-        // 4) Falhar com mensagem clara se achou padrão proibido
         if (!offenders.isEmpty()) {
             throw new GradleException(
                 "Testes contêm assertThrows para exceções proibidas (Arithmetic/IllegalArgument/NullPointer): " +
                 offenders*.name.join(", ")
             )
         }
-
         logger.lifecycle("preflightUsuarioTests: OK (sem padrões proibidos).")
     }
 }
 
-
-// Se após o preflight não sobrar nenhum teste, injeta um NoOp no STAGE
 tasks.register('injectNoOpTestIfNeeded') {
     group = 'verification'
     description = 'Cria um teste NoOp se nenhum teste válido sobrar.'
     dependsOn 'preflightUsuarioTests'
-
     doLast {
         File base = dirTestStage
         if (!base.exists()) return
         def anyJava = fileTree(base) { include '**/*.java'; exclude '**/*.java.skip' }.files.any()
         if (anyJava) return
 
-        // tenta descobrir o package do usuário
         String pkg = ''
         def srcMain = dirMain
         def anyMain = fileTree(srcMain) { include '**/*.java' }.files.find { it.text =~ /(?m)^\s*package\s+[a-zA-Z0-9_.]+\s*;/ }
@@ -1146,36 +841,25 @@ tasks.register('injectNoOpTestIfNeeded') {
         new File(dir, "NoOpTest.java").text = (pkg ? "package ${pkg};\n" : "") + """
             import org.junit.jupiter.api.Test;
             import static org.junit.jupiter.api.Assertions.*;
-            class NoOpTest {
-                @Test void ok() { assertTrue(true); }
-            }
+            class NoOpTest { @Test void ok() { assertTrue(true); } }
         """.stripIndent()
         println "injectNoOpTestIfNeeded → injetado NoOpTest (para garantir .exec)."
     }
 }
 
-
-// =======================================================================================
-
-// compila main só depois de organizar e resolver libs
+/* =============== Compilações amarradas aos stages corretos =============== */
 tasks.named(sourceSets.usuario.compileJavaTaskName) {
     dependsOn 'organizarUsuario', 'resolverDepsUsuario'
 }
-
-// compila testes só depois de organizar, sanear, resolver libs e compilar main + pré-voo/no-op
 tasks.named(sourceSets.usuarioTest.compileJavaTaskName) {
     dependsOn 'organizarUsuario', 'sanearTestesUsuario', 'resolverDepsUsuario', tasks.named(sourceSets.usuario.classesTaskName)
     dependsOn 'preflightUsuarioTests', 'injectNoOpTestIfNeeded'
     options.encoding = 'UTF-8'
-
-    // NÃO use doNotTrackState aqui: quebra o JavaCompile
     options.incremental = false
     outputs.upToDateWhen { false }
 }
 
-
-
-// ===== Runner padrão do Gradle (mantido, mas não é o caminho do covUsuario) =====
+/* ===================== Runner Test padrão (não usado no loop) ===================== */
 tasks.register('testUsuario', Test) {
     dependsOn tasks.named(sourceSets.usuario.classesTaskName),
               tasks.named(sourceSets.usuarioTest.classesTaskName)
@@ -1183,29 +867,21 @@ tasks.register('testUsuario', Test) {
     testClassesDirs = sourceSets.usuarioTest.output.classesDirs
     classpath       = sourceSets.usuarioTest.runtimeClasspath
     useJUnitPlatform()
-
     ignoreFailures = true
 
-    jacoco {
-        destinationFile = layout.buildDirectory.file("jacoco/testUsuario.exec").get().asFile
-    }
+    jacoco { destinationFile = layout.buildDirectory.file("jacoco/testUsuario.exec").get().asFile }
 
     afterSuite { desc, result ->
         if (!desc.parent) {
-            println "Resumo testUsuario -> total: ${result.testCount}, " +
-                    "passaram: ${result.successfulTestCount}, " +
-                    "falharam: ${result.failedTestCount}, " +
-                    "skipped: ${result.skippedTestCount}"
+            println "Resumo testUsuario -> total: ${result.testCount}, passaram: ${result.successfulTestCount}, falharam: ${result.failedTestCount}, skipped: ${result.skippedTestCount}"
         }
     }
-
     finalizedBy('jacocoRelatorioUsuario')
 }
 
-// === JaCoCo (relatório para o runner padrão) ===
+/* ==================== JaCoCo (runner padrão) ==================== */
 jacoco { toolVersion = "0.8.12" }
 
-// Relatório para o runner padrão (não é o caminho do covUsuario)
 tasks.register("jacocoRelatorioUsuario", JacocoReport) {
     dependsOn "testUsuario", tasks.named(sourceSets.usuario.classesTaskName)
     doFirst { executionData.from(file("$buildDir/jacoco/testUsuario.exec")) }
@@ -1219,20 +895,16 @@ tasks.register("jacocoRelatorioUsuario", JacocoReport) {
         fileTree(dir: "$buildDir/classes/java/usuario", exclude: ['**/*$*']),
         fileTree(dir: "$buildDir/classes/java/main",    exclude: ['**/*$*'])
     )
-
     reports {
-        xml.required = true
-        html.required = true
-        csv.required = false
+        xml.required = true; html.required = true; csv.required = false
         xml.outputLocation = file("$projectDir/entrada-usuario/jacoco-relatorio/jacoco.xml")
         html.outputLocation = file("$projectDir/entrada-usuario/jacoco-relatorio/html")
     }
-
     doFirst { file("$projectDir/entrada-usuario/jacoco-relatorio/html").mkdirs() }
 }
 
 tasks.register("coberturaMinimaUsuario") {
-    dependsOn "jacocoRelatorioUsuarioConsole" // garante que o XML foi gerado
+    dependsOn "jacocoRelatorioUsuarioConsole"
     doLast {
         def thr = (project.findProperty("coverageMinUsuario") ?: System.getenv("MIN_COVERAGE") ?: "0.60") as BigDecimal
         def enforce = (project.findProperty("enforceCoverage") ?: System.getenv("ENFORCE_COVERAGE") ?: "false")
@@ -1244,45 +916,32 @@ tasks.register("coberturaMinimaUsuario") {
             return
         }
 
-        // ⚠️ Remove DOCTYPE para evitar SAXParseException
         String xmlText = xml.getText("UTF-8").replaceAll("(?is)<!DOCTYPE[^>]*>", "")
         def sl = new groovy.xml.XmlSlurper(false, false).parseText(xmlText)
 
-        long missed = 0
-        long covered = 0
+        long missed = 0, covered = 0
         sl.'**'.findAll { it.name() == 'counter' && it.@type?.text() == 'LINE' }.each { c ->
-            missed += (c.@missed.text() as long)
-            covered += (c.@covered.text() as long)
+            missed += (c.@missed.text() as long); covered += (c.@covered.text() as long)
         }
-
         long total = missed + covered
-        if (total == 0) {
-            logger.warn("coberturaMinimaUsuario → relatório sem linhas contadas; pulando verificação.")
-            return
-        }
+        if (total == 0) { logger.warn("coberturaMinimaUsuario → relatório sem linhas contadas; pulando verificação."); return }
 
-        BigDecimal pct = total ? (covered as BigDecimal) / (total as BigDecimal) : 0
+        BigDecimal pct = (covered as BigDecimal) / (total as BigDecimal)
         def pctFmt = String.format(java.util.Locale.US, "%.2f", pct * 100)
         def thrFmt = String.format(java.util.Locale.US, "%.0f", (thr * 100))
-
         println "coberturaMinimaUsuario → Cobertura de linhas: ${pctFmt}%  (threshold: ${thrFmt}%)"
 
         if (pct < thr) {
-            if (enforce) {
-                throw new GradleException("Cobertura (${pctFmt}%) abaixo do mínimo (${thrFmt}%).")
-            } else {
-                logger.warn("Cobertura (${pctFmt}%) abaixo do mínimo (${thrFmt}%). Sinalizando apenas (não-fatal).")
-            }
+            if (enforce) throw new GradleException("Cobertura (${pctFmt}%) abaixo do mínimo (${thrFmt}%).")
+            else logger.warn("Cobertura (${pctFmt}%) abaixo do mínimo (${thrFmt}%). Sinalizando apenas (não-fatal).")
         }
     }
 }
 
-
-/* ===================== NOVO FLUXO: ConsoleLauncher + JaCoCo ===================== */
-
+/* ===================== Fluxo ConsoleLauncher + JaCoCo ===================== */
 tasks.register("testUsuarioConsole", JavaExec) {
     group = "verification"
-    description = "Roda os testes do sourceSet usuarioTest usando o JUnit ConsoleLauncher (instrumentado pelo JaCoCo)."
+    description = "Roda os testes do sourceSet usuarioTest via JUnit ConsoleLauncher (com JaCoCo)."
 
     dependsOn 'organizarUsuario', 'resolverDepsUsuario',
               tasks.named(sourceSets.usuario.classesTaskName),
@@ -1291,22 +950,14 @@ tasks.register("testUsuarioConsole", JavaExec) {
     mainClass = 'org.junit.platform.console.ConsoleLauncher'
     classpath = sourceSets.usuarioTest.runtimeClasspath
 
-    // Varre todo o classpath por testes
     args '--scan-class-path'
-    // força engine jupiter (ajuda a descoberta)
     args '--include-engine', 'junit-jupiter'
-    // Sumário legível
     args '--details', 'summary'
-
-    // Não falhar o build se testes falharem (para ainda gerar cobertura)
     ignoreExitValue = true
-
-    // Charset consistente
     jvmArgs '-Dfile.encoding=UTF-8'
 
     doFirst {
         file("$buildDir/jacoco").mkdirs()
-        // ⚠️ INJEÇÃO DO AGENTE (com proteção anti-quebra)
         try {
             def agent = configurations.jacocoAgentRuntime.singleFile
             if (agent == null || !agent.exists()) {
@@ -1319,24 +970,19 @@ tasks.register("testUsuarioConsole", JavaExec) {
             logger.lifecycle("testUsuarioConsole → falha ao injetar JaCoCo: ${t.class.simpleName}: ${t.message}. Seguindo sem cobertura.")
         }
     }
-
     doLast {
         def exec = file("$buildDir/jacoco/testUsuarioConsole.exec")
         println "testUsuarioConsole → exec: ${exec.exists() ? exec.length() + ' bytes' : 'não gerado'}"
     }
-
     standardInput = System.in
 }
 
-// 2) Relatório JaCoCo a partir do .exec do ConsoleLauncher
 tasks.register("jacocoRelatorioUsuarioConsole", JacocoReport) {
     group = "verification"
     description = "Gera relatório JaCoCo para a execução do ConsoleLauncher."
-
     dependsOn "testUsuarioConsole"
     mustRunAfter "testUsuarioConsole"
 
-    // ⚠️ Configure executionData na fase de configuração (evita SKIPPED)
     executionData.from(file("$buildDir/jacoco/testUsuarioConsole.exec"))
 
     doFirst {
@@ -1356,17 +1002,13 @@ tasks.register("jacocoRelatorioUsuarioConsole", JacocoReport) {
         fileTree(dir: "$buildDir/classes/java/usuario", exclude: ['**/*$*']),
         fileTree(dir: "$buildDir/classes/java/main",    exclude: ['**/*$*'])
     )
-
     reports {
-        xml.required = true
-        html.required = true
-        csv.required = false
+        xml.required = true; html.required = true; csv.required = false
         xml.outputLocation = file("$projectDir/entrada-usuario/jacoco-relatorio/jacoco.xml")
         html.outputLocation = file("$projectDir/entrada-usuario/jacoco-relatorio/html")
     }
 }
 
-// 3) Garantia: se o XML não sair (porque não houve exec), cria vazio para Codecov
 tasks.register("jacocoXmlGarantido") {
     doLast {
         def xml = file("$projectDir/entrada-usuario/jacoco-relatorio/jacoco.xml")
@@ -1387,10 +1029,7 @@ tasks.register("jacocoXmlGarantido") {
     }
 }
 
-/* -------------------------------------------------------------------------
-   🔧 Helper: roda uma tarefa Gradle isolada, captura logs e NÃO falha o build.
-   Salva logs em: entrada-usuario/diagnosticos/<tarefa>.log
-------------------------------------------------------------------------- */
+/* ---------------- Helper: roda uma task Gradle isolada sem derrubar build ---------------- */
 ext.runGradleOnce = { String taskName, Object... args ->
     def out = new ByteArrayOutputStream()
     def err = new ByteArrayOutputStream()
@@ -1408,48 +1047,36 @@ ext.runGradleOnce = { String taskName, Object... args ->
     return res.exitValue == 0
 }
 
-/* -------------------------------------------------------------------------
-   🚀 Loop robusto de cobertura para QUALQUER código do usuário
-   - Tenta compilar
-   - Se falhar, chama IA em modo fix_main (aplica patch mínimo no main)
-   - Recompila, compila testes, executa com JaCoCo e gera relatório
-------------------------------------------------------------------------- */
+/* ---------------- 🚀 covUsuario: 1 rodada completa ---------------- */
 tasks.register("covUsuario") {
     doLast {
-        // 1) preparar fontes e deps
         if (!runGradleOnce(":app:organizarUsuario")) throw new GradleException("Falha em organizarUsuario")
         if (!runGradleOnce(":app:resolverDepsUsuario")) throw new GradleException("Falha em resolverDepsUsuario")
 
-        // 2) compilar main
         def ok = runGradleOnce(":app:compileUsuarioJava")
         if (!ok) {
-            // 2a) pedir patch mínimo para compilar o MAIN
             file("$projectDir/entrada-usuario/diagnosticos").mkdirs()
             runGradleOnce(":app:ajustarTestesIa", "--modo=fix_main")
-            // 2b) tentar compilar novamente
             ok = runGradleOnce(":app:compileUsuarioJava")
             if (!ok) throw new GradleException("Falha ao compilar código do usuário mesmo após fix_main.")
         }
 
-        // 3) sanitizar/preflight testes e compilar testes
         if (!runGradleOnce(":app:sanearTestesUsuario")) throw new GradleException("Falha em sanearTestesUsuario")
         if (!runGradleOnce(":app:preflightUsuarioTests")) throw new GradleException("Falha em preflightUsuarioTests")
         runGradleOnce(":app:injectNoOpTestIfNeeded")
         if (!runGradleOnce(":app:compileUsuarioTestJava")) throw new GradleException("Falha em compileUsuarioTestJava")
 
-        // 4) executar testes com JaCoCo (ConsoleLauncher) e gerar relatório XML/HTML
         runGradleOnce(":app:testUsuarioConsole")
         runGradleOnce(":app:jacocoRelatorioUsuarioConsole")
         runGradleOnce(":app:jacocoXmlGarantido")
     }
-    // manter compat com steps seguintes
     finalizedBy "jacocoXmlGarantido"
 }
 
-// ===== Loop resiliente: para ao gerar jacoco != empty (e opcionalmente cobre >= MIN_COVERAGE) =====
+/* --------- ♻️ covUsuarioLoop: tenta até o jacoco.xml “valer” (e opcionalmente atingir MIN_COVERAGE) --------- */
 tasks.register("covUsuarioLoop") {
     group = "verification"
-    description = "Tenta até gerar jacoco.xml com cobertura > 0; para na 1ª vez que conseguir."
+    description = "Repete até gerar jacoco.xml com cobertura > 0; para na 1ª vez que conseguir (ou quando atingir MIN_COVERAGE)."
 
     doLast {
         int maxTentativas = (System.getenv("COV_MAX_ATTEMPTS") ?: "5") as int
@@ -1460,21 +1087,17 @@ tasks.register("covUsuarioLoop") {
 
         for (int i = 1; i <= maxTentativas; i++) {
             println "== Tentativa ${i}/${maxTentativas} =="
-
-            // 1) organiza/resolve/compila/roda testes instrumentados + gera relatório
             exec { commandLine "./gradlew", ":app:covUsuario"; isIgnoreExitValue = true }
 
             boolean temContagem = false
             BigDecimal pct = 0.0
 
             if (xml.exists() && xml.length() > 0) {
-                // remove DOCTYPE e lê contadores
                 String xmlText = xml.getText("UTF-8").replaceAll("(?is)<!DOCTYPE[^>]*>", "")
                 def sl = new groovy.xml.XmlSlurper(false, false).parseText(xmlText)
                 long missed = 0, covered = 0
                 sl.'**'.findAll { it.name() == 'counter' && it.@type?.text() == 'LINE' }.each { c ->
-                    missed += (c.@missed.text() as long)
-                    covered += (c.@covered.text() as long)
+                    missed += (c.@missed.text() as long); covered += (c.@covered.text() as long)
                 }
                 long total = missed + covered
                 temContagem = (total > 0 && covered > 0)
@@ -1494,22 +1117,17 @@ tasks.register("covUsuarioLoop") {
                 println "❌ Relatório vazio/sem linhas cobertas. Pedindo patches…"
             }
 
-            // 2) pedir patches para IA (tolerante a erro/429)
             try {
                 exec { commandLine "./gradlew", ":app:ajustarTestesIa"; isIgnoreExitValue = true }
             } catch (Throwable t) {
                 println "IA falhou (${t.class.simpleName}): seguindo para próxima tentativa."
             }
         }
-
-        println "🔚 Loop esgotado; se ainda não há cobertura suficiente, verifique logs/patches em 'entrada-usuario/testes_ai_patches/'."
+        println "🔚 Loop esgotado; verifique logs/patches em 'entrada-usuario/testes_ai_patches/'."
     }
 }
 
-
-/* ===================== FIM: NOVO FLUXO ===================== */
-
-// --- Demais integrações que você já tinha ---
+/* ===================== Relatório geral (merge) ===================== */
 def _configJacocoRelatorioGeral = { JacocoReport t ->
     t.dependsOn(tasks.findByName("test"), tasks.findByName("testUsuario"))
     t.executionData fileTree(projectDir) { include "**/build/jacoco/*.exec", "**/jacoco/*.exec" }
@@ -1523,29 +1141,19 @@ def _configJacocoRelatorioGeral = { JacocoReport t ->
         fileTree(dir: "$buildDir/classes/java/usuario")
     )
     t.reports {
-        xml.required = true
-        html.required = true
-        csv.required = false
+        xml.required = true; html.required = true; csv.required = false
         html.outputLocation = layout.buildDirectory.dir("reports/jacoco/geral").get().asFile
     }
 }
-
 if (tasks.findByName("jacocoRelatorioGeral") != null) {
     tasks.named("jacocoRelatorioGeral", JacocoReport).configure { _configJacocoRelatorioGeral(it) }
 } else {
     tasks.register("jacocoRelatorioGeral", JacocoReport) { _configJacocoRelatorioGeral(it) }
 }
+tasks.named("jacocoRelatorioUsuario") { finalizedBy("jacocoRelatorioGeral") }
+tasks.named("jacocoRelatorioUsuarioConsole") { finalizedBy("coberturaMinimaUsuario") }
 
-tasks.named("jacocoRelatorioUsuario") {
-    finalizedBy("jacocoRelatorioGeral")
-}
-tasks.named("jacocoRelatorioUsuarioConsole") {
-    finalizedBy("coberturaMinimaUsuario")
-}
-
-tasks.register('usuarioCobertura') {
-    dependsOn 'testUsuario'
-}
+tasks.register('usuarioCobertura') { dependsOn 'testUsuario' }
 
 tasks.withType(Test).configureEach {
     useJUnitPlatform()
@@ -1556,26 +1164,13 @@ tasks.withType(Test).configureEach {
     }
 }
 
-dependencies {
-    usuarioTestImplementation platform('org.junit:junit-bom:5.10.2')
-    usuarioTestImplementation 'org.junit.jupiter:junit-jupiter'
-    usuarioTestRuntimeOnly 'org.junit.platform:junit-platform-launcher'
-    // ✅ garante engine do JUnit 5 no usuarioTest
-    usuarioTestRuntimeOnly 'org.junit.jupiter:junit-jupiter-engine'
-
-    usuarioImplementation fileTree('entrada-usuario/libs') { include '*.jar' }
-    testImplementation 'org.mockito:mockito-core:5.13.0'
-}
-
 tasks.withType(JavaExec).configureEach {
     environment 'JAVA_TOOL_OPTIONS', '-Dfile.encoding=UTF-8'
 }
 
-tasks.named('test') {
-    useJUnitPlatform()
-}
+tasks.named('test') { useJUnitPlatform() }
 
-// ========= EXTRA: pacote zip com payload p/ IA (opcional, útil no CI) =========
+/* ========= EXTRA: pacote zip com payload p/ IA ========= */
 tasks.register("gerarPacoteParaIA", Zip) {
     group = "verification"
     description = "Empacota fontes/testes/relatórios para a IA ajustar testes."
@@ -1597,22 +1192,14 @@ tasks.register("gerarPacoteParaIA", Zip) {
     from("$projectDir/entrada-usuario/jacoco-relatorio") { include 'jacoco.xml', 'html/**'; into("jacoco") }
     from("$buildDir/reports/problems") { include 'problems-report.html'; into("problems") }
 }
+tasks.register("covUsuarioComPayload") { dependsOn "covUsuario", "gerarPacoteParaIA" }
 
-// Alias conveniente local
-tasks.register("covUsuarioComPayload") {
-    dependsOn "covUsuario", "gerarPacoteParaIA"
-}
-
-// --- Correções de orquestração entre organizarUsuario e resolverDepsUsuario ---
+/* --- Orquestração final entre organizarUsuario e resolverDepsUsuario --- */
 tasks.named('organizarUsuario') {
-    // garante ordem correta, eliminando o erro de dependência implícita
     dependsOn 'resolverDepsUsuario'
     inputs.dir("$projectDir/entrada-usuario/libs")
-    // esta task faz varreduras de FS e escreve múltiplos destinos dinamicamente
     notCompatibleWithConfigurationCache("Organiza fontes dinamicamente e lê saídas de outras tasks")
 }
 tasks.named('resolverDepsUsuario') {
-    // usa detachedConfiguration e Project.dependencies dentro do doLast
     notCompatibleWithConfigurationCache("Cria detachedConfiguration em tempo de execução")
 }
-

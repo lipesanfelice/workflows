@@ -165,93 +165,19 @@ jobs:
           echo "tem=false" >> "$GITHUB_OUTPUT"
         fi
 
-    - name: 'Loop: testes + cobertura + auto-ajuste (Groq)'
+    - name: Loop de cobertura (Gradle)
       env:
         GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
         GROQ_MODELO: llama-3.1-8b-instant
-        MAX_TRIES: '3'
-        MIN_COVERAGE: '0.40'          # opcional: exija >1% de linhas cobertas
+        COV_MAX_ATTEMPTS: ${{ env.COV_MAX_ATTEMPTS }}
+        MIN_COVERAGE: ${{ env.MIN_COVERAGE }}
+        ENFORCE_COVERAGE: ${{ env.ENFORCE_COVERAGE }}
       run: |
-        set -euo pipefail
-        tries=1
-        while [ $tries -le ${MAX_TRIES} ]; do
-          echo "== Tentativa $tries/${MAX_TRIES} =="
+        ./gradlew --no-daemon --no-configuration-cache -p app covUsuarioLoop --info
 
-          # roda cobertura (ConsoleLauncher + JaCoCo)
-          if ./gradlew --no-daemon --no-configuration-cache -p app clean covUsuario --info; then
-            ok_exec=1
-          else
-            ok_exec=0
-          fi
-
-          XML="${{ github.workspace }}/app/entrada-usuario/jacoco-relatorio/jacoco.xml"
-          EXEC="${{ github.workspace }}/app/build/jacoco/testUsuarioConsole.exec"
-
-          have_exec=0; have_xml_good=0; pct_ok=0
-          [ -s "$EXEC" ] && have_exec=1
-
-          if [ -s "$XML" ]; then
-            # rejeita xml "empty"
-            if ! grep -q 'report name="empty"' "$XML"; then
-              have_xml_good=1
-              # (opcional) calcula % de linhas cobertas e compara com MIN_COVERAGE
-              # extrai counters LINE missed/covered via awk
-              covered=$(grep '<counter type="LINE"' "$XML" | sed -E 's/.*covered="([0-9]+)".*/\1/' | paste -sd+ - | bc || echo 0)
-              missed=$(grep  '<counter type="LINE"' "$XML" | sed -E 's/.*missed="([0-9]+)".*/\1/'  | paste -sd+ - | bc || echo 0)
-              total=$((covered + missed))
-              if [ "$total" -gt 0 ]; then
-                # escala fixa com 4 decimais para comparação
-                pct=$(python - <<PY
-        covered = $covered
-        total   = $total
-        print(f"{(covered/total):.4f}")
-        PY
-        )
-                    # compara como string numérica
-                    if python - <<PY
-        import sys
-        print(float("$pct") >= float("${MIN_COVERAGE}"))
-        PY
-                    then
-                      pct_ok=1
-                    fi
-                    echo "Cobertura de linhas: $(python - <<PY
-        print(f"{(float('$pct')*100):.2f}%")
-        PY
-        )"
-                  fi
-                fi
-              fi
-
-              if [ $ok_exec -eq 1 ] && [ $have_exec -eq 1 ] && [ $have_xml_good -eq 1 ] && [ $pct_ok -eq 1 ]; then
-                echo "✅ cobertura OK e jacoco.xml válido (não-empty)."
-                break
-              fi
-
-              echo "❌ Falha/sem cobertura útil; gerando payload e pedindo patches à IA…"
-              ./gradlew --no-daemon --no-configuration-cache -p app gerarPacoteParaIA --info || true
-
-              # pedir patches; se der 429, faz backoff exponencial leve
-              set +e
-              ./gradlew --no-daemon --no-configuration-cache -p app ajustarTestesIa --info
-              rc=$?
-              set -e
-              if [ $rc -ne 0 ]; then
-                echo "ajustarTestesIa retornou $rc; tentando tratamento de rate-limit (se aplicável)…"
-                sleep $(( 2 * tries ))
-              fi
-
-              # se a IA não gerou nada, pare (não adianta insistir)
-              if ! ls "${{ github.workspace }}/app/entrada-usuario/testes_ai_patches"/*.java >/dev/null 2>&1; then
-                echo "⚠️ IA não produziu patches; encerrando loop."
-                break
-              fi
-
-              tries=$((tries+1))
-            done
-
-            echo "JACOCO_XML=${{ github.workspace }}/app/entrada-usuario/jacoco-relatorio/jacoco.xml" >> $GITHUB_ENV
-            echo "JACOCO_EXEC=${{ github.workspace }}/app/build/jacoco/testUsuarioConsole.exec" >> $GITHUB_ENV
+        # Exporta caminhos esperados pelos passos seguintes (iguais aos seus)
+        echo "JACOCO_XML=${{ github.workspace }}/app/entrada-usuario/jacoco-relatorio/jacoco.xml" >> $GITHUB_ENV
+        echo "JACOCO_EXEC=${{ github.workspace }}/app/build/jacoco/testUsuarioConsole.exec">> $GITHUB_ENV
 
 
     - name: Upload Jacoco HTML
