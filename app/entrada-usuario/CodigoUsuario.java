@@ -1,26 +1,16 @@
 import java.util.Scanner;
 
-public class ConversorHoras {
+public class VerificadorParImpar {
     public static void main(String[] args) {
         Scanner scanner = new Scanner(System.in);
         
-        System.out.print("Digite as horas (0-23): ");
-        int horas = scanner.nextInt();
+        System.out.print("Digite um número: ");
+        int numero = scanner.nextInt();
         
-        if (horas >= 0 && horas <= 23) {
-            String periodo;
-            if (horas < 12) {
-                periodo = "AM";
-            } else {
-                periodo = "PM";
-            }
-            
-            int horas12 = horas > 12 ? horas - 12 : horas;
-            if (horas12 == 0) horas12 = 12;
-            
-            System.out.println(horas + " horas = " + horas12 + " " + periodo);
+        if (numero % 2 == 0) {
+            System.out.println(numero + " é PAR");
         } else {
-            System.out.println("Hora inválida!");
+            System.out.println(numero + " é ÍMPAR");
         }
         
         scanner.close();
