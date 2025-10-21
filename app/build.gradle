@@ -1114,24 +1114,20 @@ tasks.register("preflightUsuarioTests") {
     }
 }
 
-// estas tasks usam project/file em doLast: declare incompatibilidade com o config cache
-tasks.named("preflightUsuarioTests") {
-    notCompatibleWithConfigurationCache("Inspeciona e renomeia arquivos dinamicamente em doLast")
-}
+// ⚠️ Marcar tasks dinâmicas como incompatíveis com configuration cache **após** o projeto ser avaliado
+gradle.projectsEvaluated {
+    tasks.findByName("preflightUsuarioTests")
+        ?.notCompatibleWithConfigurationCache("Inspeciona/renomeia arquivos em doLast")
 
-tasks.named("testUsuarioConsole") {
-    notCompatibleWithConfigurationCache("Injeta -javaagent dinamicamente em doFirst/doLast")
-}
+    tasks.findByName("testUsuarioConsole")
+        ?.notCompatibleWithConfigurationCache("Injeta -javaagent dinamicamente em doFirst/doLast")
 
-tasks.named("jacocoRelatorioUsuarioConsole") {
-    notCompatibleWithConfigurationCache("Lê executionData/FS em doFirst")
-}
+    tasks.findByName("jacocoRelatorioUsuarioConsole")
+        ?.notCompatibleWithConfigurationCache("Lê executionData/FS em doFirst")
 
-tasks.named("covUsuario") {
-    notCompatibleWithConfigurationCache("Invoca builds externos via helper e usa FS em doLast")
+    tasks.findByName("covUsuario")
+        ?.notCompatibleWithConfigurationCache("Invoca builds externos e usa FS em doLast")
 }
-
-// (já fizemos isso em jacocoXmlGarantido, manter)
 
 
 
