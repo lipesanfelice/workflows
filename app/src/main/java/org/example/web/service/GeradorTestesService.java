@@ -137,36 +137,9 @@ public class GeradorTestesService {
             Files.writeString(resumo, String.join(System.lineSeparator(), rel) + System.lineSeparator(),
                     StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
 
-            rodarJacocoUnico();
-
+            // ❌ NADA de JaCoCo aqui: geração de cobertura fica para a pipeline/etapa posterior.
             return base;
         } catch (Exception e) { throw new RuntimeException(e); }
-    }
-
-    private void rodarJacocoUnico() throws Exception {
-        Path raiz = localizarRaizProjeto();
-        Path xml = raiz.resolve("app").resolve("entrada-usuario").resolve("jacoco-relatorio").resolve("jacoco.xml");
-        try { Files.deleteIfExists(xml); } catch (Exception ignored) {}
-
-        boolean win = System.getProperty("os.name").toLowerCase().contains("win");
-        List<String> cmd = new ArrayList<>();
-        if (win) { cmd.add("cmd"); cmd.add("/c"); cmd.add("gradlew.bat"); } else { cmd.add("./gradlew"); }
-        cmd.add("covUsuario");
-        cmd.add("-Dfile.encoding=UTF-8");
-
-        Process p = new ProcessBuilder(cmd).directory(raiz.toFile()).inheritIO().start();
-        int ec = p.waitFor();
-        if (ec != 0) throw new RuntimeException("Execução do JaCoCo falhou: " + ec);
-    }
-
-    private Path localizarRaizProjeto() {
-        Path p = Paths.get("").toAbsolutePath();
-        for (int i = 0; i < 6; i++) {
-            if (Files.exists(p.resolve("gradlew")) || Files.exists(p.resolve("gradlew.bat"))) return p;
-            p = p.getParent();
-            if (p == null) break;
-        }
-        return Paths.get("").toAbsolutePath();
     }
 
     private List<Path> listarJava(Path baseEntrada) throws IOException {
