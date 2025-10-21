@@ -1422,19 +1422,39 @@ tasks.register("jacocoXmlGarantido") {
 ext.runGradleOnce = { String taskName, Object... args ->
     def out = new ByteArrayOutputStream()
     def err = new ByteArrayOutputStream()
-    def cmd = ["./gradlew", taskName] + (args as List<String>)
+
+    // sempre sem config-cache e com stacktrace/info p/ logs úteis
+    def base = ["./gradlew",
+                "-Dorg.gradle.configuration-cache=false",
+                "--no-daemon",
+                "--stacktrace",
+                "--info",
+                taskName] + (args as List<String>)
+
     def res = project.exec {
         workingDir project.rootDir
-        commandLine cmd
+        commandLine base
         ignoreExitValue = true
         standardOutput = out
         errorOutput    = err
     }
+
     def diagDir = file("$projectDir/entrada-usuario/diagnosticos"); diagDir.mkdirs()
     def safe = taskName.replace(':','_')
-    new File(diagDir, "${safe}.log").text = out.toString("UTF-8") + err.toString("UTF-8")
+    def logFile = new File(diagDir, "${safe}.log")
+    logFile.text = out.toString("UTF-8") + err.toString("UTF-8")
+
+    if (res.exitValue != 0) {
+        println "❌ ${taskName} falhou. Log completo em: ${logFile}"
+        // mostra o “tail” para facilitar no CI
+        def lines = logFile.readLines("UTF-8")
+        def tail = lines.size() > 200 ? lines.subList(lines.size()-200, lines.size()) : lines
+        println "── Últimas linhas do log (${tail.size()}):"
+        tail.each { println it }
+    }
     return res.exitValue == 0
 }
+
 
 /* -------------------------------------------------------------------------
    🚀 Loop robusto de cobertura para QUALQUER código do usuário
