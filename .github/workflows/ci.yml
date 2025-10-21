@@ -21,13 +21,14 @@ jobs:
     runs-on: ubuntu-latest
 
     env:
-      # Ajustes do loop de autofix:
-      MAX_LOOPS: "3"            # máximo de iterações
+      # Loop de cobertura (usado pelo :app:covUsuarioLoop)
+      COV_MAX_ATTEMPTS: "3"
       MIN_COVERAGE: "0.60"      # 60%
-      ENFORCE_COVERAGE: "false" # gradle não falha; o loop decide
-      # Provedor IA (Groq) e modelo padrão:
+      ENFORCE_COVERAGE: "false" # não falha o build; só informa
+
+      # IA (Groq)
       IA_PROVEDOR: "groq"
-      GROQ_MODEL: "llama-3.1-8b-instant"
+      GROQ_MODELO: "llama-3.1-8b-instant"
 
     steps:
     - name: Checkout do código
