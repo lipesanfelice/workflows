@@ -1052,6 +1052,23 @@ import java.util.regex.PatternSyntaxException
 
 // ... (mantenha o resto do arquivo) ...
 
+
+def entradaUsuario = "${projectDir}/entrada-usuario"
+
+// garante os dirs antes do preflight
+tasks.register("prepUsuarioDirs") {
+    doLast {
+        file("${entradaUsuario}/testes_ai_patches").mkdirs()
+        file("${entradaUsuario}/testes").mkdirs()
+    }
+}
+
+// se o preflight é um DefaultTask já registrado:
+tasks.named("preflightUsuarioTests") {
+    dependsOn("organizarUsuario", "prepUsuarioDirs")
+    // se você declarou inputs.dir para esses caminhos, mantenha,
+}
+
 tasks.register("preflightUsuarioTests") {
     // Opcional: inputs/outputs para cache correto
     inputs.dir("$buildDir/usuario-src/src/test_raw/java")
@@ -1136,6 +1153,8 @@ tasks.register('injectNoOpTestIfNeeded') {
         println "injectNoOpTestIfNeeded → injetado NoOpTest (para garantir .exec)."
     }
 }
+
+
 // =======================================================================================
 
 // compila main só depois de organizar e resolver libs
