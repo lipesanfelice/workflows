@@ -307,16 +307,37 @@ tasks.register('organizarUsuario') {
         def testesAIPatches = lerTests(dirTestsAIPatches)
         def testesIAExp     = lerTests(dirTestsIA)
 
+        // ======= PRIORIDADE DE TESTES (usuário vs IA) =======
+        boolean aiOverride = (
+                System.getenv("AI_OVERRIDE_USER_TESTS")
+                ?: (project.findProperty("AI_OVERRIDE_USER_TESTS") ?: "false")
+        ).toString().equalsIgnoreCase("true")
+
+        def porNome = [:]
         def nomePublicoTeste = { String s ->
             def m = (s =~ /(?m)^\s*public\s+(?:class|interface|enum|record)\s+([A-Za-z_]\w*)\b/)
             m.find() ? m.group(1) : null
         }
-        def porNome = [:]
-        [testesIAExp, testesAIPatches, testesUser].each { lista ->
-            lista.each { t -> def n = nomePublicoTeste(t.text) ?: ("Anon_" + t.file.name); porNome[n] = t }
+
+        List<List<Map>> ordem
+        if (aiOverride) {
+            // Usuário -> Explicações -> PATCHES  (patches por último = IA vence)
+            ordem = [testesUser, testesIAExp, testesAIPatches]
+            logger.lifecycle("organizarUsuario → prioridade de testes: IA **PODE** sobrescrever os do usuário (AI_OVERRIDE_USER_TESTS=true).")
+        } else {
+            // Explicações -> PATCHES -> Usuário  (usuário por último = usuário vence)
+            ordem = [testesIAExp, testesAIPatches, testesUser]
+            logger.lifecycle("organizarUsuario → prioridade de testes: usuário vence (AI_OVERRIDE_USER_TESTS=false).")
+        }
+
+        ordem.each { lista ->
+            lista.each { t ->
+                def n = nomePublicoTeste(t.text) ?: ("Anon_" + t.file.name)
+                porNome[n] = t
+            }
         }
         def testesIA = porNome.values().toList()
-        println "organizarUsuario → testes recebidos (raw):  ${testesIA.size()}"
+        println "organizarUsuario → testes considerados após prioridade: ${testesIA.size()}"
 
         // fontes do usuário (produção)
         def fontesUsuario = []
