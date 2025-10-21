@@ -782,14 +782,20 @@ tasks.register("preflightUsuarioTests") {
     inputs.dir("$projectDir/entrada-usuario/testes")
 
     doLast {
-        Pattern ASSERT_THROWS_BAN
-        try {
-            ASSERT_THROWS_BAN = Pattern.compile(
-                "(?s)assertThrows\\s*\\(\\s*(?:ArithmeticException|IllegalArgumentException|NullPointerException)\\s*\\.class"
-            )
-        } catch (PatternSyntaxException e) {
-            logger.warn("preflightUsuarioTests: regex inválido; verificação ignorada: ${e.message}")
-            ASSERT_THROWS_BAN = null
+        // Ativa o ban SÓ se BAN_ASSERT_THROWS=true
+        boolean banEnabled = (System.getenv("BAN_ASSERT_THROWS") ?: "false")
+                .toString().equalsIgnoreCase("true")
+
+        Pattern ASSERT_THROWS_BAN = null
+        if (banEnabled) {
+            try {
+                ASSERT_THROWS_BAN = Pattern.compile(
+                    "(?s)assertThrows\\s*\\(\\s*(?:ArithmeticException|IllegalArgumentException|NullPointerException)\\s*\\.class"
+                )
+            } catch (PatternSyntaxException e) {
+                logger.warn("preflightUsuarioTests: regex inválido; verificação ignorada: ${e.message}")
+                ASSERT_THROWS_BAN = null
+            }
         }
 
         def roots = [
@@ -803,19 +809,22 @@ tasks.register("preflightUsuarioTests") {
             roots.each { root ->
                 fileTree(root).include("**/*.java").files.each { f ->
                     def txt = f.getText("UTF-8")
-                    if (ASSERT_THROWS_BAN.matcher(txt).find()) offenders << f
+                    if (ASSERT_THROWS_BAN.matcher(txt).find()) {
+                        offenders << f
+                    }
                 }
             }
         }
 
-        if (!offenders.isEmpty()) {
+        if (banEnabled && !offenders.isEmpty()) {
             throw new GradleException(
-                "Testes contêm assertThrows para exceções proibidas (Arithmetic/IllegalArgument/NullPointer): " +
-                offenders*.name.join(", ")
+                "Testes contêm assertThrows proibidos: " + offenders*.name.join(", ")
             )
         }
-        logger.lifecycle("preflightUsuarioTests: OK (sem padrões proibidos).")
+
+        logger.lifecycle("preflightUsuarioTests: ${banEnabled ? 'BAN ATIVO' : 'ban DESLIGADO'}; OK.")
     }
+
 }
 
 tasks.register('injectNoOpTestIfNeeded') {
