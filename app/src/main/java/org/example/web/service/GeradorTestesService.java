@@ -19,10 +19,9 @@ public class GeradorTestesService {
     @Value("${app.entrada.diretorio:entrada-usuario}")
     private String dirEntrada;
 
-    // limites (ajustáveis por env)
     private final int INIT_MAX_CODE_CHARS  = (int) readLongEnv("IA_CODE_MAX_CHARS", 3000);
     private final int INIT_MAX_SONAR_CHARS = (int) readLongEnv("IA_SONAR_MAX_CHARS", 2000);
-    private final long sleepBetweenCallsMs = Math.max(1000L, readLongEnv("IA_SLEEP_MS", 7000L)); // pausa entre arquivos
+    private final long sleepBetweenCallsMs = Math.max(1000L, readLongEnv("IA_SLEEP_MS", 7000L));
 
     public GeradorTestesService(ClienteIa ia) { this.ia = ia; }
 
@@ -59,82 +58,74 @@ public class GeradorTestesService {
                 int maxCode = INIT_MAX_CODE_CHARS, maxSonar = INIT_MAX_SONAR_CHARS;
                 boolean gerou = false; String ultimoErro = null;
 
-                for (int tent = 1; tent <= 3; tent++) {
-                    try {
-                        String codigoAlvo = LeitorCodigo.lerAteLimite(arq, maxCode);
-                        String sonarCut   = SonarUtil.extrairTrechoPorArquivo(sonarJson, fileName, maxSonar);
-                        String prompt     = Prompts.montarPromptGroqPorArquivo(metasPriorizacao, sonarCut, arq.toString(), codigoAlvo);
+                try {
+                    String codigoAlvo = LeitorCodigo.lerAteLimite(arq, maxCode);
+                    String sonarCut   = SonarUtil.extrairTrechoPorArquivo(sonarJson, fileName, maxSonar);
+                    String prompt     = Prompts.montarPromptGroqPorArquivo(metasPriorizacao, sonarCut, arq.toString(), codigoAlvo);
 
-                        var resp = ia.gerar(prompt);
+                    var resp = ia.gerar(prompt);
 
-                        // prioriza bloco com tags; senão usa conteúdo cru; senão esqueleto
-                        String conteudoGerado;
-                        Map<String,String> arquivosGerados = separarArquivos(resp.codigo());
-                        if (!arquivosGerados.isEmpty()) {
-                            conteudoGerado = arquivosGerados.values().iterator().next();
-                            conteudoGerado = ajustarPacote(conteudoGerado, "org.example.generated");
-                            conteudoGerado = ajustarNomeClasseParaArquivo(conteudoGerado, desiredClassName);
+                    String conteudoGerado;
+                    Map<String,String> arquivosGerados = separarArquivos(resp.codigo());
+                    if (!arquivosGerados.isEmpty()) {
+                        conteudoGerado = arquivosGerados.values().iterator().next();
+                        conteudoGerado = ajustarPacote(conteudoGerado, "org.example.generated");
+                        conteudoGerado = ajustarNomeClasseParaArquivo(conteudoGerado, desiredClassName);
+
+                        Path alvo = pastaTests.resolve(desiredFileName);
+                        Files.createDirectories(alvo.getParent());
+                        Files.writeString(alvo, conteudoGerado);
+                        rel.add("OK: " + fileName + " -> " + alvo.getFileName());
+
+                        String explicacao = montarExplicacaoTexto(
+                                baseName, desiredFileName, desiredClassName, conteudoGerado, sonarCut, "IA_FORMATADA", resp.explicacao());
+                        Files.writeString(pastaExp.resolve(expFileName), explicacao,
+                                StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
+                        gerou = true;
+                    } else {
+                        String cru = resp.codigo();
+                        if (cru != null && !cru.isBlank()) {
+                            String conteudo = ajustarPacote(cru, "org.example.generated");
+                            conteudo = ajustarNomeClasseParaArquivo(conteudo, desiredClassName);
 
                             Path alvo = pastaTests.resolve(desiredFileName);
                             Files.createDirectories(alvo.getParent());
-                            Files.writeString(alvo, conteudoGerado);
-                            rel.add("OK: " + fileName + " -> " + alvo.getFileName());
-                            // grava EXPLICAÇÃO por arquivo
+                            Files.writeString(alvo, conteudo);
+                            rel.add("RAW_OK: " + fileName + " -> " + alvo.getFileName());
+
                             String explicacao = montarExplicacaoTexto(
-                                    baseName, desiredFileName, desiredClassName, conteudoGerado, sonarCut, "IA_FORMATADA", resp.explicacao());
+                                    baseName, desiredFileName, desiredClassName, conteudo, sonarCut, "IA_RAW", resp.explicacao());
                             Files.writeString(pastaExp.resolve(expFileName), explicacao,
                                     StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
                             gerou = true;
                         } else {
-                            String cru = resp.codigo();
-                            if (cru != null && !cru.isBlank()) {
-                                conteudoGerado = ajustarPacote(cru, "org.example.generated");
-                                conteudoGerado = ajustarNomeClasseParaArquivo(conteudoGerado, desiredClassName);
+                            String conteudo = gerarEsqueleto(desiredClassName);
+                            Path alvo = pastaTests.resolve(desiredFileName);
+                            Files.createDirectories(alvo.getParent());
+                            Files.writeString(alvo, conteudo);
+                            rel.add("SKELETON: " + fileName + " -> " + alvo.getFileName());
 
-                                Path alvo = pastaTests.resolve(desiredFileName);
-                                Files.createDirectories(alvo.getParent());
-                                Files.writeString(alvo, conteudoGerado);
-                                rel.add("RAW_OK: " + fileName + " -> " + alvo.getFileName());
-
-                                String explicacao = montarExplicacaoTexto(
-                                        baseName, desiredFileName, desiredClassName, conteudoGerado, sonarCut, "IA_RAW", resp.explicacao());
-                                Files.writeString(pastaExp.resolve(expFileName), explicacao,
-                                        StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
-                                gerou = true;
-                            } else {
-                                // esqueleto mínimo
-                                conteudoGerado = gerarEsqueleto(desiredClassName);
-                                Path alvo = pastaTests.resolve(desiredFileName);
-                                Files.createDirectories(alvo.getParent());
-                                Files.writeString(alvo, conteudoGerado);
-                                rel.add("SKELETON: " + fileName + " -> " + alvo.getFileName());
-
-                                String explicacao = montarExplicacaoTexto(
-                                        baseName, desiredFileName, desiredClassName, conteudoGerado, sonarCut, "SKELETON", null);
-                                Files.writeString(pastaExp.resolve(expFileName), explicacao,
-                                        StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
-                                gerou = true;
-                            }
+                            String explicacao = montarExplicacaoTexto(
+                                    baseName, desiredFileName, desiredClassName, conteudo, sonarCut, "SKELETON", null);
+                            Files.writeString(pastaExp.resolve(expFileName), explicacao,
+                                    StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
+                            gerou = true;
                         }
+                    }
 
-                        if (resp.explicacao() != null && !resp.explicacao().isBlank()) {
-                            // além do .txt individual, mantemos também um log geral, se quiser
-                            Path expLog = pastaExp.resolve("explicacoes.jsonl");
-                            Files.writeString(expLog, resp.explicacao() + System.lineSeparator(),
-                                    StandardOpenOption.CREATE, StandardOpenOption.APPEND);
-                        }
-                        break; // sucesso
-                    } catch (RuntimeException ex) {
-                        String msg = ex.getMessage() == null ? "" : ex.getMessage();
-                        if (msg.contains("413") || msg.toLowerCase().contains("too large")) {
-                            maxCode = Math.max(1200, (int)(maxCode * 0.6));
-                            maxSonar = Math.max(800,  (int)(maxSonar * 0.6));
-                            ultimoErro = "413 adaptado code=" + maxCode + " sonar=" + maxSonar;
-                            dormir(600L);
-                            continue;
-                        }
-                        if (msg.contains("429")) { ultimoErro = "429"; dormir(2000L); continue; }
-                        ultimoErro = msg; dormir(400L);
+                    if (resp.explicacao() != null && !resp.explicacao().isBlank()) {
+                        Path expLog = pastaExp.resolve("explicacoes.jsonl");
+                        Files.writeString(expLog, resp.explicacao() + System.lineSeparator(),
+                                StandardOpenOption.CREATE, StandardOpenOption.APPEND);
+                    }
+                } catch (RuntimeException ex) {
+                    String msg = ex.getMessage() == null ? "" : ex.getMessage();
+                    if (msg.contains("413") || msg.toLowerCase().contains("too large")) {
+                        ultimoErro = "413";
+                    } else if (msg.contains("429")) {
+                        ultimoErro = "429";
+                    } else {
+                        ultimoErro = msg;
                     }
                 }
 
@@ -146,11 +137,37 @@ public class GeradorTestesService {
             Files.writeString(resumo, String.join(System.lineSeparator(), rel) + System.lineSeparator(),
                     StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
 
+            rodarJacocoUnico();
+
             return base;
         } catch (Exception e) { throw new RuntimeException(e); }
     }
 
-    // === util ===
+    private void rodarJacocoUnico() throws Exception {
+        Path raiz = localizarRaizProjeto();
+        Path xml = raiz.resolve("app").resolve("entrada-usuario").resolve("jacoco-relatorio").resolve("jacoco.xml");
+        try { Files.deleteIfExists(xml); } catch (Exception ignored) {}
+
+        boolean win = System.getProperty("os.name").toLowerCase().contains("win");
+        List<String> cmd = new ArrayList<>();
+        if (win) { cmd.add("cmd"); cmd.add("/c"); cmd.add("gradlew.bat"); } else { cmd.add("./gradlew"); }
+        cmd.add("covUsuario");
+        cmd.add("-Dfile.encoding=UTF-8");
+
+        Process p = new ProcessBuilder(cmd).directory(raiz.toFile()).inheritIO().start();
+        int ec = p.waitFor();
+        if (ec != 0) throw new RuntimeException("Execução do JaCoCo falhou: " + ec);
+    }
+
+    private Path localizarRaizProjeto() {
+        Path p = Paths.get("").toAbsolutePath();
+        for (int i = 0; i < 6; i++) {
+            if (Files.exists(p.resolve("gradlew")) || Files.exists(p.resolve("gradlew.bat"))) return p;
+            p = p.getParent();
+            if (p == null) break;
+        }
+        return Paths.get("").toAbsolutePath();
+    }
 
     private List<Path> listarJava(Path baseEntrada) throws IOException {
         List<Path> lista = new ArrayList<>();
@@ -162,7 +179,6 @@ public class GeradorTestesService {
         return lista;
     }
 
-    /** Divide bloco em <arquivo: ...> ... por arquivo (mas ignoramos o nome retornado). */
     private Map<String,String> separarArquivos(String bloco) {
         var mapa = new LinkedHashMap<String,String>();
         if (bloco == null) return mapa;
@@ -185,17 +201,14 @@ public class GeradorTestesService {
         return s.replaceFirst("^package\\s+[^;]+;", "package " + pacoteDesejado + ";");
     }
 
-    // Força o nome da classe pública (ou primeira classe) a casar com o nome do arquivo desejado
     private String ajustarNomeClasseParaArquivo(String code, String desiredClassName) {
         if (code == null || code.isBlank()) return code;
-        // public class / class / final class / abstract class ...
         Pattern p = Pattern.compile("(\\b(public\\s+)?(abstract\\s+|final\\s+)?class\\s+)([A-Za-z_][A-Za-z0-9_]*)");
         Matcher m = p.matcher(code);
         if (m.find()) {
             String prefix = m.group(1);
             return m.replaceFirst(Matcher.quoteReplacement(prefix + desiredClassName));
         }
-        // se não achou classe, cria uma.
         return """
                package org.example.generated;
 
@@ -222,14 +235,13 @@ public class GeradorTestesService {
                 """.formatted(desiredClassName);
     }
 
-    // —————— construção da EXPLICAÇÃO .txt ——————
     private String montarExplicacaoTexto(String baseName,
                                          String testFileName,
                                          String testClassName,
                                          String testCode,
                                          String sonarCut,
-                                         String origem,            // IA_FORMATADA | IA_RAW | SKELETON
-                                         String explicacaoIaBruta) // pode ser json ou texto
+                                         String origem,
+                                         String explicacaoIaBruta)
     {
         int qtdTests = contarOcorrencias(testCode, "@Test");
         boolean temErro = testCode.contains("assertThrows(") || testCode.contains("assertThrows");
@@ -250,8 +262,8 @@ public class GeradorTestesService {
             sb.append("- Contém um teste mínimo para validar a compilação e a integração básica.\n");
         } else {
             sb.append("- Número de métodos de teste: ").append(qtdTests).append(".\n");
-            if (temErro) sb.append("- Inclui cenários de **erro** usando `assertThrows`.\n");
-            sb.append("- Exercita o caminho principal (happy path)");
+            if (temErro) sb.append("- Inclui cenários de erro usando assertThrows.\n");
+            sb.append("- Exercita o caminho principal");
             if (temErro) sb.append(" e também caminhos de erro");
             sb.append(".\n");
             if (usaMockito) sb.append("- Usa Mockito para isolar dependências e validar interações.\n");

@@ -99,12 +99,6 @@ tasks.register('salvarRelatorioSonar', JavaExec) {
     args "lipesanfelice_workflows", System.getenv('SONAR_TOKEN') ?: '', "$projectDir/entrada-usuario/relatorio-sonar.json"
 }
 
-// app/build.gradle
-tasks.register('gerarTestesIa', JavaExec) {
-    classpath = sourceSets.main.runtimeClasspath
-    mainClass = 'org.example.web.cli.GerarTestesCli'
-}
-
 // === NOVA TASK CLI p/ AJUSTE DE TESTES (Groq) ===
 tasks.register('ajustarTestesIa', JavaExec) {
     group = "verification"
