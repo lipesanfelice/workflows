@@ -1,20 +1,25 @@
-import java.util.Scanner;
-
-public class Calculadora {
+public class ConversorUnidades {
+    
+    public static double metroParaCentimetro(double metro) {
+        return metro * 100;
+    }
+    
+    public static double centimetroParaMetro(double centimetro) {
+        return centimetro / 100;
+    }
+    
+    public static double kilometroParaMetro(double kilometro) {
+        return kilometro * 1000;
+    }
+    
+    public static double litroParaMililitro(double litro) {
+        return litro * 1000;
+    }
+    
     public static void main(String[] args) {
-        Scanner scanner = new Scanner(System.in);
-        
-        System.out.print("Digite o primeiro número: ");
-        double num1 = scanner.nextDouble();
-        
-        System.out.print("Digite o segundo número: ");
-        double num2 = scanner.nextDouble();
-        
-        System.out.println("Soma: " + (num1 + num2));
-        System.out.println("Subtração: " + (num1 - num2));
-        System.out.println("Multiplicação: " + (num1 * num2));
-        System.out.println("Divisão: " + (num1 / num2));
-        
-        scanner.close();
+        System.out.println("2 metros em centímetros: " + metroParaCentimetro(2));
+        System.out.println("150 cm em metros: " + centimetroParaMetro(150));
+        System.out.println("3.5 km em metros: " + kilometroParaMetro(3.5));
+        System.out.println("2 litros em ml: " + litroParaMililitro(2));
     }
 }

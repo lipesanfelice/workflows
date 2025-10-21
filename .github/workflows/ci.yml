@@ -173,6 +173,7 @@ jobs:
       run: |
           ./gradlew --no-daemon -Dorg.gradle.configuration-cache=false -p app clean covUsuario --info
 
+
     - name: Upload de artefatos (testes + jacoco)
       uses: actions/upload-artifact@v4
       with:

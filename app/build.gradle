@@ -1114,6 +1114,13 @@ tasks.register("preflightUsuarioTests") {
     }
 }
 
+// garanta ordem: preflight só depois de sanear
+tasks.named('preflightUsuarioTests') {
+    dependsOn 'sanearTestesUsuario'
+    mustRunAfter 'sanearTestesUsuario'
+}
+
+
 // ⚠️ Marcar tasks dinâmicas como incompatíveis com configuration cache **após** o projeto ser avaliado
 gradle.projectsEvaluated {
     tasks.findByName("preflightUsuarioTests")
