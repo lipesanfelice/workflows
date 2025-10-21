@@ -1073,14 +1073,14 @@ tasks.register("covUsuario") {
     finalizedBy "jacocoXmlGarantido"
 }
 
-/// ===== Loop resiliente: para ao gerar jacoco != empty (e opcionalmente cobre >= MIN_COVERAGE) =====
+// ===== Loop resiliente: para ao gerar jacoco != empty (e opcionalmente cobre >= MIN_COVERAGE) =====
 tasks.register("covUsuarioLoop") {
     group = "verification"
-    description = "Tenta até gerar jacoco.xml com cobertura > 0; para na 1ª vez que conseguir."
+    description = "Tenta até gerar jacoco.xml com cobertura > 0; para na 1ª vez que conseguir (ou quando atingir MIN_COVERAGE se ENFORCE_COVERAGE=true)."
 
     doLast {
-        int maxTentativas = (System.getenv("COV_MAX_ATTEMPTS") ?: "5") as int
-        BigDecimal thr = (System.getenv("MIN_COVERAGE") ?: "0.00") as BigDecimal  // 0.00 = só precisa ter algo
+        int maxTentativas = (System.getenv("COV_MAX_ATTEMPTS") ?: "3") as int
+        BigDecimal thr = (System.getenv("MIN_COVERAGE") ?: "0.00") as BigDecimal
         boolean enforce = (System.getenv("ENFORCE_COVERAGE") ?: "false").toString().equalsIgnoreCase("true")
 
         File xml = file("$projectDir/entrada-usuario/jacoco-relatorio/jacoco.xml")
@@ -1088,11 +1088,8 @@ tasks.register("covUsuarioLoop") {
         for (int i = 1; i <= maxTentativas; i++) {
             println "== Tentativa ${i}/${maxTentativas} =="
 
-            // 1) organiza/resolve/compila/roda testes instrumentados + gera relatório
-            exec {
-                commandLine "./gradlew", ":app:covUsuario"
-                ignoreExitValue = true   // <<<<<<<<<< AQUI (corrigido)
-            }
+            // roda o pipeline de cobertura completo (usa runGradleOnce, que já aponta para rootDir)
+            runGradleOnce(":app:covUsuario")
 
             boolean temContagem = false
             BigDecimal pct = 0.0
@@ -1113,28 +1110,31 @@ tasks.register("covUsuarioLoop") {
             if (temContagem) {
                 String pctFmt = String.format(java.util.Locale.US, "%.2f", pct * 100)
                 println "✅ Cobertura gerada: ${pctFmt}%"
-                if (pct >= thr || !enforce) {
-                    println "🏁 Parando o loop (critério satisfeito)."
-                    return
+                if (enforce) {
+                    if (pct >= thr) {
+                        println "🏁 Parando o loop (atingiu mínimo ${thr*100}%)."
+                        return
+                    } else {
+                        println "⚠️ Abaixo do mínimo (${thr*100}%). Tentando melhorar com patches…"
+                    }
                 } else {
-                    println "⚠️ Abaixo do mínimo (${thr*100}%). Tentando melhorar com patches…"
+                    // sem enforce, parar assim que houver cobertura > 0
+                    println "🏁 Parando o loop (critério 'ter cobertura' satisfeito, ENFORCE_COVERAGE=false)."
+                    return
                 }
             } else {
                 println "❌ Relatório vazio/sem linhas cobertas. Pedindo patches…"
             }
 
-            // 2) pedir patches para IA (tolerante a erro/429)
+            // pedir patches à IA; se falhar, só loga e segue
             try {
-                exec {
-                    commandLine "./gradlew", ":app:ajustarTestesIa"
-                    ignoreExitValue = true   // <<<<<<<<<< E AQUI (corrigido)
-                }
+                runGradleOnce(":app:ajustarTestesIa")
             } catch (Throwable t) {
-                println "IA falhou (${t.class.simpleName}): seguindo para próxima tentativa."
+                println "ajustarTestesIa falhou (${t.class.simpleName}: ${t.message}). Seguindo para próxima tentativa."
             }
         }
 
-        println "🔚 Loop esgotado; se ainda não há cobertura suficiente, verifique logs/patches em 'entrada-usuario/testes_ai_patches/'."
+        println "🔚 Loop esgotado; verifique 'entrada-usuario/testes_ai_patches/' e 'entrada-usuario/diagnosticos/'."
     }
 }
 
