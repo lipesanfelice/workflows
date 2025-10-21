@@ -1162,40 +1162,43 @@ tasks.register("preflightUsuarioTests") {
     }
 }
 
-// (A) preflight só depois de sanear
+// === PROMOVER TESTES VÁLIDOS (RAW -> STAGE) ===
+// Copia todos os .java que NÃO estejam com sufixo .java.skip para o diretório STAGE
+tasks.register('promoverTestesValidosParaStage') {
+    group = 'verification'
+    description = 'Copia testes válidos de src/test_raw/java para src/test/java (exclui *.java.skip).'
+    dependsOn 'preflightUsuarioTests', 'sanearTestesUsuario'  // garante ordem
+
+    doLast {
+        File rawDir = file("$buildDir/usuario-src/src/test_raw/java")
+        File stageDir = file("$buildDir/usuario-src/src/test/java")
+        if (!rawDir.exists()) {
+            logger.lifecycle("promoverTestesValidosParaStage → RAW inexistente; nada a fazer.")
+            return
+        }
+        stageDir.mkdirs()
+        copy {
+            from rawDir
+            include '**/*.java'
+            exclude '**/*.java.skip'
+            into stageDir
+        }
+        def qtd = fileTree(stageDir) { include '**/*.java'; exclude '**/*.java.skip' }.files.size()
+        logger.lifecycle("promoverTestesValidosParaStage → promovidos ${qtd} arquivo(s) para STAGE.")
+    }
+}
+
+// garanta ordem: preflight só depois de sanear (elimina a validação do Gradle que você viu)
 tasks.named('preflightUsuarioTests') {
     dependsOn 'sanearTestesUsuario'
     mustRunAfter 'sanearTestesUsuario'
 }
 
-// (B) copiar test_raw -> test (exclui .java.skip)
-tasks.register('promoverTestesParaStage') {
-    group = 'verification'
-    description = 'Move/sincroniza testes saneados de test_raw para test (stage).'
-    dependsOn 'sanearTestesUsuario', 'preflightUsuarioTests'
-    doLast {
-        def srcDir = file("$buildDir/usuario-src/src/test_raw/java")
-        def dstDir = file("$buildDir/usuario-src/src/test/java")
-        if (!srcDir.exists()) {
-            println "promoverTestesParaStage → não há test_raw/java; nada a promover."
-            return
-        }
-        copy {
-            from srcDir
-            into dstDir
-            include '**/*.java'
-            exclude '**/*.java.skip'
-        }
-        def qtd = fileTree(dstDir){ include '**/*.java'; exclude '**/*.java.skip' }.files.size()
-        println "promoverTestesParaStage → promovidos para STAGE (${qtd} arquivos): ${dstDir}"
-    }
+// compile dos testes **depende** da promoção para STAGE
+tasks.named(sourceSets.usuarioTest.compileJavaTaskName) {
+    dependsOn 'promoverTestesValidosParaStage'
 }
 
-// (C) compile dos testes depende da promoção
-tasks.named(sourceSets.usuarioTest.compileJavaTaskName) {
-    dependsOn 'promoverTestesParaStage'
-    dependsOn 'injectNoOpTestIfNeeded' // NoOp só entra se continuar vazio
-}
 
 
 // ⚠️ Marcar tasks dinâmicas como incompatíveis com configuration cache **após** o projeto ser avaliado
@@ -1440,13 +1443,37 @@ tasks.register("testUsuarioConsole", JavaExec) {
     standardInput = System.in
 }
 
+// Ajustes/diagnóstico para o ConsoleLauncher
 tasks.named("testUsuarioConsole", JavaExec) {
-    // já tem --details summary
+    // Onde salvar os relatórios de descoberta/execução do JUnit Console
     args '--details-theme', 'ascii'
-    args '--reports-dir', file("$projectDir/entrada-usuario/junit-console").absolutePath
-    // opcional: falhar se nenhum teste for descoberto
+    args '--reports-dir', "$projectDir/entrada-usuario/junit-console"
+
+    // (Opcional, útil no CI) falhar se não houver nenhum teste descoberto
     // args '--fail-if-no-tests'
+
+    doFirst {
+        // Loga quantos .class de teste temos no STAGE
+        File testOut = file("$buildDir/classes/java/usuarioTest")
+        def count = fileTree(testOut) { include '**/*Test.class', '**/*Tests.class', '**/*_testes.class' }.files.size()
+        logger.lifecycle("testUsuarioConsole → classes de teste detectadas no STAGE: ${count}")
+
+        // Confirma agente JaCoCo
+        try {
+            def agent = configurations.jacocoAgentRuntime.singleFile
+            if (agent?.exists()) {
+                def dest  = file("$buildDir/jacoco/testUsuarioConsole.exec").absolutePath
+                jvmArgs "-javaagent:${agent.absolutePath}=destfile=${dest},append=true,output=file,inclnolocationclasses=false,includes=*"
+                logger.lifecycle("testUsuarioConsole → JaCoCo agent injetado: ${agent.name}")
+            } else {
+                logger.lifecycle("testUsuarioConsole → ⚠️ agente JaCoCo não encontrado; cobertura ficará 0%.")
+            }
+        } catch (Throwable t) {
+            logger.lifecycle("testUsuarioConsole → ⚠️ falha ao injetar JaCoCo: ${t.class.simpleName}: ${t.message}")
+        }
+    }
 }
+
 
 // 2) Relatório JaCoCo a partir do .exec do ConsoleLauncher
 tasks.register("jacocoRelatorioUsuarioConsole", JacocoReport) {
@@ -1485,6 +1512,27 @@ tasks.register("jacocoRelatorioUsuarioConsole", JacocoReport) {
         html.outputLocation = file("$projectDir/entrada-usuario/jacoco-relatorio/html")
     }
 }
+
+tasks.named("jacocoRelatorioUsuarioConsole", JacocoReport) {
+    executionData.from(file("$buildDir/jacoco/testUsuarioConsole.exec"))
+
+    sourceDirectories.from = files(
+        sourceSets.main.allSource.srcDirs,
+        (sourceSets.findByName("usuario")?.allSource?.srcDirs ?: []),
+        file("$projectDir/entrada-usuario")
+    )
+    classDirectories.from = files(
+        fileTree(dir: "$buildDir/classes/java/usuario", exclude: ['**/*$*']),
+        fileTree(dir: "$buildDir/classes/java/main",    exclude: ['**/*$*'])
+    )
+
+    doFirst {
+        def exec = file("$buildDir/jacoco/testUsuarioConsole.exec")
+        logger.lifecycle("jacocoRelatorioUsuarioConsole → exec: ${exec.exists() ? exec.length()+' bytes' : 'NÃO ENCONTRADO'}")
+        file("$projectDir/entrada-usuario/jacoco-relatorio/html").mkdirs()
+    }
+}
+
 
 // 3) Garantia: se o XML não sair (porque não houve exec), cria vazio para Codecov
 tasks.register("jacocoXmlGarantido") {
