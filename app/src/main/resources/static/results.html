@@ -17,7 +17,7 @@
   <!-- marked (renderizar explicações em Markdown bonitinho) -->
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 
-  <!-- Chart.js (mini-dashboard do Codecov) -->
+  <!-- Chart.js (dashboards interativos) -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 
   <style>
@@ -27,6 +27,10 @@
     .scroll-y{max-height:22rem;overflow:auto}
     .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono","Courier New",monospace}
     .exp-header{cursor:pointer}
+    .btn{padding:.5rem .75rem;border-radius:.5rem;border:1px solid #e5e7eb;background:#fff;font-size:.875rem}
+    .btn:hover{background:#f9fafb}
+    .prose pre{background:#0b1020;color:#e2e8f0;border-radius:.5rem;padding:.75rem}
+    .prose code{background:#f3f4f6;padding:.1rem .35rem;border-radius:.25rem}
   </style>
 </head>
 <body class="bg-gray-50">
@@ -108,25 +112,32 @@
           <!-- Lista ou Visualizador de Código (decidido via JS) -->
           <div id="listaArquivos" class="scroll-y space-y-2"></div>
 
-          <!-- Viewer para 1 arquivo -->
+          <!-- Viewer para 1 arquivo (com botões de baixar/copiar) -->
           <div id="viewerUmArquivo" class="hidden">
-            <div class="mb-2 text-sm text-gray-500">Visualizando <span id="viewerNome" class="font-medium"></span></div>
+            <div class="flex items-center justify-between mb-2">
+              <div class="text-sm text-gray-500">Visualizando <span id="viewerNome" class="font-medium"></span></div>
+              <div class="flex gap-2">
+                <a id="btnDownload" class="btn" download><i data-feather="download" class="w-4 h-4 inline mr-1"></i> Baixar .java</a>
+                <button id="btnCopiar" class="btn"><i data-feather="copy" class="w-4 h-4 inline mr-1"></i> Copiar</button>
+              </div>
+            </div>
             <pre class="rounded-lg border bg-white p-3 mono text-sm overflow-auto"><code id="viewerCode" class="language-java"></code></pre>
           </div>
         </div>
 
+        <!-- Painel Codecov/Jacoco com 3 dashboards interativos -->
         <div class="card p-4" data-aos="fade-up" data-aos-delay="100">
           <h2 class="text-lg font-semibold text-gray-800 mb-3 flex items-center">
-            <i data-feather="pie-chart" class="mr-2"></i> Codecov
+            <i data-feather="pie-chart" class="mr-2"></i> Cobertura
           </h2>
           <div id="areaCodecov" class="space-y-4">
-            <!-- Dashboard -->
+            <!-- Dashboard 1: Gauge (Codecov %) -->
             <div class="grid grid-cols-2 gap-4">
               <div class="p-3 border rounded-md bg-white flex items-center justify-center">
                 <canvas id="covGauge" width="200" height="200" aria-label="Cobertura (gauge)"></canvas>
               </div>
               <div class="p-3 border rounded-md bg-white">
-                <div class="text-sm text-gray-500 mb-1">Cobertura</div>
+                <div class="text-sm text-gray-500 mb-1">Cobertura (Codecov)</div>
                 <div class="flex items-end gap-2">
                   <div id="covPct" class="text-4xl font-bold text-gray-800">—</div>
                   <div class="text-gray-500 mb-1">%</div>
@@ -136,11 +147,28 @@
                     <div id="covBar" class="bg-blue-600 h-3 rounded" style="width:0%"></div>
                   </div>
                 </div>
-                <div class="mt-3 text-xs text-gray-500">Origem: Codecov badge</div>
+                <div class="mt-3 text-xs text-gray-500">Fonte: badge do Codecov</div>
               </div>
             </div>
 
-            <!-- Badge de fallback (mantido, sem botões extras) -->
+            <!-- Dashboard 2: Barras empilhadas (Jacoco: linhas cobertas x perdidas) -->
+            <div class="p-3 border rounded-md bg-white">
+              <div class="flex items-center justify-between mb-2">
+                <div class="text-sm text-gray-700 font-medium">Linhas cobertas x não cobertas (JaCoCo)</div>
+              </div>
+              <canvas id="jacocoStacked"></canvas>
+              <div id="jacocoStackedHint" class="text-xs text-gray-500 mt-2"></div>
+            </div>
+
+            <!-- Dashboard 3: Radar de tipos de cobertura (Jacoco) -->
+            <div class="p-3 border rounded-md bg-white">
+              <div class="flex items-center justify-between mb-2">
+                <div class="text-sm text-gray-700 font-medium">Distribuição de cobertura por tipo</div>
+              </div>
+              <canvas id="jacocoRadar"></canvas>
+            </div>
+
+            <!-- Badge fallback (mostrado só se não for possível obter % numérico) -->
             <img id="covBadge" alt="Codecov badge" class="w-full h-auto border rounded-md bg-white p-2 hidden"/>
           </div>
         </div>
@@ -208,6 +236,7 @@ if (STATUS_PARAM && chipStatus) {
 const TESTS_DIR  = 'app/entrada-usuario/testes_explicações/tests';
 const EXPL_DIR   = 'app/entrada-usuario/testes_explicações/explicacoes';
 const MARKER     = 'app/entrada-usuario/done.json'; // marcador sem token
+const JACOCO_XML = 'app/entrada-usuario/jacoco-relatorio/jacoco.xml';
 
 /** ====== HELPERS ====== */
 function escreveStatus(msg, tipo='info'){
@@ -228,6 +257,7 @@ function tempoFmt(ms){
   return parts.join(' ') || (ms+' ms');
 }
 function diagLog(s){ const d=document.getElementById('diag'); d.textContent += (d.textContent?'\n':'') + s; }
+function escapeHtml(s){ return s.replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m])); }
 
 /** ====== GITHUB: listar e abrir RAW ====== */
 async function listGithubPath(path){
@@ -305,6 +335,18 @@ function expCard(name, html){
   return wrap;
 }
 
+/** ====== Limpeza das explicações (remove blocos indesejados) ====== */
+function limparBlocosIndesejados(texto){
+  if (!texto) return texto;
+  // remove “Notas adicionais da IA {...}”
+  texto = texto.replace(/^\s*Notas adicionais da IA\s*\n?\{[\s\S]*?\}\s*$/gmi, '');
+  // remove “Trecho relevante do Sonar (recorte) {...}”
+  texto = texto.replace(/^\s*Trecho relevante do Sonar\s*\(recorte\)\s*\n?\{[\s\S]*?\}\s*$/gmi, '');
+  // remove cercas JSON em linha única após esses títulos (fallback)
+  texto = texto.replace(/^\s*(Notas adicionais da IA|Trecho relevante do Sonar[^\n]*)\s*[\r\n]+```json[\s\S]*?```/gmi,'');
+  return texto.trim();
+}
+
 /** ====== Codecov (% via badge) ====== */
 async function fetchCodecovPct(){
   try{
@@ -317,6 +359,29 @@ async function fetchCodecovPct(){
   }catch{ return null; }
 }
 
+/** ====== Jacoco: ler xml e extrair contadores ====== */
+async function fetchJacoco(){
+  try{
+    const url = `https://raw.githubusercontent.com/${OWNER}/${REPO}/${BRANCH}/${JACOCO_XML}?t=${Date.now()}`;
+    const r = await fetch(url, { cache:'no-store' });
+    if (!r.ok) return null;
+    const xml = await r.text();
+    const dp = new DOMParser();
+    const doc = dp.parseFromString(xml.replace(/<!DOCTYPE[\s\S]*?>/,'') , 'application/xml');
+    const counters = [...doc.querySelectorAll('report > counter, package > counter, class > counter')];
+    const sum = {LINE:{missed:0,covered:0}, INSTRUCTION:{missed:0,covered:0}, METHOD:{missed:0,covered:0}, CLASS:{missed:0,covered:0}, COMPLEXITY:{missed:0,covered:0}};
+    for (const c of counters){
+      const t = c.getAttribute('type');
+      if (sum[t] != null){
+        sum[t].missed  += Number(c.getAttribute('missed')||0);
+        sum[t].covered += Number(c.getAttribute('covered')||0);
+      }
+    }
+    return sum;
+  }catch { return null; }
+}
+
+/** ====== Render dashboards ====== */
 function renderCovDashboard(pct){
   const badge = document.getElementById('covBadge');
   const covPct = document.getElementById('covPct');
@@ -338,26 +403,57 @@ function renderCovDashboard(pct){
   const ctx = document.getElementById('covGauge');
   if (!ctx) return;
 
-  // destrói gráfico anterior se existir
   if (window.__covChart) { window.__covChart.destroy(); }
-
   window.__covChart = new Chart(ctx, {
     type: 'doughnut',
+    data: { labels: ['Coberto', 'Descoberto'], datasets: [{ data: [pct, Math.max(0, 100 - pct)], borderWidth: 0 }] },
+    options: { responsive: true, cutout: '70%', plugins: { legend: { display: false }, tooltip: { enabled: true } } }
+  });
+}
+
+function renderJacocoCharts(sum){
+  // Stacked bars (Linhas)
+  const stackedEl = document.getElementById('jacocoStacked');
+  const hintEl    = document.getElementById('jacocoStackedHint');
+  if (window.__jacocoStacked) { window.__jacocoStacked.destroy(); }
+
+  if (!sum || (sum.LINE.covered+sum.LINE.missed)===0){
+    hintEl.textContent = 'Sem dados no jacoco.xml (usando apenas Codecov).';
+  } else {
+    const total = sum.LINE.covered + sum.LINE.missed;
+    hintEl.textContent = `Total de linhas: ${total.toLocaleString('pt-BR')}  •  Cobertas: ${sum.LINE.covered.toLocaleString('pt-BR')}  •  Não cobertas: ${sum.LINE.missed.toLocaleString('pt-BR')}`;
+  }
+
+  window.__jacocoStacked = new Chart(stackedEl, {
+    type: 'bar',
     data: {
-      labels: ['Coberto', 'Descoberto'],
-      datasets: [{
-        data: [pct, Math.max(0, 100 - pct)],
-        borderWidth: 0
-      }]
+      labels: ['Linhas'],
+      datasets: [
+        { label: 'Cobertas',   data: [sum ? sum.LINE.covered : 0],   stack: 'linhas' },
+        { label: 'Não cobertas', data: [sum ? sum.LINE.missed : 0],   stack: 'linhas' }
+      ]
     },
     options: {
       responsive: true,
-      cutout: '70%',
-      plugins: {
-        legend: { display: false },
-        tooltip: { enabled: true }
-      }
+      plugins: { legend: { position: 'top' } },
+      scales: { x: { stacked:true }, y: { stacked:true, beginAtZero:true } }
     }
+  });
+
+  // Radar (tipos)
+  const radarEl = document.getElementById('jacocoRadar');
+  if (window.__jacocoRadar) { window.__jacocoRadar.destroy(); }
+  const tipos = ['LINE','INSTRUCTION','METHOD','CLASS'];
+  const pct   = tipos.map(t => {
+    const c = sum?.[t]||{covered:0,missed:0};
+    const tot = c.covered + c.missed;
+    return tot ? (c.covered/tot*100) : 0;
+  });
+
+  window.__jacocoRadar = new Chart(radarEl, {
+    type: 'radar',
+    data: { labels: ['Linhas','Instruções','Métodos','Classes'], datasets: [{ label:'% coberto', data: pct, pointRadius:3 }] },
+    options: { responsive:true, plugins:{ legend:{ display:true } }, scales:{ r:{ suggestedMin:0, suggestedMax:100, ticks:{ stepSize:25 } } } }
   });
 }
 
@@ -366,6 +462,8 @@ const listaArquivos = document.getElementById('listaArquivos');
 const viewer = document.getElementById('viewerUmArquivo');
 const viewerNome = document.getElementById('viewerNome');
 const viewerCode = document.getElementById('viewerCode');
+const btnDownload = document.getElementById('btnDownload');
+const btnCopiar   = document.getElementById('btnCopiar');
 
 const listaExplicacoes = document.getElementById('listaExplicacoes');
 const kpiTestes = document.getElementById('kpiTestes');
@@ -375,12 +473,27 @@ const kpiCobertura = document.getElementById('kpiCobertura');
 async function carregarResultados(){
   try {
     // TESTES
-    const tests = await listGithubPath(TESTS_DIR);
+    const tests = (await listGithubPath(TESTS_DIR))
+      .filter(f => !!(f.name||'').length)
+      .filter(f => !f.name.toLowerCase().endsWith('.jsonl')); // oculta explicacoes.jsonl
 
-    // KPIs
-    const totalTestFiles = tests.filter(f => (f.name||'').toLowerCase().endsWith('.java')).length;
-    kpiTestes.textContent   = totalTestFiles;
-    kpiArquivos.textContent = tests.length;
+    // KPIs: número real de testes = total de @Test nos arquivos
+    const totalTestFiles = tests.filter(f => f.name.toLowerCase().endsWith('.java')).length;
+    let testCount = 0;
+    for (const t of tests){
+      if (t.name.toLowerCase().endsWith('.java')){
+        const raw = t.download_url || `https://raw.githubusercontent.com/${OWNER}/${REPO}/${BRANCH}/${t.path}`;
+        try{
+          const res = await fetch(raw, { cache:'no-store' });
+          const code = await res.text();
+          const m = code.match(/@Test\b/g);
+          if (m) testCount += m.length;
+        }catch{}
+      }
+    }
+
+    kpiTestes.textContent   = testCount;     // 👈 número de testes
+    kpiArquivos.textContent = tests.length;  // arquivos listados (qualquer tipo)
 
     limpar(listaArquivos);
     viewer.classList.add('hidden');
@@ -391,7 +504,7 @@ async function carregarResultados(){
       d.textContent = 'Nenhum arquivo de teste encontrado (pasta vazia ou pipeline não gerou).';
       listaArquivos.appendChild(d);
     } else {
-      // Se houver somente 1 arquivo (e for código), mostrar viewer em vez da lista
+      // Se houver somente 1 arquivo e for código, mostrar viewer
       const codeLike = ['.java', '.kt', '.js', '.ts', '.py', '.go', '.rb', '.cs', '.cpp', '.c'];
       const unico = tests.length === 1 ? tests[0] : null;
       const hasOneCode = !!(unico && codeLike.some(ext => (unico.name||'').toLowerCase().endsWith(ext)));
@@ -400,20 +513,38 @@ async function carregarResultados(){
         const raw = unico.download_url || `https://raw.githubusercontent.com/${OWNER}/${REPO}/${BRANCH}/${unico.path}`;
         const res = await fetch(raw, {cache:'no-store'});
         const code = await res.text();
-        viewerNome.textContent = unico.name || unico.path.split('/').pop();
+        const filename = unico.name || unico.path.split('/').pop();
+
+        viewerNome.textContent = filename;
         viewerCode.textContent = code;
         viewer.classList.remove('hidden');
         Prism.highlightElement(viewerCode);
+
+        // Botão Baixar
+        btnDownload.href = raw;
+        btnDownload.setAttribute('download', filename);
+
+        // Botão Copiar
+        btnCopiar.onclick = async ()=>{
+          try{
+            await navigator.clipboard.writeText(code);
+            btnCopiar.innerHTML = '<i data-feather="check" class="w-4 h-4 inline mr-1"></i> Copiado!';
+            feather.replace();
+            setTimeout(()=>{ btnCopiar.innerHTML = '<i data-feather="copy" class="w-4 h-4 inline mr-1"></i> Copiar'; feather.replace(); }, 1800);
+          }catch{
+            alert('Não foi possível copiar para a área de transferência.');
+          }
+        };
+
       } else {
-        tests
-          .filter(f => (f.name||'').length)
-          .forEach(item => listaArquivos.appendChild(fileCard(item)));
+        tests.forEach(item => listaArquivos.appendChild(fileCard(item)));
         feather.replace();
       }
     }
 
     // EXPLICAÇÕES
-    const expls = await listGithubPath(EXPL_DIR);
+    const explsRaw = await listGithubPath(EXPL_DIR);
+    const expls = explsRaw.filter(e => !e.name.toLowerCase().endsWith('.jsonl')); // oculta explicacoes.jsonl
     limpar(listaExplicacoes);
     if (!expls.length) {
       const d = document.createElement('div');
@@ -429,12 +560,18 @@ async function carregarResultados(){
           let html = '';
           if (ct.includes('application/json')) {
             const obj = await r.json();
-            html = `<pre class="mono text-xs">${escapeHtml(JSON.stringify(obj, null, 2))}</pre>`;
+            // Mostra JSON “bonito”, mas sem os blocos indesejados (se houver um campo "markdown")
+            if (typeof obj.markdown === 'string'){
+              const limpo = limparBlocosIndesejados(obj.markdown);
+              html = marked.parse(limpo || '(sem conteúdo)');
+            } else {
+              html = `<pre class="mono text-xs">${escapeHtml(JSON.stringify(obj, null, 2))}</pre>`;
+            }
           } else {
             const txt = await r.text();
-            // se for markdown, renderiza; caso contrário, mostra em <pre>
-            const looksMd = /[#*_`\-\+\>\|]/.test(txt);
-            html = looksMd ? marked.parse(txt) : `<pre class="mono text-sm whitespace-pre-wrap">${escapeHtml(txt)}</pre>`;
+            const limpo = limparBlocosIndesejados(txt);
+            const looksMd = /[#*_`\-\+\>\|]/.test(limpo);
+            html = looksMd ? marked.parse(limpo) : `<pre class="mono text-sm whitespace-pre-wrap">${escapeHtml(limpo)}</pre>`;
           }
           listaExplicacoes.appendChild(expCard(e.name, html));
         } catch {
@@ -454,14 +591,14 @@ async function carregarResultados(){
       renderCovDashboard(null); // fallback badge
     }
 
+    // Jacoco dashboards (extras)
+    const jacoco = await fetchJacoco();
+    renderJacocoCharts(jacoco);
+
     escreveStatus('Resultados atualizados', 'ok');
   } catch (e) {
     escreveStatus('Erro ao carregar resultados: ' + e.message, 'err');
   }
-}
-
-function escapeHtml(s){
-  return s.replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]));
 }
 
 /** ====== Modo pendente: polling do marcador ====== */
@@ -478,7 +615,7 @@ function watchdogIniciar(ms){
   }, ms);
 }
 function urlMarcador(){
-  return `https://raw.githubusercontent.com/${OWNER}/${REPO}/${BRANCH}/${MARKER}?t=${Date.now()}`;
+  return `https://raw.githubusercontent.com/${OWNER}/${REPO}/${BRANCH}/app/entrada-usuario/done.json?t=${Date.now()}`;
 }
 async function lerMarcador(){
   const u = urlMarcador();

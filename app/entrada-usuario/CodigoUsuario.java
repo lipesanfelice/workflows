@@ -1,20 +1,25 @@
-public class ConversorMoedas {
+public class ConversorUnidades {
     
-    public static double realParaDolar(double real) {
-        return real * 0.19; // Cotação aproximada
+    public static double metroParaCentimetro(double metro) {
+        return metro * 100;
     }
     
-    public static double dolarParaReal(double dolar) {
-        return dolar * 5.25; // Cotação aproximada
+    public static double centimetroParaMetro(double centimetro) {
+        return centimetro / 100;
     }
     
-    public static double realParaEuro(double real) {
-        return real * 0.18; // Cotação aproximada
+    public static double kilometroParaMetro(double kilometro) {
+        return kilometro * 1000;
+    }
+    
+    public static double litroParaMililitro(double litro) {
+        return litro * 1000;
     }
     
     public static void main(String[] args) {
-        System.out.println("100 reais em dólar: $" + realParaDolar(100));
-        System.out.println("50 dólares em reais: R$" + dolarParaReal(50));
-        System.out.println("200 reais em euro: €" + realParaEuro(200));
+        System.out.println("2 metros em centímetros: " + metroParaCentimetro(2));
+        System.out.println("150 cm em metros: " + centimetroParaMetro(150));
+        System.out.println("3.5 km em metros: " + kilometroParaMetro(3.5));
+        System.out.println("2 litros em ml: " + litroParaMililitro(2));
     }
 }
