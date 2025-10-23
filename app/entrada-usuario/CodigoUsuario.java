@@ -1,27 +1,20 @@
-import java.util.Random;
-
-public class SimuladorDados {
-    private static final Random random = new Random();
+public class ConversorTemperatura {
     
-    public static int lancarDado(int faces) {
-        return random.nextInt(faces) + 1;
+    public static double celsiusParaFahrenheit(double celsius) {
+        return (celsius * 9/5) + 32;
     }
     
-    public static int[] lancarVariosDados(int quantidade, int faces) {
-        int[] resultados = new int[quantidade];
-        for (int i = 0; i < quantidade; i++) {
-            resultados[i] = lancarDado(faces);
-        }
-        return resultados;
+    public static double fahrenheitParaCelsius(double fahrenheit) {
+        return (fahrenheit - 32) * 5/9;
+    }
+    
+    public static double celsiusParaKelvin(double celsius) {
+        return celsius + 273.15;
     }
     
     public static void main(String[] args) {
-        System.out.println("Dado de 6 faces: " + lancarDado(6));
-        
-        int[] dados = lancarVariosDados(4, 20);
-        System.out.print("4 dados de 20 faces: ");
-        for (int resultado : dados) {
-            System.out.print(resultado + " ");
-        }
+        System.out.println("25°C para Fahrenheit: " + celsiusParaFahrenheit(25));
+        System.out.println("77°F para Celsius: " + fahrenheitParaCelsius(77));
+        System.out.println("0°C para Kelvin: " + celsiusParaKelvin(0));
     }
 }
