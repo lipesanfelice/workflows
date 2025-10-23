@@ -125,7 +125,7 @@
           </div>
         </div>
 
-        <!-- Painel Codecov/Jacoco com 3 dashboards interativos + LOC do usuário -->
+        <!-- Painel Codecov/Jacoco com dashboards -->
         <div class="card p-4" data-aos="fade-up" data-aos-delay="100">
           <h2 class="text-lg font-semibold text-gray-800 mb-3 flex items-center">
             <i data-feather="pie-chart" class="mr-2"></i> Cobertura
@@ -151,7 +151,7 @@
               </div>
             </div>
 
-            <!-- Dashboard 2: Barras empilhadas (Jacoco: linhas cobertas x perdidas) -->
+            <!-- Dashboard 2: Barras empilhadas (JaCoCo) -->
             <div class="p-3 border rounded-md bg-white">
               <div class="flex items-center justify-between mb-2">
                 <div class="text-sm text-gray-700 font-medium">Linhas cobertas x não cobertas (JaCoCo)</div>
@@ -160,7 +160,7 @@
               <div id="jacocoStackedHint" class="text-xs text-gray-500 mt-2"></div>
             </div>
 
-            <!-- Dashboard 3: Radar de tipos de cobertura (Jacoco) -->
+            <!-- Dashboard 3: Radar (JaCoCo) -->
             <div class="p-3 border rounded-md bg-white">
               <div class="flex items-center justify-between mb-2">
                 <div class="text-sm text-gray-700 font-medium">Distribuição de cobertura por tipo</div>
@@ -168,7 +168,7 @@
               <canvas id="jacocoRadar"></canvas>
             </div>
 
-            <!-- NOVO: Dashboard 4: Linhas de código (fonte do usuário) -->
+            <!-- Dashboard 4: Linhas de código (fonte do usuário) -->
             <div class="p-3 border rounded-md bg-white">
               <div class="flex items-center justify-between mb-2">
                 <div class="text-sm text-gray-700 font-medium">Linhas de código (fonte do usuário)</div>
@@ -177,7 +177,7 @@
               <div id="locHint" class="text-xs text-gray-500 mt-2"></div>
             </div>
 
-            <!-- Badge fallback (mostrado só se não for possível obter % numérico) -->
+            <!-- Badge fallback -->
             <img id="covBadge" alt="Codecov badge" class="w-full h-auto border rounded-md bg-white p-2 hidden"/>
           </div>
         </div>
@@ -245,7 +245,7 @@ if (STATUS_PARAM && chipStatus) {
 const ROOT_DIR   = 'app/entrada-usuario';
 const TESTS_DIR  = `${ROOT_DIR}/testes_explicações/tests`;
 const EXPL_DIR   = `${ROOT_DIR}/testes_explicações/explicacoes`;
-const MARKER     = `${ROOT_DIR}/done.json`; // marcador sem token
+const MARKER     = `${ROOT_DIR}/done.json`;
 const JACOCO_XML = `${ROOT_DIR}/jacoco-relatorio/jacoco.xml`;
 
 /** ====== HELPERS ====== */
@@ -348,11 +348,8 @@ function expCard(name, html){
 /** ====== Limpeza das explicações (remove blocos indesejados) ====== */
 function limparBlocosIndesejados(texto){
   if (!texto) return texto;
-  // remove “Notas adicionais da IA {...}”
   texto = texto.replace(/^\s*Notas adicionais da IA\s*\n?\{[\s\S]*?\}\s*$/gmi, '');
-  // remove “Trecho relevante do Sonar (recorte) {...}”
   texto = texto.replace(/^\s*Trecho relevante do Sonar\s*\(recorte\)\s*\n?\{[\s\S]*?\}\s*$/gmi, '');
-  // fallback para cercas JSON
   texto = texto.replace(/^\s*(Notas adicionais da IA|Trecho relevante do Sonar[^\n]*)\s*[\r\n]+```json[\s\S]*?```/gmi,'');
   return texto.trim();
 }
@@ -391,15 +388,15 @@ async function fetchJacoco(){
   }catch { return null; }
 }
 
-/** ====== LOC reais do usuário (conta linhas não vazias nos .java do diretório de entrada) ====== */
+/** ====== LOC reais do usuário ====== */
 async function fetchUserSourceLoc(){
-  // lista recursiva em app/entrada-usuario, ignorando pastas de saída/relatórios e testes_explicações
   const tudo = await listGithubPath(ROOT_DIR);
-  const ignorar = ['testes_explicações/','jacoco-relatorio/','testes_explicações\\','jacoco-relatorio\\','/tests/','/explicacoes/','/build/','/target/'];
+  const ignorar = ['testes_explicações/','jacoco-relatorio/','/tests/','/explicacoes/','/build/','/target/'];
   const fontes = tudo
     .filter(f => f.type === 'file')
     .filter(f => f.name.toLowerCase().endsWith('.java'))
-    .filter(f => !ignorar.some(ig => f.path.includes(ig)));
+    .filter(f => !ignorAR(f.path));
+  function ignorAR(p){ return ignorar.some(ig => p.includes(ig)); }
 
   const porArquivo = [];
   let total = 0;
@@ -410,14 +407,12 @@ async function fetchUserSourceLoc(){
       const r = await fetch(raw, { cache:'no-store' });
       if (!r.ok) continue;
       const code = await r.text();
-      // conta linhas não-vazias (trim().length > 0)
       const linhas = code.split(/\r?\n/).filter(l => l.trim().length>0).length;
       porArquivo.push({nome: f.name, path: f.path, linhas});
       total += linhas;
     }catch{}
   }
 
-  // ordena desc por linhas e limita a 12 barras para legibilidade
   porArquivo.sort((a,b)=> b.linhas - a.linhas);
   const top = porArquivo.slice(0, 12);
   return {total, top, todos: porArquivo};
@@ -430,7 +425,6 @@ function renderCovDashboard(pct){
   const covBar = document.getElementById('covBar');
 
   if (typeof pct !== 'number' || isNaN(pct)) {
-    // fallback: mostra somente o badge
     badge.classList.remove('hidden');
     badge.src = `https://codecov.io/gh/${OWNER}/${REPO}/branch/${BRANCH}/graph/badge.svg`;
     covPct.textContent = '—';
@@ -441,10 +435,8 @@ function renderCovDashboard(pct){
   covPct.textContent = pct.toFixed(2);
   covBar.style.width = Math.max(0, Math.min(100, pct)) + '%';
 
-  // Gauge (rosca)
   const ctx = document.getElementById('covGauge');
   if (!ctx) return;
-
   if (window.__covChart) { window.__covChart.destroy(); }
   window.__covChart = new Chart(ctx, {
     type: 'doughnut',
@@ -454,7 +446,6 @@ function renderCovDashboard(pct){
 }
 
 function renderJacocoCharts(sum){
-  // Stacked bars (Linhas)
   const stackedEl = document.getElementById('jacocoStacked');
   const hintEl    = document.getElementById('jacocoStackedHint');
   if (window.__jacocoStacked) { window.__jacocoStacked.destroy(); }
@@ -482,7 +473,6 @@ function renderJacocoCharts(sum){
     }
   });
 
-  // Radar (tipos)
   const radarEl = document.getElementById('jacocoRadar');
   if (window.__jacocoRadar) { window.__jacocoRadar.destroy(); }
   const tipos = ['LINE','INSTRUCTION','METHOD','CLASS'];
@@ -499,7 +489,6 @@ function renderJacocoCharts(sum){
   });
 }
 
-/** ====== Render LOC do usuário ====== */
 function renderLocChart(model){
   const el = document.getElementById('locBar');
   const hint = document.getElementById('locHint');
@@ -519,10 +508,7 @@ function renderLocChart(model){
     },
     options: {
       responsive: true,
-      plugins: {
-        legend: { display: true },
-        tooltip: { enabled: true }
-      },
+      plugins: { legend: { display: true }, tooltip: { enabled: true } },
       scales: {
         x: { ticks: { autoSkip: false, maxRotation: 60, minRotation: 0 } },
         y: { beginAtZero: true }
@@ -531,7 +517,7 @@ function renderLocChart(model){
   });
 }
 
-/** ====== Carregar resultados (final) ====== */
+/** ====== Carregar resultados ====== */
 const listaArquivos = document.getElementById('listaArquivos');
 const viewer = document.getElementById('viewerUmArquivo');
 const viewerNome = document.getElementById('viewerNome');
@@ -549,10 +535,8 @@ async function carregarResultados(){
     // TESTES
     const tests = (await listGithubPath(TESTS_DIR))
       .filter(f => !!(f.name||'').length)
-      .filter(f => !f.name.toLowerCase().endsWith('.jsonl')); // oculta explicacoes.jsonl
+      .filter(f => !f.name.toLowerCase().endsWith('.jsonl'));
 
-    // KPIs: número real de testes = total de @Test nos arquivos
-    const totalTestFiles = tests.filter(f => f.name.toLowerCase().endsWith('.java')).length;
     let testCount = 0;
     for (const t of tests){
       if (t.name.toLowerCase().endsWith('.java')){
@@ -566,8 +550,8 @@ async function carregarResultados(){
       }
     }
 
-    kpiTestes.textContent   = testCount;     // número de testes reais
-    kpiArquivos.textContent = tests.length;  // total de arquivos listados (qualquer tipo)
+    kpiTestes.textContent   = testCount;
+    kpiArquivos.textContent = tests.length;
 
     limpar(listaArquivos);
     viewer.classList.add('hidden');
@@ -578,7 +562,6 @@ async function carregarResultados(){
       d.textContent = 'Nenhum arquivo de teste encontrado (pasta vazia ou pipeline não gerou).';
       listaArquivos.appendChild(d);
     } else {
-      // Se houver somente 1 arquivo e for código, mostrar viewer
       const codeLike = ['.java', '.kt', '.js', '.ts', '.py', '.go', '.rb', '.cs', '.cpp', '.c'];
       const unico = tests.length === 1 ? tests[0] : null;
       const hasOneCode = !!(unico && codeLike.some(ext => (unico.name||'').toLowerCase().endsWith(ext)));
@@ -594,11 +577,8 @@ async function carregarResultados(){
         viewer.classList.remove('hidden');
         Prism.highlightElement(viewerCode);
 
-        // Botão Baixar
         btnDownload.href = raw;
         btnDownload.setAttribute('download', filename);
-
-        // Botão Copiar
         btnCopiar.onclick = async ()=>{
           try{
             await navigator.clipboard.writeText(code);
@@ -609,14 +589,13 @@ async function carregarResultados(){
             alert('Não foi possível copiar para a área de transferência.');
           }
         };
-
       } else {
         tests.forEach(item => listaArquivos.appendChild(fileCard(item)));
         feather.replace();
       }
     }
 
-    // EXPLICAÇÕES (MD preferencial, TXT fallback) — oculta *.jsonl
+    // ===== EXPLICAÇÕES (MD preferencial, TXT fallback) =====
     const explsRaw = await listGithubPath(EXPL_DIR);
     const expls = explsRaw.filter(e => !e.name.toLowerCase().endsWith('.jsonl'));
     limpar(listaExplicacoes);
@@ -628,10 +607,14 @@ async function carregarResultados(){
     } else {
       for (const e of expls) {
         const raw = e.download_url || `https://raw.githubusercontent.com/${OWNER}/${REPO}/${BRANCH}/${e.path}`;
+        const isMd = (e.name||'').toLowerCase().endsWith('.md');    // <<<<<< chave da correção
+        const isTxt = (e.name||'').toLowerCase().endsWith('.txt');
+
         try {
           const r = await fetch(raw, { cache:'no-store' });
           const ct = (r.headers.get('content-type')||'').toLowerCase();
           let html = '';
+
           if (ct.includes('application/json')) {
             const obj = await r.json();
             if (typeof obj.markdown === 'string'){
@@ -644,10 +627,20 @@ async function carregarResultados(){
           } else {
             const txt = await r.text();
             const limpo = limparBlocosIndesejados(txt);
-            const looksMd = /[#*_`\-\+\>\|]/.test(limpo);
-            const withTitle = limpo.trim().startsWith('#') ? limpo : ('# Explicações dos Testes\n\n' + limpo);
-            html = looksMd ? marked.parse(withTitle) : `<pre class="mono text-sm whitespace-pre-wrap">${escapeHtml(limpo)}</pre>`;
+
+            if (isMd) {
+              // renderizar como Markdown SEM depender do content-type
+              const withTitle = limpo.trim().startsWith('#') ? limpo : ('# Explicações dos Testes\n\n' + limpo);
+              html = marked.parse(withTitle);
+            } else if (isTxt) {
+              html = `<pre class="mono text-sm whitespace-pre-wrap">${escapeHtml(limpo)}</pre>`;
+            } else {
+              // heurística p/ outros formatos textuais
+              const looksMd = /[#*_`\-\+\>\|]/.test(limpo);
+              html = looksMd ? marked.parse(limpo) : `<pre class="mono text-sm whitespace-pre-wrap">${escapeHtml(limpo)}</pre>`;
+            }
           }
+
           listaExplicacoes.appendChild(expCard(e.name, html));
         } catch {
           listaExplicacoes.appendChild(expCard(e.name, '<em class="text-gray-500">Falha ao carregar</em>'));
@@ -663,7 +656,7 @@ async function carregarResultados(){
       renderCovDashboard(pct);
     } else {
       kpiCobertura.textContent = '—';
-      renderCovDashboard(null); // fallback badge
+      renderCovDashboard(null);
     }
 
     // Jacoco dashboards
@@ -737,7 +730,6 @@ async function ciclo(){
 /** ====== Init ====== */
 document.addEventListener('DOMContentLoaded', async ()=>{
   feather.replace();
-
   const btnReload = document.getElementById('btnReload');
   if (btnReload) btnReload.addEventListener('click', carregarResultados);
 
