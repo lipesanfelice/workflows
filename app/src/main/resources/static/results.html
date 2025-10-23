@@ -125,7 +125,7 @@
           </div>
         </div>
 
-        <!-- Painel Codecov/Jacoco com 3 dashboards interativos -->
+        <!-- Painel Codecov/Jacoco com 3 dashboards interativos + LOC do usuário -->
         <div class="card p-4" data-aos="fade-up" data-aos-delay="100">
           <h2 class="text-lg font-semibold text-gray-800 mb-3 flex items-center">
             <i data-feather="pie-chart" class="mr-2"></i> Cobertura
@@ -168,6 +168,15 @@
               <canvas id="jacocoRadar"></canvas>
             </div>
 
+            <!-- NOVO: Dashboard 4: Linhas de código (fonte do usuário) -->
+            <div class="p-3 border rounded-md bg-white">
+              <div class="flex items-center justify-between mb-2">
+                <div class="text-sm text-gray-700 font-medium">Linhas de código (fonte do usuário)</div>
+              </div>
+              <canvas id="locBar"></canvas>
+              <div id="locHint" class="text-xs text-gray-500 mt-2"></div>
+            </div>
+
             <!-- Badge fallback (mostrado só se não for possível obter % numérico) -->
             <img id="covBadge" alt="Codecov badge" class="w-full h-auto border rounded-md bg-white p-2 hidden"/>
           </div>
@@ -176,7 +185,7 @@
 
       <div class="card p-4" data-aos="fade-up">
         <h2 class="text-lg font-semibold text-gray-800 mb-3 flex items-center">
-          <i data-feather="info" class="mr-2"></i> Explicações
+          <i data-feather="info" class="mr-2"></i> Explicações dos Testes
         </h2>
         <div id="listaExplicacoes" class="grid gap-3">
           <div class="p-4 border border-dashed border-gray-300 rounded-md bg-gray-50 text-gray-500">Carregando explicações…</div>
@@ -233,10 +242,11 @@ if (STATUS_PARAM && chipStatus) {
 }
 
 /** ====== CONSTANTES DOS DIRETÓRIOS ====== */
-const TESTS_DIR  = 'app/entrada-usuario/testes_explicações/tests';
-const EXPL_DIR   = 'app/entrada-usuario/testes_explicações/explicacoes';
-const MARKER     = 'app/entrada-usuario/done.json'; // marcador sem token
-const JACOCO_XML = 'app/entrada-usuario/jacoco-relatorio/jacoco.xml';
+const ROOT_DIR   = 'app/entrada-usuario';
+const TESTS_DIR  = `${ROOT_DIR}/testes_explicações/tests`;
+const EXPL_DIR   = `${ROOT_DIR}/testes_explicações/explicacoes`;
+const MARKER     = `${ROOT_DIR}/done.json`; // marcador sem token
+const JACOCO_XML = `${ROOT_DIR}/jacoco-relatorio/jacoco.xml`;
 
 /** ====== HELPERS ====== */
 function escreveStatus(msg, tipo='info'){
@@ -342,7 +352,7 @@ function limparBlocosIndesejados(texto){
   texto = texto.replace(/^\s*Notas adicionais da IA\s*\n?\{[\s\S]*?\}\s*$/gmi, '');
   // remove “Trecho relevante do Sonar (recorte) {...}”
   texto = texto.replace(/^\s*Trecho relevante do Sonar\s*\(recorte\)\s*\n?\{[\s\S]*?\}\s*$/gmi, '');
-  // remove cercas JSON em linha única após esses títulos (fallback)
+  // fallback para cercas JSON
   texto = texto.replace(/^\s*(Notas adicionais da IA|Trecho relevante do Sonar[^\n]*)\s*[\r\n]+```json[\s\S]*?```/gmi,'');
   return texto.trim();
 }
@@ -379,6 +389,38 @@ async function fetchJacoco(){
     }
     return sum;
   }catch { return null; }
+}
+
+/** ====== LOC reais do usuário (conta linhas não vazias nos .java do diretório de entrada) ====== */
+async function fetchUserSourceLoc(){
+  // lista recursiva em app/entrada-usuario, ignorando pastas de saída/relatórios e testes_explicações
+  const tudo = await listGithubPath(ROOT_DIR);
+  const ignorar = ['testes_explicações/','jacoco-relatorio/','testes_explicações\\','jacoco-relatorio\\','/tests/','/explicacoes/','/build/','/target/'];
+  const fontes = tudo
+    .filter(f => f.type === 'file')
+    .filter(f => f.name.toLowerCase().endsWith('.java'))
+    .filter(f => !ignorar.some(ig => f.path.includes(ig)));
+
+  const porArquivo = [];
+  let total = 0;
+
+  for (const f of fontes){
+    const raw = f.download_url || `https://raw.githubusercontent.com/${OWNER}/${REPO}/${BRANCH}/${f.path}`;
+    try{
+      const r = await fetch(raw, { cache:'no-store' });
+      if (!r.ok) continue;
+      const code = await r.text();
+      // conta linhas não-vazias (trim().length > 0)
+      const linhas = code.split(/\r?\n/).filter(l => l.trim().length>0).length;
+      porArquivo.push({nome: f.name, path: f.path, linhas});
+      total += linhas;
+    }catch{}
+  }
+
+  // ordena desc por linhas e limita a 12 barras para legibilidade
+  porArquivo.sort((a,b)=> b.linhas - a.linhas);
+  const top = porArquivo.slice(0, 12);
+  return {total, top, todos: porArquivo};
 }
 
 /** ====== Render dashboards ====== */
@@ -429,8 +471,8 @@ function renderJacocoCharts(sum){
     data: {
       labels: ['Linhas'],
       datasets: [
-        { label: 'Cobertas',   data: [sum ? sum.LINE.covered : 0],   stack: 'linhas' },
-        { label: 'Não cobertas', data: [sum ? sum.LINE.missed : 0],   stack: 'linhas' }
+        { label: 'Cobertas',     data: [sum ? sum.LINE.covered : 0],   stack: 'linhas' },
+        { label: 'Não cobertas', data: [sum ? sum.LINE.missed : 0],    stack: 'linhas' }
       ]
     },
     options: {
@@ -454,6 +496,38 @@ function renderJacocoCharts(sum){
     type: 'radar',
     data: { labels: ['Linhas','Instruções','Métodos','Classes'], datasets: [{ label:'% coberto', data: pct, pointRadius:3 }] },
     options: { responsive:true, plugins:{ legend:{ display:true } }, scales:{ r:{ suggestedMin:0, suggestedMax:100, ticks:{ stepSize:25 } } } }
+  });
+}
+
+/** ====== Render LOC do usuário ====== */
+function renderLocChart(model){
+  const el = document.getElementById('locBar');
+  const hint = document.getElementById('locHint');
+  if (window.__locChart) { window.__locChart.destroy(); }
+
+  const labels = model.top.map(x => x.nome);
+  const data   = model.top.map(x => x.linhas);
+  const total  = model.total;
+
+  hint.textContent = `Total de linhas não vazias nos fontes do usuário: ${total.toLocaleString('pt-BR')} • Arquivos no gráfico: ${labels.length}${model.todos.length>labels.length?` (de ${model.todos.length})`:''}`;
+
+  window.__locChart = new Chart(el, {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [{ label:'Linhas por arquivo (não vazias)', data }]
+    },
+    options: {
+      responsive: true,
+      plugins: {
+        legend: { display: true },
+        tooltip: { enabled: true }
+      },
+      scales: {
+        x: { ticks: { autoSkip: false, maxRotation: 60, minRotation: 0 } },
+        y: { beginAtZero: true }
+      }
+    }
   });
 }
 
@@ -492,8 +566,8 @@ async function carregarResultados(){
       }
     }
 
-    kpiTestes.textContent   = testCount;     // 👈 número de testes
-    kpiArquivos.textContent = tests.length;  // arquivos listados (qualquer tipo)
+    kpiTestes.textContent   = testCount;     // número de testes reais
+    kpiArquivos.textContent = tests.length;  // total de arquivos listados (qualquer tipo)
 
     limpar(listaArquivos);
     viewer.classList.add('hidden');
@@ -542,9 +616,9 @@ async function carregarResultados(){
       }
     }
 
-    // EXPLICAÇÕES
+    // EXPLICAÇÕES (MD preferencial, TXT fallback) — oculta *.jsonl
     const explsRaw = await listGithubPath(EXPL_DIR);
-    const expls = explsRaw.filter(e => !e.name.toLowerCase().endsWith('.jsonl')); // oculta explicacoes.jsonl
+    const expls = explsRaw.filter(e => !e.name.toLowerCase().endsWith('.jsonl'));
     limpar(listaExplicacoes);
     if (!expls.length) {
       const d = document.createElement('div');
@@ -560,10 +634,10 @@ async function carregarResultados(){
           let html = '';
           if (ct.includes('application/json')) {
             const obj = await r.json();
-            // Mostra JSON “bonito”, mas sem os blocos indesejados (se houver um campo "markdown")
             if (typeof obj.markdown === 'string'){
               const limpo = limparBlocosIndesejados(obj.markdown);
-              html = marked.parse(limpo || '(sem conteúdo)');
+              const withTitle = limpo.trim().startsWith('#') ? limpo : ('# Explicações dos Testes\n\n' + limpo);
+              html = marked.parse(withTitle || '(sem conteúdo)');
             } else {
               html = `<pre class="mono text-xs">${escapeHtml(JSON.stringify(obj, null, 2))}</pre>`;
             }
@@ -571,7 +645,8 @@ async function carregarResultados(){
             const txt = await r.text();
             const limpo = limparBlocosIndesejados(txt);
             const looksMd = /[#*_`\-\+\>\|]/.test(limpo);
-            html = looksMd ? marked.parse(limpo) : `<pre class="mono text-sm whitespace-pre-wrap">${escapeHtml(limpo)}</pre>`;
+            const withTitle = limpo.trim().startsWith('#') ? limpo : ('# Explicações dos Testes\n\n' + limpo);
+            html = looksMd ? marked.parse(withTitle) : `<pre class="mono text-sm whitespace-pre-wrap">${escapeHtml(limpo)}</pre>`;
           }
           listaExplicacoes.appendChild(expCard(e.name, html));
         } catch {
@@ -591,9 +666,13 @@ async function carregarResultados(){
       renderCovDashboard(null); // fallback badge
     }
 
-    // Jacoco dashboards (extras)
+    // Jacoco dashboards
     const jacoco = await fetchJacoco();
     renderJacocoCharts(jacoco);
+
+    // LOC reais do usuário
+    const locModel = await fetchUserSourceLoc();
+    renderLocChart(locModel);
 
     escreveStatus('Resultados atualizados', 'ok');
   } catch (e) {
@@ -615,7 +694,7 @@ function watchdogIniciar(ms){
   }, ms);
 }
 function urlMarcador(){
-  return `https://raw.githubusercontent.com/${OWNER}/${REPO}/${BRANCH}/app/entrada-usuario/done.json?t=${Date.now()}`;
+  return `https://raw.githubusercontent.com/${OWNER}/${REPO}/${BRANCH}/${MARKER}?t=${Date.now()}`;
 }
 async function lerMarcador(){
   const u = urlMarcador();

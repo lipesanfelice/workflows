@@ -1,25 +1,34 @@
-public class ConversorUnidades {
+import java.util.ArrayList;
+import java.util.List;
+
+public class GerenciadorTarefas {
+    private List<String> tarefas = new ArrayList<>();
     
-    public static double metroParaCentimetro(double metro) {
-        return metro * 100;
+    public void adicionarTarefa(String tarefa) {
+        tarefas.add(tarefa);
+        System.out.println("Tarefa adicionada: " + tarefa);
     }
     
-    public static double centimetroParaMetro(double centimetro) {
-        return centimetro / 100;
+    public void removerTarefa(int indice) {
+        if (indice >= 0 && indice < tarefas.size()) {
+            String removida = tarefas.remove(indice);
+            System.out.println("Tarefa removida: " + removida);
+        }
     }
     
-    public static double kilometroParaMetro(double kilometro) {
-        return kilometro * 1000;
-    }
-    
-    public static double litroParaMililitro(double litro) {
-        return litro * 1000;
+    public void listarTarefas() {
+        System.out.println("\n--- LISTA DE TAREFAS ---");
+        for (int i = 0; i < tarefas.size(); i++) {
+            System.out.println((i + 1) + ". " + tarefas.get(i));
+        }
     }
     
     public static void main(String[] args) {
-        System.out.println("2 metros em centímetros: " + metroParaCentimetro(2));
-        System.out.println("150 cm em metros: " + centimetroParaMetro(150));
-        System.out.println("3.5 km em metros: " + kilometroParaMetro(3.5));
-        System.out.println("2 litros em ml: " + litroParaMililitro(2));
+        GerenciadorTarefas gerenciador = new GerenciadorTarefas();
+        gerenciador.adicionarTarefa("Estudar Java");
+        gerenciador.adicionarTarefa("Fazer exercícios");
+        gerenciador.listarTarefas();
+        gerenciador.removerTarefa(0);
+        gerenciador.listarTarefas();
     }
 }
