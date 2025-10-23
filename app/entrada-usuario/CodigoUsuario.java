@@ -1,30 +1,22 @@
-public class ValidadorCPF {
+import java.util.Arrays;
+
+public class CalculadoraEstatistica {
     
-    public static boolean validarCPF(String cpf) {
-        cpf = cpf.replaceAll("[^0-9]", "");
-        
-        if (cpf.length() != 11 || cpf.matches("(\\d)\\1{10}")) {
-            return false;
-        }
-        
-        int[] digitos = cpf.chars().map(Character::getNumericValue).toArray();
-        
-        int digito1 = calcularDigito(digitos, 9);
-        int digito2 = calcularDigito(digitos, 10);
-        
-        return digitos[9] == digito1 && digitos[10] == digito2;
+    public static double calcularMedia(double[] numeros) {
+        return Arrays.stream(numeros).average().orElse(0.0);
     }
     
-    private static int calcularDigito(int[] digitos, int posicao) {
-        int soma = 0;
-        for (int i = 0; i < posicao; i++) {
-            soma += digitos[i] * (posicao + 1 - i);
-        }
-        int resto = soma % 11;
-        return resto < 2 ? 0 : 11 - resto;
+    public static double calcularMediana(double[] numeros) {
+        Arrays.sort(numeros);
+        int meio = numeros.length / 2;
+        return numeros.length % 2 == 0 ? 
+            (numeros[meio - 1] + numeros[meio]) / 2.0 : 
+            numeros[meio];
     }
     
     public static void main(String[] args) {
-        System.out.println("CPF válido: " + validarCPF("123.456.789-09"));
+        double[] dados = {10.5, 20.3, 15.7, 8.9, 25.1};
+        System.out.println("Média: " + calcularMedia(dados));
+        System.out.println("Mediana: " + calcularMediana(dados));
     }
 }
