@@ -14,9 +14,6 @@
   <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-core.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
 
-  <!-- marked (renderizar explicações em Markdown bonitinho) -->
-  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
-
   <!-- Chart.js (dashboards interativos) -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 
@@ -26,11 +23,8 @@
     .soft{background:rgba(59,130,246,.08);border:1px dashed rgba(59,130,246,.35)}
     .scroll-y{max-height:22rem;overflow:auto}
     .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono","Courier New",monospace}
-    .exp-header{cursor:pointer}
     .btn{padding:.5rem .75rem;border-radius:.5rem;border:1px solid #e5e7eb;background:#fff;font-size:.875rem}
     .btn:hover{background:#f9fafb}
-    .prose pre{background:#0b1020;color:#e2e8f0;border-radius:.5rem;padding:.75rem}
-    .prose code{background:#f3f4f6;padding:.1rem .35rem;border-radius:.25rem}
   </style>
 </head>
 <body class="bg-gray-50">
@@ -183,13 +177,28 @@
         </div>
       </div>
 
+      <!-- EXPLICAÇÕES: apenas explicacoes_refatoradas.txt -->
       <div class="card p-4" data-aos="fade-up">
-        <h2 class="text-lg font-semibold text-gray-800 mb-3 flex items-center">
-          <i data-feather="info" class="mr-2"></i> Explicações dos Testes
-        </h2>
-        <div id="listaExplicacoes" class="grid gap-3">
-          <div class="p-4 border border-dashed border-gray-300 rounded-md bg-gray-50 text-gray-500">Carregando explicações…</div>
+        <div class="flex items-center justify-between mb-2">
+          <h2 class="text-lg font-semibold text-gray-800 flex items-center">
+            <i data-feather="info" class="mr-2"></i> Explicações dos Testes
+          </h2>
+          <div class="flex gap-2">
+            <a id="btnExpDownload" class="btn" download="explicacoes_refatoradas.txt">
+              <i data-feather="download" class="w-4 h-4 inline mr-1"></i> Baixar .txt
+            </a>
+            <button id="btnExpCopiar" class="btn">
+              <i data-feather="copy" class="w-4 h-4 inline mr-1"></i> Copiar
+            </button>
+          </div>
         </div>
+        <div class="text-sm text-gray-600 mb-2">
+          Fonte:
+          <code class="mono text-xs bg-gray-100 px-2 py-0.5 rounded">
+            explicacoes/explicacoes_refatoradas.txt
+          </code>
+        </div>
+        <pre id="expPre" class="mono text-sm whitespace-pre-wrap bg-gray-50 border border-gray-200 rounded p-3">Carregando explicações…</pre>
       </div>
 
       <details class="mt-6">
@@ -244,9 +253,11 @@ if (STATUS_PARAM && chipStatus) {
 /** ====== CONSTANTES DOS DIRETÓRIOS ====== */
 const ROOT_DIR   = 'app/entrada-usuario';
 const TESTS_DIR  = `${ROOT_DIR}/testes_explicações/tests`;
-const EXPL_DIR   = `${ROOT_DIR}/testes_explicações/explicacoes`;
 const MARKER     = `${ROOT_DIR}/done.json`;
 const JACOCO_XML = `${ROOT_DIR}/jacoco-relatorio/jacoco.xml`;
+
+// arquivo ÚNICO de explicações (sem fallback)
+const EXPL_TXT   = `${ROOT_DIR}/testes_explicações/explicacoes/explicacoes_refatoradas.txt`;
 
 /** ====== HELPERS ====== */
 function escreveStatus(msg, tipo='info'){
@@ -269,7 +280,7 @@ function tempoFmt(ms){
 function diagLog(s){ const d=document.getElementById('diag'); d.textContent += (d.textContent?'\n':'') + s; }
 function escapeHtml(s){ return s.replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m])); }
 
-/** ====== GITHUB: listar e abrir RAW ====== */
+/** GitHub: listar e abrir RAW */
 async function listGithubPath(path){
   const url = `https://api.github.com/repos/${OWNER}/${REPO}/contents/${path}?ref=${encodeURIComponent(BRANCH)}&t=${Date.now()}`;
   const r = await fetch(url, { cache:'no-store' });
@@ -293,59 +304,7 @@ async function listGithubPath(path){
   return [];
 }
 
-/** ====== UI builders ====== */
-function fileCard(item){
-  const name = item.name || item.path.split('/').pop();
-  const htmlUrl = item.html_url || `https://github.com/${OWNER}/${REPO}/blob/${BRANCH}/${item.path}`;
-  const rawUrl  = item.download_url || `https://raw.githubusercontent.com/${OWNER}/${REPO}/${BRANCH}/${item.path}`;
-
-  const el = document.createElement('div');
-  el.className = 'p-3 border rounded-md bg-white flex items-center justify-between gap-3';
-  const left = document.createElement('div');
-  left.className = 'flex items-center gap-2';
-  const ic = document.createElement('i');
-  ic.setAttribute('data-feather','file');
-  ic.className = 'text-gray-400';
-  const span = document.createElement('span');
-  span.className = 'font-medium text-gray-800 break-all';
-  span.textContent = name;
-  left.appendChild(ic); left.appendChild(span);
-  const right = document.createElement('div');
-  right.className = 'flex gap-2';
-  const a1 = document.createElement('a'); a1.href=rawUrl; a1.target='_blank'; a1.className='px-3 py-1 rounded-md border text-sm text-gray-700 bg-white hover:bg-gray-50'; a1.textContent='Baixar';
-  const a2 = document.createElement('a'); a2.href=htmlUrl; a2.target='_blank'; a2.className='px-3 py-1 rounded-md border text-sm text-gray-700 bg-white hover:bg-gray-50'; a2.textContent='Abrir no GitHub';
-  right.appendChild(a1); right.appendChild(a2);
-  el.appendChild(left); el.appendChild(right);
-  return el;
-}
-
-function expCard(name, html){
-  const wrap = document.createElement('div');
-  wrap.className = 'border rounded-md bg-white overflow-hidden';
-
-  const header = document.createElement('button');
-  header.type = 'button';
-  header.className = 'exp-header w-full px-4 py-2 flex items-center justify-between bg-gray-50 hover:bg-gray-100';
-  header.innerHTML = `<span class="font-medium text-gray-800">${name||'Explicação'}</span><i data-feather="chevron-down"></i>`;
-
-  const body = document.createElement('div');
-  body.className = 'px-4 py-3 prose prose-sm max-w-none';
-  body.innerHTML = html;
-  body.style.display = 'none';
-
-  header.addEventListener('click', ()=>{
-    const open = body.style.display !== 'none';
-    body.style.display = open ? 'none' : 'block';
-    header.querySelector('i').setAttribute('data-feather', open ? 'chevron-down' : 'chevron-up');
-    feather.replace();
-  });
-
-  wrap.appendChild(header);
-  wrap.appendChild(body);
-  return wrap;
-}
-
-/** ====== Limpeza das explicações (remove blocos indesejados) ====== */
+/** ====== Limpeza de blocos indesejados no TXT ====== */
 function limparBlocosIndesejados(texto){
   if (!texto) return texto;
   texto = texto.replace(/^\s*Notas adicionais da IA\s*\n?\{[\s\S]*?\}\s*$/gmi, '');
@@ -392,11 +351,12 @@ async function fetchJacoco(){
 async function fetchUserSourceLoc(){
   const tudo = await listGithubPath(ROOT_DIR);
   const ignorar = ['testes_explicações/','jacoco-relatorio/','/tests/','/explicacoes/','/build/','/target/'];
+  function ignorAR(p){ return ignorar.some(ig => p.includes(ig)); }
+
   const fontes = tudo
     .filter(f => f.type === 'file')
     .filter(f => f.name.toLowerCase().endsWith('.java'))
     .filter(f => !ignorAR(f.path));
-  function ignorAR(p){ return ignorar.some(ig => p.includes(ig)); }
 
   const porArquivo = [];
   let total = 0;
@@ -525,10 +485,14 @@ const viewerCode = document.getElementById('viewerCode');
 const btnDownload = document.getElementById('btnDownload');
 const btnCopiar   = document.getElementById('btnCopiar');
 
-const listaExplicacoes = document.getElementById('listaExplicacoes');
 const kpiTestes = document.getElementById('kpiTestes');
 const kpiArquivos = document.getElementById('kpiArquivos');
 const kpiCobertura = document.getElementById('kpiCobertura');
+
+// elementos da explicação única
+const expPre = document.getElementById('expPre');
+const btnExpDownload = document.getElementById('btnExpDownload');
+const btnExpCopiar   = document.getElementById('btnExpCopiar');
 
 async function carregarResultados(){
   try {
@@ -553,6 +517,7 @@ async function carregarResultados(){
     kpiTestes.textContent   = testCount;
     kpiArquivos.textContent = tests.length;
 
+    // Mostrar 1 arquivo em viewer ou lista
     limpar(listaArquivos);
     viewer.classList.add('hidden');
 
@@ -595,58 +560,41 @@ async function carregarResultados(){
       }
     }
 
-    // ===== EXPLICAÇÕES (MD preferencial, TXT fallback) =====
-    const explsRaw = await listGithubPath(EXPL_DIR);
-    const expls = explsRaw.filter(e => !e.name.toLowerCase().endsWith('.jsonl'));
-    limpar(listaExplicacoes);
-    if (!expls.length) {
-      const d = document.createElement('div');
-      d.className = 'p-4 border border-dashed border-gray-300 rounded-md bg-gray-50 text-gray-500';
-      d.textContent = 'Sem explicações disponíveis.';
-      listaExplicacoes.appendChild(d);
-    } else {
-      for (const e of expls) {
-        const raw = e.download_url || `https://raw.githubusercontent.com/${OWNER}/${REPO}/${BRANCH}/${e.path}`;
-        const isMd = (e.name||'').toLowerCase().endsWith('.md');    // <<<<<< chave da correção
-        const isTxt = (e.name||'').toLowerCase().endsWith('.txt');
+    // ===== EXPLICAÇÕES: APENAS explicacoes_refatoradas.txt =====
+    const rawUrl = `https://raw.githubusercontent.com/${OWNER}/${REPO}/${BRANCH}/${EXPL_TXT}?t=${Date.now()}`;
+    let txt = '';
+    try{
+      const r = await fetch(rawUrl, { cache:'no-store' });
+      if (r.ok) txt = await r.text();
+    }catch{}
 
-        try {
-          const r = await fetch(raw, { cache:'no-store' });
-          const ct = (r.headers.get('content-type')||'').toLowerCase();
-          let html = '';
-
-          if (ct.includes('application/json')) {
-            const obj = await r.json();
-            if (typeof obj.markdown === 'string'){
-              const limpo = limparBlocosIndesejados(obj.markdown);
-              const withTitle = limpo.trim().startsWith('#') ? limpo : ('# Explicações dos Testes\n\n' + limpo);
-              html = marked.parse(withTitle || '(sem conteúdo)');
-            } else {
-              html = `<pre class="mono text-xs">${escapeHtml(JSON.stringify(obj, null, 2))}</pre>`;
-            }
-          } else {
-            const txt = await r.text();
-            const limpo = limparBlocosIndesejados(txt);
-
-            if (isMd) {
-              // renderizar como Markdown SEM depender do content-type
-              const withTitle = limpo.trim().startsWith('#') ? limpo : ('# Explicações dos Testes\n\n' + limpo);
-              html = marked.parse(withTitle);
-            } else if (isTxt) {
-              html = `<pre class="mono text-sm whitespace-pre-wrap">${escapeHtml(limpo)}</pre>`;
-            } else {
-              // heurística p/ outros formatos textuais
-              const looksMd = /[#*_`\-\+\>\|]/.test(limpo);
-              html = looksMd ? marked.parse(limpo) : `<pre class="mono text-sm whitespace-pre-wrap">${escapeHtml(limpo)}</pre>`;
-            }
-          }
-
-          listaExplicacoes.appendChild(expCard(e.name, html));
-        } catch {
-          listaExplicacoes.appendChild(expCard(e.name, '<em class="text-gray-500">Falha ao carregar</em>'));
-        }
+    if (txt && txt.trim().length > 0) {
+      let limpo = limparBlocosIndesejados(txt);
+      // garante o título na primeira linha
+      const lines = limpo.split(/\r?\n/);
+      if (!/^Explicações dos Testes\s*$/i.test((lines[0]||'').trim())) {
+        limpo = 'Explicações dos Testes\n\n' + limpo;
       }
-      feather.replace();
+      expPre.textContent = limpo;
+
+      // download/cópia
+      btnExpDownload.setAttribute('href', rawUrl);
+      btnExpDownload.setAttribute('download', 'explicacoes_refatoradas.txt');
+      btnExpCopiar.onclick = async () => {
+        try {
+          await navigator.clipboard.writeText(limpo);
+          btnExpCopiar.innerHTML = '<i data-feather="check" class="w-4 h-4 inline mr-1"></i> Copiado!';
+          feather.replace();
+          setTimeout(()=>{ btnExpCopiar.innerHTML = '<i data-feather="copy" class="w-4 h-4 inline mr-1"></i> Copiar'; feather.replace(); }, 1600);
+        } catch {
+          alert('Não foi possível copiar.');
+        }
+      };
+    } else {
+      expPre.textContent = 'Sem explicações disponíveis (explicacoes/explicacoes_refatoradas.txt não encontrado).';
+      btnExpDownload.removeAttribute('href');
+      btnExpDownload.removeAttribute('download');
+      btnExpCopiar.onclick = null;
     }
 
     // Codecov
