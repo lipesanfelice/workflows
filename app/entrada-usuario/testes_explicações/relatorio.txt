@@ -1,0 +1,20 @@
+Explicações dos Testes
+
+=== CodigoUsuario_testes.java ===
+
+Este arquivo de teste contém testes para a classe CalculadoraJuros. Os testes validam a correção das funções jurosSimples, jurosCompostos e montanteJurosCompostos.
+
+Os testes cobrem as seguintes funções/métodos do código:
+- jurosSimples
+- jurosCompostos
+- montanteJurosCompostos
+
+Os cenários principais/borda incluem:
+- Testes com valores positivos e negativos para capital, taxa e tempo
+- Teste com tempo zero
+
+O uso de mocks não é necessário, pois os testes utilizam apenas as funções da classe CalculadoraJuros.
+
+As exceções não são testadas, pois os testes não simulam erros ou exceções.
+
+Os testes são importantes para garantir que as funções da classe CalculadoraJuros estejam funcionando corretamente em diferentes cenários.
