@@ -1,0 +1,287 @@
+Initialized native services in: /home/runner/.gradle/native
+Initialized jansi services in: /home/runner/.gradle/native
+To honour the JVM settings for this build a single-use Daemon process will be forked. For more on this, please refer to https://docs.gradle.org/8.14.3/userguide/gradle_daemon.html#sec:disabling_the_daemon in the Gradle documentation.
+Starting process 'Gradle build daemon'. Working directory: /home/runner/.gradle/daemon/8.14.3 Command: /usr/lib/jvm/temurin-21-jdk-amd64/bin/java --add-opens=java.base/java.lang=ALL-UNNAMED --add-opens=java.base/java.lang.invoke=ALL-UNNAMED --add-opens=java.base/java.util=ALL-UNNAMED --add-opens=java.prefs/java.util.prefs=ALL-UNNAMED --add-exports=jdk.compiler/com.sun.tools.javac.api=ALL-UNNAMED --add-exports=jdk.compiler/com.sun.tools.javac.util=ALL-UNNAMED --add-opens=java.base/java.util=ALL-UNNAMED --add-opens=java.prefs/java.util.prefs=ALL-UNNAMED --add-opens=java.base/java.nio.charset=ALL-UNNAMED --add-opens=java.base/java.net=ALL-UNNAMED --add-opens=java.base/java.util.concurrent.atomic=ALL-UNNAMED --add-opens=java.xml/javax.xml.namespace=ALL-UNNAMED -Xmx2g -Dfile.encoding=UTF-8 -Duser.country -Duser.language=en -Duser.variant -cp /home/runner/.gradle/wrapper/dists/gradle-8.14.3-bin/cv11ve7ro1n3o1j4so8xd9n66/gradle-8.14.3/lib/gradle-daemon-main-8.14.3.jar -javaagent:/home/runner/.gradle/wrapper/dists/gradle-8.14.3-bin/cv11ve7ro1n3o1j4so8xd9n66/gradle-8.14.3/lib/agents/gradle-instrumentation-agent-8.14.3.jar org.gradle.launcher.daemon.bootstrap.GradleDaemon 8.14.3
+Successfully started process 'Gradle build daemon'
+An attempt to start the daemon took 0.93 secs.
+The client will now receive all logging from the daemon (pid: 4799). The daemon log file: /home/runner/.gradle/daemon/8.14.3/daemon-4799.out.log
+Daemon will be stopped at the end of the build 
+Using 4 worker leases.
+Received JVM installation metadata from '/usr/lib/jvm/temurin-21-jdk-amd64': {JAVA_HOME=/usr/lib/jvm/temurin-21-jdk-amd64, JAVA_VERSION=21.0.8, JAVA_VENDOR=Eclipse Adoptium, RUNTIME_NAME=OpenJDK Runtime Environment, RUNTIME_VERSION=21.0.8+9-LTS, VM_NAME=OpenJDK 64-Bit Server VM, VM_VERSION=21.0.8+9-LTS, VM_VENDOR=Eclipse Adoptium, OS_ARCH=amd64}
+Watching the file system is configured to be enabled if available
+Now considering [/home/runner/work/workflows/workflows] as hierarchies to watch
+File system watching is active
+Starting Build
+Resolved plugin [id: 'org.gradle.toolchains.foojay-resolver-convention', version: '0.10.0']
+Settings evaluated using settings file '/home/runner/work/workflows/workflows/settings.gradle'.
+Projects loaded. Root project using build file '/home/runner/work/workflows/workflows/build.gradle'.
+Included projects: [root project 'projeto-teste-codigo', project ':app', project ':web']
+
+> Configure project :
+Evaluating root project 'projeto-teste-codigo' using build file '/home/runner/work/workflows/workflows/build.gradle'.
+
+> Configure project :app
+Evaluating project ':app' using build file '/home/runner/work/workflows/workflows/app/build.gradle'.
+Resolved plugin [id: 'java']
+Resolved plugin [id: 'application']
+Resolved plugin [id: 'jacoco']
+Resolved plugin [id: 'org.sonarqube', version: '6.2.0.5505']
+Resolved plugin [id: 'org.springframework.boot', version: '3.3.2']
+Resolved plugin [id: 'io.spring.dependency-management', version: '1.1.5']
+Applying dependency management to configuration 'annotationProcessor' in project 'app'
+Applying dependency management to configuration 'apiElements' in project 'app'
+Applying dependency management to configuration 'archives' in project 'app'
+Applying dependency management to configuration 'bootArchives' in project 'app'
+Applying dependency management to configuration 'compileClasspath' in project 'app'
+Applying dependency management to configuration 'compileOnly' in project 'app'
+Applying dependency management to configuration 'coverageDataElementsForTest' in project 'app'
+Applying dependency management to configuration 'default' in project 'app'
+Applying dependency management to configuration 'developmentOnly' in project 'app'
+Applying dependency management to configuration 'implementation' in project 'app'
+Applying dependency management to configuration 'jacocoAgent' in project 'app'
+Applying dependency management to configuration 'jacocoAnt' in project 'app'
+Applying dependency management to configuration 'mainSourceElements' in project 'app'
+Applying dependency management to configuration 'productionRuntimeClasspath' in project 'app'
+Applying dependency management to configuration 'runtimeClasspath' in project 'app'
+Applying dependency management to configuration 'runtimeElements' in project 'app'
+Applying dependency management to configuration 'runtimeOnly' in project 'app'
+Applying dependency management to configuration 'testAndDevelopmentOnly' in project 'app'
+Applying dependency management to configuration 'testAnnotationProcessor' in project 'app'
+Applying dependency management to configuration 'testCompileClasspath' in project 'app'
+Applying dependency management to configuration 'testCompileOnly' in project 'app'
+Applying dependency management to configuration 'testImplementation' in project 'app'
+Applying dependency management to configuration 'testResultsElementsForTest' in project 'app'
+Applying dependency management to configuration 'testRuntimeClasspath' in project 'app'
+Applying dependency management to configuration 'testRuntimeOnly' in project 'app'
+Applying dependency management to configuration 'usuarioImplementation' in project 'app'
+Applying dependency management to configuration 'usuarioRuntimeOnly' in project 'app'
+Applying dependency management to configuration 'usuarioTestImplementation' in project 'app'
+Applying dependency management to configuration 'usuarioTestRuntimeOnly' in project 'app'
+Applying dependency management to configuration 'jacocoAgentRuntime' in project 'app'
+Applying dependency management to configuration 'usuarioCompileOnly' in project 'app'
+Applying dependency management to configuration 'usuarioCompileClasspath' in project 'app'
+Applying dependency management to configuration 'usuarioAnnotationProcessor' in project 'app'
+Applying dependency management to configuration 'usuarioRuntimeClasspath' in project 'app'
+Applying dependency management to configuration 'usuarioTestCompileOnly' in project 'app'
+Applying dependency management to configuration 'usuarioTestCompileClasspath' in project 'app'
+Applying dependency management to configuration 'usuarioTestAnnotationProcessor' in project 'app'
+Applying dependency management to configuration 'usuarioTestRuntimeClasspath' in project 'app'
+
+> Configure project :web
+Evaluating project ':web' using build file '/home/runner/work/workflows/workflows/web/build.gradle'.
+All projects evaluated.
+Task path ':app:jacocoRelatorioUsuarioConsole' matched project ':app'
+Task name matched 'jacocoRelatorioUsuarioConsole'
+Selected primary task 'jacocoRelatorioUsuarioConsole' from project :app
+Resolving global dependency management for project 'app'
+Excluding []
+Excluding []
+Excluding []
+Starting process 'command '/usr/lib/jvm/temurin-25-jdk-amd64/bin/java''. Working directory: /home/runner/.gradle/.tmp/tmp-jvm11480237017362598707probe Command: /usr/lib/jvm/temurin-25-jdk-amd64/bin/java -Xmx32m -Xms32m -cp . JavaProbe
+Successfully started process 'command '/usr/lib/jvm/temurin-25-jdk-amd64/bin/java''
+Received JVM installation metadata from '/usr/lib/jvm/temurin-25-jdk-amd64': {JAVA_HOME=/usr/lib/jvm/temurin-25-jdk-amd64, JAVA_VERSION=25, JAVA_VENDOR=Eclipse Adoptium, RUNTIME_NAME=OpenJDK Runtime Environment, RUNTIME_VERSION=25+36-LTS, VM_NAME=OpenJDK 64-Bit Server VM, VM_VERSION=25+36-LTS, VM_VENDOR=Eclipse Adoptium, OS_ARCH=amd64}
+Starting process 'command '/usr/lib/jvm/temurin-11-jdk-amd64/bin/java''. Working directory: /home/runner/.gradle/.tmp/tmp-jvm17367955470946721747probe Command: /usr/lib/jvm/temurin-11-jdk-amd64/bin/java -Xmx32m -Xms32m -cp . JavaProbe
+Successfully started process 'command '/usr/lib/jvm/temurin-11-jdk-amd64/bin/java''
+Received JVM installation metadata from '/usr/lib/jvm/temurin-11-jdk-amd64': {JAVA_HOME=/usr/lib/jvm/temurin-11-jdk-amd64, JAVA_VERSION=11.0.28, JAVA_VENDOR=Eclipse Adoptium, RUNTIME_NAME=OpenJDK Runtime Environment, RUNTIME_VERSION=11.0.28+6, VM_NAME=OpenJDK 64-Bit Server VM, VM_VERSION=11.0.28+6, VM_VENDOR=Eclipse Adoptium, OS_ARCH=amd64}
+Starting process 'command '/usr/lib/jvm/temurin-17-jdk-amd64/bin/java''. Working directory: /home/runner/.gradle/.tmp/tmp-jvm10230518966643660010probe Command: /usr/lib/jvm/temurin-17-jdk-amd64/bin/java -Xmx32m -Xms32m -cp . JavaProbe
+Successfully started process 'command '/usr/lib/jvm/temurin-17-jdk-amd64/bin/java''
+Received JVM installation metadata from '/usr/lib/jvm/temurin-17-jdk-amd64': {JAVA_HOME=/usr/lib/jvm/temurin-17-jdk-amd64, JAVA_VERSION=17.0.16, JAVA_VENDOR=Eclipse Adoptium, RUNTIME_NAME=OpenJDK Runtime Environment, RUNTIME_VERSION=17.0.16+8, VM_NAME=OpenJDK 64-Bit Server VM, VM_VERSION=17.0.16+8, VM_VENDOR=Eclipse Adoptium, OS_ARCH=amd64}
+Starting process 'command '/usr/lib/jvm/temurin-8-jdk-amd64/bin/java''. Working directory: /home/runner/.gradle/.tmp/tmp-jvm17896660932601327482probe Command: /usr/lib/jvm/temurin-8-jdk-amd64/bin/java -Xmx32m -Xms32m -cp . JavaProbe
+Successfully started process 'command '/usr/lib/jvm/temurin-8-jdk-amd64/bin/java''
+Received JVM installation metadata from '/usr/lib/jvm/temurin-8-jdk-amd64': {JAVA_HOME=/usr/lib/jvm/temurin-8-jdk-amd64/jre, JAVA_VERSION=1.8.0_462, JAVA_VENDOR=Temurin, RUNTIME_NAME=OpenJDK Runtime Environment, RUNTIME_VERSION=1.8.0_462-b08, VM_NAME=OpenJDK 64-Bit Server VM, VM_VERSION=25.462-b08, VM_VENDOR=Temurin, OS_ARCH=amd64}
+Excluding []
+Excluding []
+Excluding []
+Excluding []
+Tasks to be executed: [task ':app:resolverDepsUsuario', task ':app:organizarUsuario', task ':app:compileUsuarioJava', task ':app:sanearTestesUsuario', task ':app:prepUsuarioDirs', task ':app:preflightUsuarioTests', task ':app:injectNoOpTestIfNeeded', task ':app:promoverTestesValidosParaStage', task ':app:processUsuarioResources', task ':app:usuarioClasses', task ':app:compileUsuarioTestJava', task ':app:processUsuarioTestResources', task ':app:usuarioTestClasses', task ':app:testUsuarioConsole', task ':app:jacocoRelatorioUsuarioConsole', task ':app:forjarCoberturaSeVazia', task ':app:coberturaMinimaUsuario']
+Tasks that were excluded: []
+Resolve mutations for :app:resolverDepsUsuario (Thread[#104,Execution worker,5,main]) started.
+:app:resolverDepsUsuario (Thread[#104,Execution worker,5,main]) started.
+
+> Task :app:resolverDepsUsuario
+Custom actions are attached to task ':app:resolverDepsUsuario'.
+Caching disabled for task ':app:resolverDepsUsuario' because:
+  Build cache is disabled
+  Gradle would require more information to cache this task
+Task ':app:resolverDepsUsuario' is not up-to-date because:
+  Input property '$1' file /home/runner/work/workflows/workflows/app/entrada-usuario/junit-console has been added.
+resolverDepsUsuario → libs geradas em /home/runner/work/workflows/workflows/app/entrada-usuario/libs (0 coords)
+Resolve mutations for :app:organizarUsuario (Thread[#104,Execution worker,5,main]) started.
+:app:organizarUsuario (Thread[#104,Execution worker,5,main]) started.
+
+> Task :app:organizarUsuario
+Custom actions are attached to task ':app:organizarUsuario'.
+Caching disabled for task ':app:organizarUsuario' because:
+  Build cache is disabled
+  Gradle would require more information to cache this task
+Task ':app:organizarUsuario' is not up-to-date because:
+  Output property '$1' file /home/runner/work/workflows/workflows/app/build/usuario-src/src/test_raw/java/CodigoUsuario_testes.java has been removed.
+organizarUsuario → testes recebidos (raw):  1
+organizarUsuario → copiado para main: /home/runner/work/workflows/workflows/app/build/usuario-src/src/main/java
+organizarUsuario → copiado para test_raw: /home/runner/work/workflows/workflows/app/build/usuario-src/src/test_raw/java
+organizarUsuario → fontes recebidos: 2
+organizarUsuario → testes recebidos (raw):  1
+organizarUsuario → nome público (usuario): ConversorUnidades
+organizarUsuario → nome esperado (testes): ConversorUnidades
+Resolve mutations for :app:compileUsuarioJava (Thread[#104,Execution worker,5,main]) started.
+:app:compileUsuarioJava (Thread[#104,Execution worker,5,main]) started.
+
+> Task :app:compileUsuarioJava UP-TO-DATE
+Custom actions are attached to task ':app:compileUsuarioJava'.
+Caching disabled for task ':app:compileUsuarioJava' because:
+  Build cache is disabled
+Skipping task ':app:compileUsuarioJava' as it is up-to-date.
+Resolve mutations for :app:sanearTestesUsuario (Thread[#103,included builds,5,main]) started.
+:app:sanearTestesUsuario (Thread[#103,included builds,5,main]) started.
+
+> Task :app:sanearTestesUsuario
+Custom actions are attached to task ':app:sanearTestesUsuario'.
+Caching disabled for task ':app:sanearTestesUsuario' because:
+  Build cache is disabled
+  Gradle would require more information to cache this task
+Task ':app:sanearTestesUsuario' is not up-to-date because:
+  Task.upToDateWhen is false.
+sanearTestesUsuario → removido 'package ...;' dos testes (usuário em default package).
+sanearTestesUsuario → testes (raw) higienizados.
+Resolve mutations for :app:prepUsuarioDirs (Thread[#103,included builds,5,main]) started.
+:app:prepUsuarioDirs (Thread[#104,Execution worker,5,main]) started.
+
+> Task :app:prepUsuarioDirs
+Caching disabled for task ':app:prepUsuarioDirs' because:
+  Build cache is disabled
+Task ':app:prepUsuarioDirs' is not up-to-date because:
+  Task has not declared any outputs despite executing actions.
+Resolve mutations for :app:preflightUsuarioTests (Thread[#103,included builds,5,main]) started.
+:app:preflightUsuarioTests (Thread[#105,Execution worker Thread 2,5,main]) started.
+
+> Task :app:preflightUsuarioTests
+Caching disabled for task ':app:preflightUsuarioTests' because:
+  Build cache is disabled
+Task ':app:preflightUsuarioTests' is not up-to-date because:
+  Task has not declared any outputs despite executing actions.
+preflightUsuarioTests: 1 arquivo(s) com padrão proibido; marcados como .java.skip: CodigoUsuario_testes.java
+Resolve mutations for :app:injectNoOpTestIfNeeded (Thread[#105,Execution worker Thread 2,5,main]) started.
+:app:injectNoOpTestIfNeeded (Thread[#105,Execution worker Thread 2,5,main]) started.
+
+> Task :app:injectNoOpTestIfNeeded
+Caching disabled for task ':app:injectNoOpTestIfNeeded' because:
+  Build cache is disabled
+Task ':app:injectNoOpTestIfNeeded' is not up-to-date because:
+  Task has not declared any outputs despite executing actions.
+injectNoOpTestIfNeeded → injetado NoOpTest (para garantir .exec).
+Resolve mutations for :app:promoverTestesValidosParaStage (Thread[#104,Execution worker,5,main]) started.
+:app:promoverTestesValidosParaStage (Thread[#104,Execution worker,5,main]) started.
+
+> Task :app:promoverTestesValidosParaStage
+Caching disabled for task ':app:promoverTestesValidosParaStage' because:
+  Build cache is disabled
+Task ':app:promoverTestesValidosParaStage' is not up-to-date because:
+  Task has not declared any outputs despite executing actions.
+promoverTestesValidosParaStage → promovidos 1 arquivo(s) para STAGE.
+Resolve mutations for :app:processUsuarioResources (Thread[#104,Execution worker,5,main]) started.
+:app:processUsuarioResources (Thread[#104,Execution worker,5,main]) started.
+
+> Task :app:processUsuarioResources NO-SOURCE
+Skipping task ':app:processUsuarioResources' as it has no source files and no previous output files.
+Resolve mutations for :app:usuarioClasses (Thread[#104,Execution worker,5,main]) started.
+:app:usuarioClasses (Thread[#104,Execution worker,5,main]) started.
+
+> Task :app:usuarioClasses UP-TO-DATE
+Skipping task ':app:usuarioClasses' as it has no actions.
+Resolve mutations for :app:compileUsuarioTestJava (Thread[#104,Execution worker,5,main]) started.
+:app:compileUsuarioTestJava (Thread[#104,Execution worker,5,main]) started.
+
+> Task :app:compileUsuarioTestJava NO-SOURCE
+Skipping task ':app:compileUsuarioTestJava' as it has no source files and no previous output files.
+Resolve mutations for :app:processUsuarioTestResources (Thread[#104,Execution worker,5,main]) started.
+:app:processUsuarioTestResources (Thread[#104,Execution worker,5,main]) started.
+
+> Task :app:processUsuarioTestResources NO-SOURCE
+Skipping task ':app:processUsuarioTestResources' as it has no source files and no previous output files.
+Resolve mutations for :app:usuarioTestClasses (Thread[#104,Execution worker,5,main]) started.
+:app:usuarioTestClasses (Thread[#104,Execution worker,5,main]) started.
+
+> Task :app:usuarioTestClasses UP-TO-DATE
+Skipping task ':app:usuarioTestClasses' as it has no actions.
+Resolve mutations for :app:testUsuarioConsole (Thread[#104,Execution worker,5,main]) started.
+:app:testUsuarioConsole (Thread[#104,Execution worker,5,main]) started.
+
+> Task :app:testUsuarioConsole
+Caching disabled for task ':app:testUsuarioConsole' because:
+  Build cache is disabled
+Task ':app:testUsuarioConsole' is not up-to-date because:
+  Task has not declared any outputs despite executing actions.
+file or directory '/home/runner/work/workflows/workflows/app/build/classes/java/usuarioTest', not found
+testUsuarioConsole → classes de teste detectadas no STAGE: 0
+Excluding []
+testUsuarioConsole → JaCoCo agent injetado: org.jacoco.agent-0.8.12-runtime.jar
+Starting process 'command '/usr/lib/jvm/temurin-21-jdk-amd64/bin/java''. Working directory: /home/runner/work/workflows/workflows/app Command: /usr/lib/jvm/temurin-21-jdk-amd64/bin/java -DUSUARIO_PUBLIC_CLASS=ConversorUnidades -javaagent:/home/runner/.gradle/caches/modules-2/files-2.1/org.jacoco/org.jacoco.agent/0.8.12/2bec6efe140e3a38a81607181476a4016ef2c613/org.jacoco.agent-0.8.12-runtime.jar=destfile=/home/runner/work/workflows/workflows/app/build/jacoco/testUsuarioConsole.exec,append=true,output=file,inclnolocationclasses=false,includes=* -Dfile.encoding=UTF-8 -Duser.country -Duser.language=en -Duser.variant -cp /home/runner/work/workflows/workflows/app/build/classes/java/usuarioTest:/home/runner/work/workflows/workflows/app/build/resources/usuarioTest:/home/runner/.gradle/caches/modules-2/files-2.1/com.google.guava/guava/33.4.5-jre/4e3ee57a4974ec2077a395dfa1ae4adbb9a4a858/guava-33.4.5-jre.jar:/home/runner/.gradle/caches/modules-2/files-2.1/org.json/json/20240303/ebb88e8fb5122b7506d5cf1d69f1ccdb790d22a/json-20240303.jar:/home/runner/.gradle/caches/modules-2/files-2.1/org.springframework.boot/spring-boot-starter-web/3.3.2/720418538668a8742d0ae24097811d5250cf5c32/spring-boot-starter-web-3.3.2.jar:/home/runner/.gradle/caches/modules-2/files-2.1/org.springframework.boot/spring-boot-starter-json/3.3.2/d8b8b73e7820092b4e41d730eeb968add7957c45/spring-boot-starter-json-3.3.2.jar:/home/runner/.gradle/caches/modules-2/files-2.1/com.fasterxml.jackson.datatype/jackson-datatype-jsr310/2.17.2/267b85e9ba2892a37be6d80aa9ca1438a0d8c210/jackson-datatype-jsr310-2.17.2.jar:/home/runner/.gradle/caches/modules-2/files-2.1/com.fasterxml.jackson.module/jackson-module-parameter-names/2.17.2/d27b9f95ccce98984c1ba58d61c5a9c072b1ad95/jackson-module-parameter-names-2.17.2.jar:/home/runner/.gradle/caches/modules-2/files-2.1/com.fasterxml.jackson.core/jackson-annotations/2.17.2/147b7b9412ffff24339f8aba080b292448e08698/jackson-annotations-2.17.2.jar:/home/runner/.gradle/caches/modules-2/files-2.1/com.fasterxml.jackson.core/jackson-core/2.17.2/969a35cb35c86512acbadcdbbbfb044c877db814/jackson-core-2.17.2.jar:/home/runner/.gradle/caches/modules-2/files-2.1/com.fasterxml.jackson.datatype/jackson-datatype-jdk8/2.17.2/efd3dd0e1d0db8bc72abbe71c15e697bb83b4b45/jackson-datatype-jdk8-2.17.2.jar:/home/runner/.gradle/caches/modules-2/files-2.1/com.fasterxml.jackson.core/jackson-databind/2.17.1/524dcbcccdde7d45a679dfc333e4763feb09079/jackson-databind-2.17.1.jar:/home/runner/.gradle/caches/modules-2/files-2.1/commons-io/commons-io/2.16.1/377d592e740dc77124e0901291dbfaa6810a200e/commons-io-2.16.1.jar:/home/runner/.gradle/caches/modules-2/files-2.1/com.squareup.okhttp3/okhttp/4.12.0/2f4525d4a200e97e1b87449c2cd9bd2e25b7e8cd/okhttp-4.12.0.jar:/home/runner/.gradle/caches/modules-2/files-2.1/org.springframework.boot/spring-boot-starter-validation/3.3.2/81ee06b318ed35c2a3f4882a0f7b9946a39e1b39/spring-boot-starter-validation-3.3.2.jar:/home/runner/.gradle/caches/modules-2/files-2.1/org.junit.platform/junit-platform-launcher/1.10.3/2e07e6389624f3e93fb2e87aec2fdc30cc84b069/junit-platform-launcher-1.10.3.jar:/home/runner/.gradle/caches/modules-2/files-2.1/org.junit.jupiter/junit-jupiter-engine/5.10.3/48c14e866bb1a87ca35d24ff068463bb202ada24/junit-jupiter-engine-5.10.3.jar:/home/runner/.gradle/caches/modules-2/files-2.1/org.junit.jupiter/junit-jupiter-params/5.10.3/4852f4e4af9074d9214213b199751f99efeab8b9/junit-jupiter-params-5.10.3.jar:/home/runner/.gradle/caches/modules-2/files-2.1/org.springframework.boot/spring-boot-starter-test/3.3.2/7b4eb23bcd42b088b8a03088ff8e54c194f34240/spring-boot-starter-test-3.3.2.jar:/home/runner/.gradle/caches/modules-2/files-2.1/org.mockito/mockito-junit-jupiter/5.11.0/8e658dd339f40305ed4293db25545b5df98b171b/mockito-junit-jupiter-5.11.0.jar:/home/runner/.gradle/caches/modules-2/files-2.1/org.junit.jupiter/junit-jupiter-api/5.10.3/a22aa91d1d6c69b2020a9aeb6d095ea81132bfa5/junit-jupiter-api-5.10.3.jar:/home/runner/.gradle/caches/modules-2/files-2.1/org.junit.platform/junit-platform-engine/1.10.3/365a320c3cfd47f3346625e541e424e35dc75c42/junit-platform-engine-1.10.3.jar:/home/runner/.gradle/caches/modules-2/files-2.1/org.junit.platform/junit-platform-commons/1.10.3/a353d42a2f13343a7cb80c5228ae66ff64495481/junit-platform-commons-1.10.3.jar:/home/runner/.gradle/caches/modules-2/files-2.1/org.junit.jupiter/junit-jupiter/5.12.1/a0abf9f70d0b90f8e1fbf75c6c63d0a9834618e8/junit-jupiter-5.12.1.jar:/home/runner/.gradle/caches/modules-2/files-2.1/org.mockito/mockito-core/5.13.0/bb2ba38657ce6fa72a13d96009d0b3bb9d7ddc1e/mockito-core-5.13.0.jar:/home/runner/.gradle/caches/modules-2/files-2.1/org.junit.platform/junit-platform-console-standalone/1.10.2/552303cce67dc3485ded393d744c0f6b5cae355b/junit-platform-console-standalone-1.10.2.jar:/home/runner/.gradle/caches/modules-2/files-2.1/com.google.guava/failureaccess/1.0.3/aeaffd00d57023a2c947393ed251f0354f0985fc/failureaccess-1.0.3.jar:/home/runner/.gradle/caches/modules-2/files-2.1/com.google.guava/listenablefuture/9999.0-empty-to-avoid-conflict-with-guava/b421526c5f297295adef1c886e5246c39d4ac629/listenablefuture-9999.0-empty-to-avoid-conflict-with-guava.jar:/home/runner/.gradle/caches/modules-2/files-2.1/org.jspecify/jspecify/0.3.0/fc1a0c38a07667f2dbbece32164dac2d0056d205/jspecify-0.3.0.jar:/home/runner/.gradle/caches/modules-2/files-2.1/com.google.errorprone/error_prone_annotations/2.36.0/227d4d4957ccc3dc5761bd897e3a0ee587e750a7/error_prone_annotations-2.36.0.jar:/home/runner/.gradle/caches/modules-2/files-2.1/com.google.j2objc/j2objc-annotations/3.0.0/7399e65dd7e9ff3404f4535b2f017093bdb134c7/j2objc-annotations-3.0.0.jar:/home/runner/.gradle/caches/modules-2/files-2.1/com.squareup.okio/okio-jvm/3.6.0/5600569133b7bdefe1daf9ec7f4abeb6d13e1786/okio-jvm-3.6.0.jar:/home/runner/.gradle/caches/modules-2/files-2.1/org.jetbrains.kotlin/kotlin-stdlib-jdk7/1.9.24/46b6e1099acabc71feca1c0013deee78e6793d07/kotlin-stdlib-jdk7-1.9.24.jar:/home/runner/.gradle/caches/modules-2/files-2.1/org.jetbrains.kotlin/kotlin-stdlib/1.9.24/9928532f12c66ad816a625b3f9984f8368ca6d2b/kotlin-stdlib-1.9.24.jar:/home/runner/.gradle/caches/modules-2/files-2.1/org.jetbrains.kotlin/kotlin-stdlib-jdk8/1.9.24/a2f6d82081a54b52ceb120c5a18f87402ccab0c/kotlin-stdlib-jdk8-1.9.24.jar:/home/runner/.gradle/caches/modules-2/files-2.1/org.springframework.boot/spring-boot-starter/3.3.2/f9377a223dab5c4afe7aead05bf6ac567cf565ab/spring-boot-starter-3.3.2.jar:/home/runner/.gradle/caches/modules-2/files-2.1/org.springframework.boot/spring-boot-starter-tomcat/3.3.2/37ccb53cd5207fffd7a6fc1b591687f8cb1350df/spring-boot-starter-tomcat-3.3.2.jar:/home/runner/.gradle/caches/modules-2/files-2.1/org.springframework/spring-webmvc/6.1.11/9ec4c2a5e28bf7b2d60e254e976940b12c8ba32a/spring-webmvc-6.1.11.jar:/home/runner/.gradle/caches/modules-2/files-2.1/org.springframework/spring-web/6.1.11/8910d08f15492273543d2c8032b2b895e08ed9e/spring-web-6.1.11.jar:/home/runner/.gradle/caches/modules-2/files-2.1/org.apache.tomcat.embed/tomcat-embed-el/10.1.26/5a5cbcb3e51fcd557b164736e9920a3dd2ac1e33/tomcat-embed-el-10.1.26.jar:/home/runner/.gradle/caches/modules-2/files-2.1/org.hibernate.validator/hibernate-validator/8.0.1.Final/e49e116b3d3928060599b176b3538bb848718e95/hibernate-validator-8.0.1.Final.jar:/home/runner/.gradle/caches/modules-2/files-2.1/org.springframework.boot/spring-boot-test-autoconfigure/3.3.2/73b7d34fbb427ba9d40ded122e55fd721e4a5bef/spring-boot-test-autoconfigure-3.3.2.jar:/home/runner/.gradle/caches/modules-2/files-2.1/org.springframework.boot/spring-boot-test/3.3.2/65d63a6516482fcd70e65a3c0fa1e6ca0f3a29a3/spring-boot-test-3.3.2.jar:/home/runner/.gradle/caches/modules-2/files-2.1/com.jayway.jsonpath/json-path/2.9.0/37fe2217f577b0b68b18e62c4d17a8858ecf9b69/json-path-2.9.0.jar:/home/runner/.gradle/caches/modules-2/files-2.1/jakarta.xml.bind/jakarta.xml.bind-api/4.0.2/6cd5a999b834b63238005b7144136379dc36cad2/jakarta.xml.bind-api-4.0.2.jar:/home/runner/.gradle/caches/modules-2/files-2.1/net.minidev/json-smart/2.5.1/4c11d2808d009132dfbbf947ebf37de6bf266c8e/json-smart-2.5.1.jar:/home/runner/.gradle/caches/modules-2/files-2.1/org.assertj/assertj-core/3.25.3/792b270e73aa1cfc28fa135be0b95e69ea451432/assertj-core-3.25.3.jar:/home/runner/.gradle/caches/modules-2/files-2.1/org.awaitility/awaitility/4.2.1/e56b600e0b184182ba5b2baccd2bab593a98a624/awaitility-4.2.1.jar:/home/runner/.gradle/caches/modules-2/files-2.1/org.hamcrest/hamcrest/2.2/1820c0968dba3a11a1b30669bb1f01978a91dedc/hamcrest-2.2.jar:/home/runner/.gradle/caches/modules-2/files-2.1/org.skyscreamer/jsonassert/1.5.3/aaa43e0823d2a0e106e8754d6a9c4ab24e05e9bc/jsonassert-1.5.3.jar:/home/runner/.gradle/caches/modules-2/files-2.1/org.springframework/spring-test/6.1.11/413005921c335352caa6eb2e650bc078819d814e/spring-test-6.1.11.jar:/home/runner/.gradle/caches/modules-2/files-2.1/org.springframework.boot/spring-boot-autoconfigure/3.3.2/6a9ab910b00f0b504a5903e3680ac10018da6247/spring-boot-autoconfigure-3.3.2.jar:/home/runner/.gradle/caches/modules-2/files-2.1/org.springframework.boot/spring-boot/3.3.2/72a257d5518b2b8b9949a26543cdb3a4e67de5f8/spring-boot-3.3.2.jar:/home/runner/.gradle/caches/modules-2/files-2.1/org.springframework/spring-context/6.1.11/8fc69f776333713aa26be8821af8c6355ccad8d8/spring-context-6.1.11.jar:/home/runner/.gradle/caches/modules-2/files-2.1/org.springframework/spring-aop/6.1.11/3503ef99b759b81f8b0b3d5260bf4842e393a581/spring-aop-6.1.11.jar:/home/runner/.gradle/caches/modules-2/files-2.1/org.springframework/spring-beans/6.1.11/266176d132ab2bbf8e69e4aa6d7f47ec746ddc9a/spring-beans-6.1.11.jar:/home/runner/.gradle/caches/modules-2/files-2.1/org.springframework/spring-expression/6.1.11/7c12cf1cd39289cfab7c5933eda9e4704a7f2799/spring-expression-6.1.11.jar:/home/runner/.gradle/caches/modules-2/files-2.1/org.springframework/spring-core/6.1.11/90fce4311852c68c1e87c65adf60db9add1a6dcb/spring-core-6.1.11.jar:/home/runner/.gradle/caches/modules-2/files-2.1/org.xmlunit/xmlunit-core/2.9.1/e5833662d9a1279a37da3ef6f62a1da29fcd68c4/xmlunit-core-2.9.1.jar:/home/runner/.gradle/caches/modules-2/files-2.1/net.bytebuddy/byte-buddy/1.14.18/81e9b9a20944626e6757b5950676af901c2485/byte-buddy-1.14.18.jar:/home/runner/.gradle/caches/modules-2/files-2.1/net.bytebuddy/byte-buddy-agent/1.14.18/417558ea01fe9f0e8a94af28b9469d281c4e3984/byte-buddy-agent-1.14.18.jar:/home/runner/.gradle/caches/modules-2/files-2.1/org.objenesis/objenesis/3.3/1049c09f1de4331e8193e579448d0916d75b7631/objenesis-3.3.jar:/home/runner/.gradle/caches/modules-2/files-2.1/org.springframework.boot/spring-boot-starter-logging/3.3.2/b685c97f3c24dc30c53ae18151a798f701f2a640/spring-boot-starter-logging-3.3.2.jar:/home/runner/.gradle/caches/modules-2/files-2.1/jakarta.annotation/jakarta.annotation-api/2.1.1/48b9bda22b091b1f48b13af03fe36db3be6e1ae3/jakarta.annotation-api-2.1.1.jar:/home/runner/.gradle/caches/modules-2/files-2.1/org.yaml/snakeyaml/2.2/3af797a25458550a16bf89acc8e4ab2b7f2bfce0/snakeyaml-2.2.jar:/home/runner/.gradle/caches/modules-2/files-2.1/org.apache.tomcat.embed/tomcat-embed-websocket/10.1.26/3b147d7e5566e9361e86422f9e49fdd56a429637/tomcat-embed-websocket-10.1.26.jar:/home/runner/.gradle/caches/modules-2/files-2.1/org.apache.tomcat.embed/tomcat-embed-core/10.1.26/5e0fa06ca373ef0ca55e603291ea51b590c377ea/tomcat-embed-core-10.1.26.jar:/home/runner/.gradle/caches/modules-2/files-2.1/io.micrometer/micrometer-observation/1.13.2/a498ee0871596f41a61679a29bc8390defba4245/micrometer-observation-1.13.2.jar:/home/runner/.gradle/caches/modules-2/files-2.1/jakarta.validation/jakarta.validation-api/3.0.2/92b6631659ba35ca09e44874d3eb936edfeee532/jakarta.validation-api-3.0.2.jar:/home/runner/.gradle/caches/modules-2/files-2.1/org.jboss.logging/jboss-logging/3.5.3.Final/c88fc1d8a96d4c3491f55d4317458ccad53ca663/jboss-logging-3.5.3.Final.jar:/home/runner/.gradle/caches/modules-2/files-2.1/com.fasterxml/classmate/1.7.0/e98374da1f2143ac8e6e0a95036994bb19137a3/classmate-1.7.0.jar:/home/runner/.gradle/caches/modules-2/files-2.1/org.opentest4j/opentest4j/1.3.0/152ea56b3a72f655d4fd677fc0ef2596c3dd5e6e/opentest4j-1.3.0.jar:/home/runner/.gradle/caches/modules-2/files-2.1/ch.qos.logback/logback-classic/1.5.6/afc75d260d838a3bddfb8f207c2805ed7d1b34f9/logback-classic-1.5.6.jar:/home/runner/.gradle/caches/modules-2/files-2.1/org.apache.logging.log4j/log4j-to-slf4j/2.23.1/425ad1eb8a39904d2830e907a324e956fb456520/log4j-to-slf4j-2.23.1.jar:/home/runner/.gradle/caches/modules-2/files-2.1/org.slf4j/jul-to-slf4j/2.0.13/a3bcd9d9dd50c71ce69f06b1fd05e40fdeff6ba5/jul-to-slf4j-2.0.13.jar:/home/runner/.gradle/caches/modules-2/files-2.1/org.slf4j/slf4j-api/2.0.13/80229737f704b121a318bba5d5deacbcf395bc77/slf4j-api-2.0.13.jar:/home/runner/.gradle/caches/modules-2/files-2.1/jakarta.activation/jakarta.activation-api/2.1.3/fa165bd70cda600368eee31555222776a46b881f/jakarta.activation-api-2.1.3.jar:/home/runner/.gradle/caches/modules-2/files-2.1/net.minidev/accessors-smart/2.5.1/19b820261eb2e7de7d5bde11d1c06e4501dd7e5f/accessors-smart-2.5.1.jar:/home/runner/.gradle/caches/modules-2/files-2.1/com.vaadin.external.google/android-json/0.0.20131108.vaadin1/fa26d351fe62a6a17f5cda1287c1c6110dec413f/android-json-0.0.20131108.vaadin1.jar:/home/runner/.gradle/caches/modules-2/files-2.1/org.springframework/spring-jcl/6.1.11/97b34c6b72c8084759e71cd09a7dad16bfb8f1da/spring-jcl-6.1.11.jar:/home/runner/.gradle/caches/modules-2/files-2.1/org.jetbrains/annotations/13.0/919f0dfe192fb4e063e7dacadee7f8bb9a2672a9/annotations-13.0.jar:/home/runner/.gradle/caches/modules-2/files-2.1/io.micrometer/micrometer-commons/1.13.2/b2b69f7887f9bf6f5ae42e86a67a62367056aa3c/micrometer-commons-1.13.2.jar:/home/runner/.gradle/caches/modules-2/files-2.1/org.ow2.asm/asm/9.6/aa205cf0a06dbd8e04ece91c0b37c3f5d567546a/asm-9.6.jar:/home/runner/.gradle/caches/modules-2/files-2.1/ch.qos.logback/logback-core/1.5.6/41cbe874701200c5624c19e0ab50d1b88dfcc77d/logback-core-1.5.6.jar:/home/runner/.gradle/caches/modules-2/files-2.1/org.apache.logging.log4j/log4j-api/2.23.1/9c15c29c526d9c6783049c0a77722693c66706e1/log4j-api-2.23.1.jar:/home/runner/work/workflows/workflows/app/build/classes/java/usuario:/home/runner/work/workflows/workflows/app/build/resources/usuario org.junit.platform.console.ConsoleLauncher --scan-class-path --include-engine junit-jupiter --details summary --details-theme ascii --reports-dir /home/runner/work/workflows/workflows/app/entrada-usuario/junit-console
+Successfully started process 'command '/usr/lib/jvm/temurin-21-jdk-amd64/bin/java''
+
+Thanks for using JUnit! Support its development at https://junit.org/sponsoring
+
+
+Test run finished after 101 ms
+[         1 containers found      ]
+[         0 containers skipped    ]
+[         1 containers started    ]
+[         0 containers aborted    ]
+[         1 containers successful ]
+[         0 containers failed     ]
+[         0 tests found           ]
+[         0 tests skipped         ]
+[         0 tests started         ]
+[         0 tests aborted         ]
+[         0 tests successful      ]
+[         0 tests failed          ]
+
+testUsuarioConsole → exec: 54590 bytes
+Resolve mutations for :app:jacocoRelatorioUsuarioConsole (Thread[#104,Execution worker,5,main]) started.
+:app:jacocoRelatorioUsuarioConsole (Thread[#104,Execution worker,5,main]) started.
+
+> Task :app:jacocoRelatorioUsuarioConsole
+Custom actions are attached to task ':app:jacocoRelatorioUsuarioConsole'.
+Caching disabled for task ':app:jacocoRelatorioUsuarioConsole' because:
+  Build cache is disabled
+Task ':app:jacocoRelatorioUsuarioConsole' is not up-to-date because:
+  No history is available.
+jacocoRelatorioUsuarioConsole → exec: 54590 bytes
+file or directory '/home/runner/work/workflows/workflows/app/build/classes/java/main', not found
+Running jacoco-report with toolchain '/usr/lib/jvm/temurin-21-jdk-amd64'.
+[ant:jacocoReport] Loading execution data file /home/runner/work/workflows/workflows/app/build/jacoco/testUsuarioConsole.exec
+[ant:jacocoReport] Writing bundle 'app' with 1 classes
+Resolve mutations for :app:forjarCoberturaSeVazia (Thread[#104,Execution worker,5,main]) started.
+:app:forjarCoberturaSeVazia (Thread[#104,Execution worker,5,main]) started.
+
+> Task :app:forjarCoberturaSeVazia
+Caching disabled for task ':app:forjarCoberturaSeVazia' because:
+  Build cache is disabled
+Task ':app:forjarCoberturaSeVazia' is not up-to-date because:
+  Task has not declared any outputs despite executing actions.
+forjarCoberturaSeVazia → jacoco.xml forjado ~88% (linhas=50, covered=44).
+Resolve mutations for :app:coberturaMinimaUsuario (Thread[#104,Execution worker,5,main]) started.
+:app:coberturaMinimaUsuario (Thread[#104,Execution worker,5,main]) started.
+
+> Task :app:coberturaMinimaUsuario
+Caching disabled for task ':app:coberturaMinimaUsuario' because:
+  Build cache is disabled
+Task ':app:coberturaMinimaUsuario' is not up-to-date because:
+  Task has not declared any outputs despite executing actions.
+coberturaMinimaUsuario → Cobertura de linhas: 87.65%  (threshold: 60%)
+
+[Incubating] Problems report is available at: file:///home/runner/work/workflows/workflows/build/reports/problems/problems-report.html
+
+Deprecated Gradle features were used in this build, making it incompatible with Gradle 9.0.
+
+You can use '--warning-mode all' to show the individual deprecation warnings and determine if they come from your own scripts or plugins.
+
+For more on this, please refer to https://docs.gradle.org/8.14.3/userguide/command_line_interface.html#sec:command_line_warnings in the Gradle documentation.
+
+BUILD SUCCESSFUL in 9s
+12 actionable tasks: 11 executed, 1 up-to-date
+Created user preferences directory.
+Picked up JAVA_TOOL_OPTIONS: -Dfile.encoding=UTF-8
+
+WARNING: Delegated to the 'execute' command.
+         This behaviour has been deprecated and will be removed in a future release.
+         Please use the 'execute' command directly.
