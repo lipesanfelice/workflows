@@ -1,0 +1,28 @@
+Explicações dos Testes
+
+=== CodigoUsuario_testes ===
+
+Este arquivo de teste valida a funcionalidade da classe CalculadoraIMC, responsável por calcular o Índice de Massa Corporal (IMC) e classificar a obesidade de acordo com o IMC.
+
+Os métodos testados são:
+
+- calcularIMC: calcula o IMC com base no peso e altura fornecidos.
+- classificarIMC: classifica a obesidade com base no IMC fornecido.
+
+Cenários principais:
+
+- Testar o cálculo do IMC com valores de peso e altura válidos.
+- Testar a classificação da obesidade com IMC dentro dos limites de cada categoria.
+
+Cenários de borda:
+
+- Testar o cálculo do IMC com peso ou altura igual a zero.
+- Testar a classificação da obesidade com IMC negativo.
+
+Uso de mocks:
+
+- Nenhum mock é utilizado em nenhum dos testes.
+
+Exceções:
+
+- Testar a exceção ArithmeticException quando o peso ou altura for negativo ou zero.
