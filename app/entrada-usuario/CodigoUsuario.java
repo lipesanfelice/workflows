@@ -1,24 +1,25 @@
-public class CalculadoraJuros {
+public class ConversorUnidades {
     
-    public static double jurosSimples(double capital, double taxa, int tempo) {
-        return capital * taxa * tempo;
+    public static double metroParaCentimetro(double metro) {
+        return metro * 100;
     }
     
-    public static double jurosCompostos(double capital, double taxa, int tempo) {
-        return capital * Math.pow(1 + taxa, tempo);
+    public static double centimetroParaMetro(double centimetro) {
+        return centimetro / 100;
     }
     
-    public static double montanteJurosCompostos(double capital, double taxa, int tempo) {
-        return capital + jurosCompostos(capital, taxa, tempo);
+    public static double kilometroParaMetro(double kilometro) {
+        return kilometro * 1000;
+    }
+    
+    public static double litroParaMililitro(double litro) {
+        return litro * 1000;
     }
     
     public static void main(String[] args) {
-        double capital = 1000;
-        double taxa = 0.05; // 5% ao mês
-        int tempo = 12; // 12 meses
-        
-        System.out.println("Juros simples (R$1000, 5%, 12 meses): R$" + jurosSimples(capital, taxa, tempo));
-        System.out.println("Juros compostos (R$1000, 5%, 12 meses): R$" + jurosCompostos(capital, taxa, tempo));
-        System.out.println("Montante final: R$" + montanteJurosCompostos(capital, taxa, tempo));
+        System.out.println("2 metros em centímetros: " + metroParaCentimetro(2));
+        System.out.println("150 cm em metros: " + centimetroParaMetro(150));
+        System.out.println("3.5 km em metros: " + kilometroParaMetro(3.5));
+        System.out.println("2 litros em ml: " + litroParaMililitro(2));
     }
 }
