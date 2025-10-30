@@ -81,7 +81,7 @@ jobs:
         ./gradlew clean build
         ./gradlew -p app -Dsonar.token=$SONAR_TOKEN sonar
 
-    - name: Extrair relatório completo do Sonar (robusto, sem --argjson gigante)
+    - name: Extrair relatório do Sonar (foco 5 métricas + robusto)
       env:
         SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         SONAR_HOST: https://sonarcloud.io
@@ -98,60 +98,82 @@ jobs:
         OUT="${SONAR_OUTPUT:-$GITHUB_WORKSPACE/app/entrada-usuario/relatorio-sonar.json}"
 
         mkdir -p "$(dirname "$OUT")"
+        TMP="$(mktemp -d)"
 
-        # jq/curl geralmente já existem no runner. Se quiser forçar:
-        # sudo apt-get update -y && sudo apt-get install -y jq curl
+        # Somente as 5 métricas desejadas
+        DESIRED_KEYS="bugs,vulnerabilities,code_smells,complexity,duplicated_lines_density"
 
-        DESIRED_KEYS="bugs,vulnerabilities,code_smells,coverage,lines,ncloc,duplicated_lines_density,complexity,cognitive_complexity,security_hotspots,security_rating,reliability_rating,tests,test_success_density"
-
+        # Helper: GET com retry
         cf() {
           local url="$1"
           echo "GET $url" >&2
           curl -sfL --retry 3 --retry-delay 2 -u "${SONAR_TOKEN}:" "$url"
         }
 
-        # ===== 1) Métricas suportadas
-        METRICS_ALL="$(cf "$h/api/metrics/search?ps=500")"
-        VALID_KEYS="$(jq -r --arg wanted "$DESIRED_KEYS" '
-          (.metrics // []) | map(.key) as $avail
-          | ($wanted|split(",")) | map(select($avail | index(.) != null)) | join(",")
-        ' <<<"$METRICS_ALL")"
-        if [[ -z "${VALID_KEYS//,/}" ]]; then
-          echo "Nenhuma métrica desejada existe no servidor. Revise DESIRED_KEYS." >&2
-          exit 1
-        fi
+        # Helper: grava e valida JSON; se inválido, grava {}
+        get_json_to() {
+          local url="$1" dest="$2"
+          local body
+          if ! body="$(cf "$url")"; then
+            printf '{}' > "$dest"
+            return 0
+          fi
+          # valida
+          if jq -e . >/dev/null 2>&1 <<<"$body"; then
+            printf '%s' "$body" > "$dest"
+          else
+            printf '{}' > "$dest"
+          fi
+        }
 
-        # ===== 2) Medidas (projeto)
-        COMP="$(cf "$h/api/measures/component?component=$key&metricKeys=$(jq -rn --arg s "$VALID_KEYS" '$s|@uri')&branch=$(jq -rn --arg b "$branch" '$b|@uri')")"
+        # ===== 1) Catálogo de métricas (para pegar definições legíveis)
+        get_json_to "$h/api/metrics/search?ps=500" "$TMP/metrics_all.json"
 
-        # ===== 3) Medidas por árvore (arquivos e diretórios)
-        TREE="$(cf "$h/api/measures/component_tree?component=$key&metricKeys=$(jq -rn --arg s "$VALID_KEYS" '$s|@uri')&branch=$(jq -rn --arg b "$branch" '$b|@uri')&qualifiers=FIL,DIR&ps=500")"
+        # Filtra só as desejadas e monta dicionário key -> definição
+        jq --arg keys "$DESIRED_KEYS" '
+          (.metrics // [])
+          | map(select((.key) as $k | ($keys|split(",")|index($k)) != null))
+          | map({ ( .key ): { name, type, domain, direction, description } })
+          | add
+        ' "$TMP/metrics_all.json" > "$TMP/metrics_def.json"
 
-        # ===== 4) Issues (paginado em ARQUIVOS, sem --argjson)
-        TMP="$(mktemp -d)"
+        # ===== 2) Medidas no projeto (apenas as 5)
+        KEYS_URI="$(jq -rn --arg s "$DESIRED_KEYS" '$s|@uri')"
+        BR_URI="$(jq -rn --arg b "$branch" '$b|@uri')"
+
+        get_json_to \
+          "$h/api/measures/component?component=$key&metricKeys=$KEYS_URI&branch=$BR_URI" \
+          "$TMP/comp.json"
+
+        # ===== 3) Medidas por arquivos e diretórios (árvore)
+        get_json_to \
+          "$h/api/measures/component_tree?component=$key&metricKeys=$KEYS_URI&branch=$BR_URI&qualifiers=FIL,DIR&ps=500" \
+          "$TMP/tree.json"
+
+        # ===== 4) Issues (BUG, VULNERABILITY, CODE_SMELL) — paginação segura
         page=1
         ps=500
         files=()
         while : ; do
-          URL="$h/api/issues/search?componentKeys=$key&branch=$(jq -rn --arg b "$branch" '$b|@uri')&ps=$ps&p=$page&types=BUG,VULNERABILITY,CODE_SMELL"
-          JSON="$(cf "$URL")" || JSON='{"issues":[],"total":0,"p":'$page',"ps":'$ps'}'
+          URL="$h/api/issues/search?componentKeys=$key&branch=$BR_URI&ps=$ps&p=$page&types=BUG,VULNERABILITY,CODE_SMELL"
           f="$TMP/issues_p${page}.json"
-          printf '%s' "$JSON" > "$f"
+          get_json_to "$URL" "$f"
           files+=("$f")
 
-          # paginação: se total <= page*ps, acabou
           tot="$(jq -r '.paging.total // .total // 0' "$f" 2>/dev/null || echo 0)"
+          # Se não houver a chave paging/total, para na 1ª página
+          [[ "$tot" =~ ^[0-9]+$ ]] || break
           (( page*ps >= tot )) && break
           page=$((page+1))
         done
 
-        # Merge de issues via jq -s (lendo arquivos)
+        # Merge das páginas (lendo de arquivo; evita --argjson gigante)
         if ((${#files[@]})); then
           jq -s '
             def last: .[-1];
             def first: .[0];
             {
-              total: ( (first.paging.total // first.total // (map(.issues|length)|add)) ),
+              total: ( first.paging.total // first.total // (map(.issues|length)|add) // 0 ),
               ps:    ( last.ps // last.paging.pageSize // 500 ),
               issues: ( map(.issues // []) | add )
             }
@@ -160,77 +182,48 @@ jobs:
           echo '{"total":0,"ps":500,"issues":[]}' > "$TMP/issues_merged.json"
         fi
 
-        # ===== 5) Security Hotspots — novo endpoint e fallback
-        HOTSPOTS='{}'
-        set +e
-        HOTSPOTS_NEW="$(cf "$h/api/security_hotspots/search?projectKey=$key&branch=$(jq -rn --arg b "$branch" '$b|@uri')&ps=500")"
-        rc=$?
-        set -e
-        if [[ $rc -ne 0 || -z "$HOTSPOTS_NEW" ]]; then
-          set +e
-          HOTSPOTS_OLD="$(cf "$h/api/hotspots/search?projectKey=$key&branch=$(jq -rn --arg b "$branch" '$b|@uri')&ps=500")"
-          set -e
-          if [[ -n "$HOTSPOTS_OLD" ]]; then
-            HOTSPOTS="$HOTSPOTS_OLD"
-          else
-            HOTSPOTS='{"warning":"no_hotspots_endpoint"}'
-          fi
-        else
-          HOTSPOTS="$HOTSPOTS_NEW"
-        fi
+        # ===== 5) (Opcional) Quality Gate — útil para contexto do projeto
+        get_json_to \
+          "$h/api/qualitygates/project_status?projectKey=$key&branch=$BR_URI" \
+          "$TMP/qg.json"
 
-        # ===== 6) Quality Gate
-        QG="$(cf "$h/api/qualitygates/project_status?projectKey=$key&branch=$(jq -rn --arg b "$branch" '$b|@uri')")"
-
-        # ===== 7) Histórico de métricas
-        HIST_KEYS="coverage,bugs,code_smells,vulnerabilities"
-        HIST="$(cf "$h/api/measures/search_history?component=$key&metrics=$(jq -rn --arg s "$HIST_KEYS" '$s|@uri')&branch=$(jq -rn --arg b "$branch" '$b|@uri')&ps=500")"
-
-        # ===== 8) Persistir blobs em arquivos (evita argumentos gigantes)
-        echo "$METRICS_ALL"  > "$TMP/metrics_all.json"
-        echo "$COMP"        > "$TMP/comp.json"
-        echo "$TREE"        > "$TMP/tree.json"
-        echo "$HOTSPOTS"    > "$TMP/hotspots.json"
-        echo "$QG"          > "$TMP/qg.json"
-        echo "${HIST:-{}}"  > "$TMP/hist.json"
-
-        # Definições “bonitas” das métricas usadas
-        jq --arg keys "$VALID_KEYS" '
-          (.metrics // [])
-          | map(select((.key) as $k | ($keys|split(",")|index($k)) != null))
-          | map({ ( .key ): { name, type, domain, direction, description } })
-          | add
-        ' "$TMP/metrics_all.json" > "$TMP/metrics_def.json"
-
-        # ===== 9) Montagem final
+        # ===== 6) Montagem final do relatório
         jq -n \
           --arg projectKey "$key" \
           --arg branch "$branch" \
           --arg host "$h" \
-          --arg valid_keys "$VALID_KEYS" \
-          --slurpfile metrics_def    "$TMP/metrics_def.json" \
-          --slurpfile measures_proj  "$TMP/comp.json" \
-          --slurpfile measures_tree  "$TMP/tree.json" \
-          --slurpfile issues         "$TMP/issues_merged.json" \
-          --slurpfile hotspots       "$TMP/hotspots.json" \
-          --slurpfile quality_gate   "$TMP/qg.json" \
-          --slurpfile history        "$TMP/hist.json" '
+          --arg metric_keys "$DESIRED_KEYS" \
+          --slurpfile metrics_def   "$TMP/metrics_def.json" \
+          --slurpfile measures_proj "$TMP/comp.json" \
+          --slurpfile measures_tree "$TMP/tree.json" \
+          --slurpfile issues        "$TMP/issues_merged.json" \
+          --slurpfile quality_gate  "$TMP/qg.json" '
           {
             project: { key: $projectKey, branch: $branch, host: $host },
-            metric_keys_used: ($valid_keys|split(",")),
+
+            # Métricas solicitadas
+            metric_keys_used: ($metric_keys|split(",")),
+
+            # "O que permeia": definições detalhadas das métricas usadas
             metrics_definitions: ($metrics_def[0] // {}),
+
+            # Medidas (projeto + árvore FIL/DIR) somente dessas métricas
             measures: {
               project: ($measures_proj[0].component.measures // []),
               tree:    ($measures_tree[0] // {})
             },
+
+            # Issues relevantes a essas métricas (tipos BUG/VULN/CODE_SMELL)
             issues: ($issues[0] // {}),
-            security_hotspots: ($hotspots[0] // {}),
-            quality_gate: ($quality_gate[0] // {}),
-            trends: ($history[0] // {})
-          }' > "$OUT"
+
+            # Contexto de qualidade (opcional)
+            quality_gate: ($quality_gate[0] // {})
+          }
+        ' > "$OUT"
 
         echo "Relatório salvo em: $OUT"
         echo "Bytes: $(wc -c < "$OUT")"
+
 
 
 
