@@ -59,6 +59,21 @@ jobs:
     - name: Conceder permissão para o wrapper
       run: chmod +x gradlew
 
+    # - name: SonarQube
+    #   env:
+    #     SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+    #   run: |
+    #     ./gradlew clean build
+    #     ./gradlew -p app -Dsonar.token=$SONAR_TOKEN sonar
+
+    # - name: Extrair métricas Sonar → relatorio-sonar.json
+    #   working-directory: app
+    #   env:
+    #     SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+    #     SONAR_PROJECT_KEY: lipesanfelice_workflows
+    #     SONAR_OUTPUT_DIR: ${{ github.workspace }}/app/entrada-usuario
+    #   run: ../gradlew bootRun --args='--acao=extrair-sonar --spring.main.web-application-type=none'
+
     - name: SonarQube
       env:
         SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
@@ -66,13 +81,74 @@ jobs:
         ./gradlew clean build
         ./gradlew -p app -Dsonar.token=$SONAR_TOKEN sonar
 
-    - name: Extrair métricas Sonar → relatorio-sonar.json
-      working-directory: app
+    # Substitui o seu "Extrair métricas Sonar → relatorio-sonar.json"
+    - name: Extrair relatório completo do Sonar (metrics + measures + issues + hotspots + QG)
       env:
         SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        SONAR_HOST: https://sonarcloud.io               # troque se usar servidor próprio
+        SONAR_ORG:  lipesanfelice                        # se for SonarCloud
         SONAR_PROJECT_KEY: lipesanfelice_workflows
-        SONAR_OUTPUT_DIR: ${{ github.workspace }}/app/entrada-usuario
-      run: ../gradlew bootRun --args='--acao=extrair-sonar --spring.main.web-application-type=none'
+        BRANCH: ${{ github.head_ref || github.ref_name }}
+        OUT: ${{ github.workspace }}/app/entrada-usuario/relatorio-sonar.json
+      shell: bash
+      run: |
+        set -euo pipefail
+        sudo apt-get update -y && sudo apt-get install -y jq
+
+        h="$SONAR_HOST"
+        key="$SONAR_PROJECT_KEY"
+        branch="${BRANCH:-main}"
+        auth_header="Authorization: Bearer $SONAR_TOKEN"
+        KEYS="bugs,vulnerabilities,code_smells,coverage,lines,ncloc,duplicated_lines_density,complexity,cognitive_complexity,security_hotspots,security_rating,reliability_rating,maintainability_rating,tests,test_success_density"
+
+        curlj(){ curl -sfSL --retry 3 --retry-delay 2 -H "$auth_header" "$@"; }
+
+        METRICS=$(curlj "$h/api/metrics/search?ps=500")
+        COMP=$(curlj "$h/api/measures/component?component=$key&metricKeys=$KEYS&branch=$branch")
+        TREE=$(curlj "$h/api/measures/component_tree?component=$key&metricKeys=$KEYS&branch=$branch&qualifiers=FIL,DIR&ps=500")
+
+        PAGE=1; ALL_ISSUES='{"total":0,"issues":[]}'
+        while :; do
+          RES=$(curlj "$h/api/issues/search?componentKeys=$key&branch=$branch&ps=500&p=$PAGE&types=BUG,VULNERABILITY,CODE_SMELL&additionalFields=_all")
+          COUNT=$(echo "$RES" | jq -r '.issues | length')
+          if [ "${COUNT:-0}" -eq 0 ]; then break; fi
+          ALL_ISSUES=$(jq -n --argjson A "$ALL_ISSUES" --argjson B "$RES" '
+            { total: ($A.total + ($B.total//0)), issues: ($A.issues + ($B.issues//[])) }')
+          PAGE=$((PAGE+1))
+        done
+
+        HOTSPOTS=$(curlj "$h/api/hotspots/search?projectKey=$key&branch=$branch&ps=500")
+        QG=$(curlj "$h/api/qualitygates/project_status?projectKey=$key&branch=$branch")
+        HIST=$(curlj "$h/api/measures/search_history?component=$key&metrics=coverage,bugs,code_smells&branch=$branch&ps=500")
+
+        METRICS_MAP=$(echo "$METRICS" | jq '(.metrics // []) | map({key, name, type, domain, direction, description}) | map({( .key ): del(.key)}) | add')
+
+        jq -n \
+          --arg projectKey "$key" \
+          --arg branch "$branch" \
+          --arg host "$h" \
+          --argjson metrics_def "$METRICS_MAP" \
+          --argjson measures_project "$COMP" \
+          --argjson measures_tree "$TREE" \
+          --argjson issues "$ALL_ISSUES" \
+          --argjson hotspots "$HOTSPOTS" \
+          --argjson quality_gate "$QG" \
+          --argjson history "$HIST" '
+          {
+            project: { key: $projectKey, branch: $branch, host: $host },
+            metrics_definitions: $metrics_def,
+            measures: {
+              project: $measures_project.component.measures,
+              tree:    $measures_tree
+            },
+            issues: $issues,
+            security_hotspots: $hotspots,
+            quality_gate: $quality_gate,
+            trends: $history
+          }' >"$OUT"
+
+        echo "Gerado $OUT (bytes: $(wc -c < "$OUT"))"
+
 
     - name: Conferir e imprimir conteúdo
       env:

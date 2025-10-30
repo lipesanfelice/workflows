@@ -1,30 +1,23 @@
-public class ValidadorCPF {
+public class CalculadoraIMC {
     
-    public static boolean validarCPF(String cpf) {
-        cpf = cpf.replaceAll("[^0-9]", "");
-        
-        if (cpf.length() != 11 || cpf.matches("(\\d)\\1{10}")) {
-            return false;
-        }
-        
-        int[] digitos = cpf.chars().map(Character::getNumericValue).toArray();
-        
-        int digito1 = calcularDigito(digitos, 9);
-        int digito2 = calcularDigito(digitos, 10);
-        
-        return digitos[9] == digito1 && digitos[10] == digito2;
+    public static double calcularIMC(double peso, double altura) {
+        return peso / (altura * altura);
     }
     
-    private static int calcularDigito(int[] digitos, int posicao) {
-        int soma = 0;
-        for (int i = 0; i < posicao; i++) {
-            soma += digitos[i] * (posicao + 1 - i);
-        }
-        int resto = soma % 11;
-        return resto < 2 ? 0 : 11 - resto;
+    public static String classificarIMC(double imc) {
+        if (imc < 18.5) return "Abaixo do peso";
+        else if (imc < 25) return "Peso normal";
+        else if (imc < 30) return "Sobrepeso";
+        else if (imc < 35) return "Obesidade grau I";
+        else if (imc < 40) return "Obesidade grau II";
+        else return "Obesidade grau III";
     }
     
     public static void main(String[] args) {
-        System.out.println("CPF válido: " + validarCPF("123.456.789-09"));
+        double imc1 = calcularIMC(70, 1.75);
+        double imc2 = calcularIMC(90, 1.70);
+        
+        System.out.println("IMC 70kg/1.75m: " + imc1 + " - " + classificarIMC(imc1));
+        System.out.println("IMC 90kg/1.70m: " + imc2 + " - " + classificarIMC(imc2));
     }
 }
