@@ -1,0 +1,29 @@
+Explicações dos Testes
+
+=== CodigoUsuario_testes ===
+
+Este arquivo de teste contém 10 testes para a classe CalculadoraGeometrica. Os testes validam a correta implementação dos métodos areaCirculo, areaRetangulo e areaTriangulo.
+
+Os métodos testados são:
+- areaCirculo: calcula a área de um círculo com raio dado.
+- areaRetangulo: calcula a área de um retângulo com base e altura dadas.
+- areaTriangulo: calcula a área de um triângulo com base e altura dadas.
+
+Os cenários principais testados são:
+- Área de círculo com raio positivo.
+- Área de círculo com raio negativo (deve lançar ArithmeticException).
+- Área de círculo com raio zero.
+- Área de retângulo com base e altura positivas.
+- Área de retângulo com base negativa (deve lançar ArithmeticException).
+- Área de retângulo com base zero e altura positiva.
+- Área de triângulo com base e altura positivas.
+- Área de triângulo com base negativa (deve lançar ArithmeticException).
+- Área de triângulo com base zero e altura positiva.
+
+O uso de mocks não é necessário nesse arquivo de teste, pois os métodos testados não dependem de objetos externos.
+
+As exceções testadas são:
+- ArithmeticException lançada quando o raio do círculo é negativo.
+- ArithmeticException lançada quando a base do retângulo ou triângulo é negativa.
+
+O método main da classe CalculadoraGeometrica também é testado, mas sem argumentos.
