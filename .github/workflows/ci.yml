@@ -81,19 +81,17 @@ jobs:
         ./gradlew clean build
         ./gradlew -p app -Dsonar.token=$SONAR_TOKEN sonar
 
-    # Substitui o seu "Extrair métricas Sonar → relatorio-sonar.json"
     - name: Extrair relatório completo do Sonar (metrics + measures + issues + hotspots + QG)
       env:
         SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-        SONAR_HOST: https://sonarcloud.io               # troque se usar servidor próprio
-        SONAR_ORG:  lipesanfelice                        # se for SonarCloud
-        SONAR_PROJECT_KEY: lipesanfelice_workflows
+        SONAR_HOST: https://sonarcloud.io                 # troque se for servidor próprio
+        SONAR_PROJECT_KEY: lipesanfelice_workflows        # CONFIRA esse key no Sonar!
         BRANCH: ${{ github.head_ref || github.ref_name }}
         OUT: ${{ github.workspace }}/app/entrada-usuario/relatorio-sonar.json
       shell: bash
       run: |
         set -euo pipefail
-        sudo apt-get update -y && sudo apt-get install -y jq
+        sudo apt-get update -y >/dev/null && sudo apt-get install -y jq >/dev/null
 
         h="$SONAR_HOST"
         key="$SONAR_PROJECT_KEY"
@@ -101,26 +99,73 @@ jobs:
         auth_header="Authorization: Bearer $SONAR_TOKEN"
         KEYS="bugs,vulnerabilities,code_smells,coverage,lines,ncloc,duplicated_lines_density,complexity,cognitive_complexity,security_hotspots,security_rating,reliability_rating,maintainability_rating,tests,test_success_density"
 
-        curlj(){ curl -sfSL --retry 3 --retry-delay 2 -H "$auth_header" "$@"; }
+        call() {
+          local path="$1"
+          local url="$h$path"
+          echo "GET $url" >&2
+          # retorna JSON e código HTTP separados
+          resp=$(curl -sS -w "\n%{http_code}" -H "$auth_header" "$url")
+          code=$(echo "$resp" | tail -n1)
+          body=$(echo "$resp" | sed '$d')
+          echo "$code"
+          printf '%s' "$body" > /tmp/resp.json
+        }
 
-        METRICS=$(curlj "$h/api/metrics/search?ps=500")
-        COMP=$(curlj "$h/api/measures/component?component=$key&metricKeys=$KEYS&branch=$branch")
-        TREE=$(curlj "$h/api/measures/component_tree?component=$key&metricKeys=$KEYS&branch=$branch&qualifiers=FIL,DIR&ps=500")
+        must() {
+          local path="$1"
+          code=$(call "$path")
+          if [ "$code" != "200" ]; then
+            echo "::warning::Falha $code em $path — corpo: $(tr -d '\n' </tmp/resp.json | cut -c1-400)" >&2
+            return 1
+          fi
+          cat /tmp/resp.json
+        }
 
-        PAGE=1; ALL_ISSUES='{"total":0,"issues":[]}'
+        try_or_empty() {
+          local path="$1"
+          if body=$(must "$path"); then
+            echo "$body"
+          else
+            echo "{}"
+          fi
+        }
+
+        # 1) definições de métricas
+        METRICS=$(try_or_empty "/api/metrics/search?ps=500")
+
+        # 2) medidas do projeto + árvore (arquivos/diretórios)
+        COMP=$(try_or_empty "/api/measures/component?component=$(jq -rn --arg v "$key" '$v|@uri')&metricKeys=$(jq -rn --arg v "$KEYS" '$v|@uri')&branch=$(jq -rn --arg v "$branch" '$v|@uri')")
+        TREE=$(try_or_empty "/api/measures/component_tree?component=$(jq -rn --arg v "$key" '$v|@uri')&metricKeys=$(jq -rn --arg v "$KEYS" '$v|@uri')&branch=$(jq -rn --arg v "$branch" '$v|@uri')&qualifiers=FIL,DIR&ps=500")
+
+        # 3) issues (pagina em loop)
+        ALL_ISSUES='{"total":0,"issues":[]}'
+        page=1
         while :; do
-          RES=$(curlj "$h/api/issues/search?componentKeys=$key&branch=$branch&ps=500&p=$PAGE&types=BUG,VULNERABILITY,CODE_SMELL&additionalFields=_all")
-          COUNT=$(echo "$RES" | jq -r '.issues | length')
-          if [ "${COUNT:-0}" -eq 0 ]; then break; fi
-          ALL_ISSUES=$(jq -n --argjson A "$ALL_ISSUES" --argjson B "$RES" '
-            { total: ($A.total + ($B.total//0)), issues: ($A.issues + ($B.issues//[])) }')
-          PAGE=$((PAGE+1))
+          code=$(call "/api/issues/search?componentKeys=$(jq -rn --arg v "$key" '$v|@uri')&branch=$(jq -rn --arg v "$branch" '$v|@uri')&ps=500&p=$page&types=BUG,VULNERABILITY,CODE_SMELL&additionalFields=_all")
+          if [ "$code" != "200" ]; then
+            echo "::warning::Issues página $page falhou ($code); interrompendo paginação." >&2
+            break
+          fi
+          COUNT=$(jq -r '.issues | length' </tmp/resp.json 2>/dev/null || echo 0)
+          [ "${COUNT:-0}" -eq 0 ] && break
+          ALL_ISSUES=$(jq -n --argjson A "$ALL_ISSUES" --argjson B "$(cat /tmp/resp.json)" \
+            '{ total: ($A.total + ($B.total//0)), issues: ($A.issues + ($B.issues//[])) }')
+          page=$((page+1))
         done
 
-        HOTSPOTS=$(curlj "$h/api/hotspots/search?projectKey=$key&branch=$branch&ps=500")
-        QG=$(curlj "$h/api/qualitygates/project_status?projectKey=$key&branch=$branch")
-        HIST=$(curlj "$h/api/measures/search_history?component=$key&metrics=coverage,bugs,code_smells&branch=$branch&ps=500")
+        # 4) security hotspots — tenta endpoint novo e antigo
+        HOTSPOTS=$(try_or_empty "/api/security_hotspots/search?projectKey=$(jq -rn --arg v "$key" '$v|@uri')&branch=$(jq -rn --arg v "$branch" '$v|@uri')&ps=500")
+        if [ "$(echo "$HOTSPOTS" | jq -r 'keys[0] // empty')" = "" ]; then
+          HOTSPOTS=$(try_or_empty "/api/hotspots/search?projectKey=$(jq -rn --arg v "$key" '$v|@uri')&branch=$(jq -rn --arg v "$branch" '$v|@uri')&ps=500")
+        fi
 
+        # 5) quality gate
+        QG=$(try_or_empty "/api/qualitygates/project_status?projectKey=$(jq -rn --arg v "$key" '$v|@uri')&branch=$(jq -rn --arg v "$branch" '$v|@uri')")
+
+        # 6) histórico de métricas
+        HIST=$(try_or_empty "/api/measures/search_history?component=$(jq -rn --arg v "$key" '$v|@uri')&metrics=coverage,bugs,code_smells&branch=$(jq -rn --arg v "$branch" '$v|@uri')&ps=500")
+
+        # mapeia definições de métricas p/ consulta amigável
         METRICS_MAP=$(echo "$METRICS" | jq '(.metrics // []) | map({key, name, type, domain, direction, description}) | map({( .key ): del(.key)}) | add')
 
         jq -n \
@@ -136,9 +181,9 @@ jobs:
           --argjson history "$HIST" '
           {
             project: { key: $projectKey, branch: $branch, host: $host },
-            metrics_definitions: $metrics_def,
+            metrics_definitions: ($metrics_def // {}),
             measures: {
-              project: $measures_project.component.measures,
+              project: ($measures_project.component.measures // []),
               tree:    $measures_tree
             },
             issues: $issues,
@@ -147,7 +192,8 @@ jobs:
             trends: $history
           }' >"$OUT"
 
-        echo "Gerado $OUT (bytes: $(wc -c < "$OUT"))"
+        echo "Relatório salvo em: $OUT (bytes: $(wc -c < "$OUT"))"
+
 
 
     - name: Conferir e imprimir conteúdo
