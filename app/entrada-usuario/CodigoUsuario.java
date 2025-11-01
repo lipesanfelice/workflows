@@ -1,20 +1,24 @@
-public class CalculadoraGeometrica {
+public class CalculadoraJuros {
     
-    public static double areaCirculo(double raio) {
-        return Math.PI * raio * raio;
+    public static double jurosSimples(double capital, double taxa, int tempo) {
+        return capital * taxa * tempo;
     }
     
-    public static double areaRetangulo(double base, double altura) {
-        return base * altura;
+    public static double jurosCompostos(double capital, double taxa, int tempo) {
+        return capital * Math.pow(1 + taxa, tempo);
     }
     
-    public static double areaTriangulo(double base, double altura) {
-        return (base * altura) / 2;
+    public static double montanteJurosCompostos(double capital, double taxa, int tempo) {
+        return capital + jurosCompostos(capital, taxa, tempo);
     }
     
     public static void main(String[] args) {
-        System.out.println("Área do círculo (raio 5): " + areaCirculo(5));
-        System.out.println("Área do retângulo (4x6): " + areaRetangulo(4, 6));
-        System.out.println("Área do triângulo (3x4): " + areaTriangulo(3, 4));
+        double capital = 1000;
+        double taxa = 0.05; // 5% ao mês
+        int tempo = 12; // 12 meses
+        
+        System.out.println("Juros simples (R$1000, 5%, 12 meses): R$" + jurosSimples(capital, taxa, tempo));
+        System.out.println("Juros compostos (R$1000, 5%, 12 meses): R$" + jurosCompostos(capital, taxa, tempo));
+        System.out.println("Montante final: R$" + montanteJurosCompostos(capital, taxa, tempo));
     }
 }
