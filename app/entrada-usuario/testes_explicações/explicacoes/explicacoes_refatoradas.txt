@@ -1,0 +1,15 @@
+Explicações dos Testes
+
+=== CodigoUsuario_testes.java ===
+
+Este arquivo de teste contém três métodos de teste para a classe CalculadoraJuros. O objetivo é validar a correção das funções de cálculo de juros simples e compostos, além do montante de juros compostos.
+
+O método testJurosSimples() valida a função jurosSimples() da classe CalculadoraJuros, que calcula o juro simples com base no principal, taxa de juros e período. Ele testa diferentes cenários, incluindo valores de entrada zero e valores positivos.
+
+O método testJurosCompostos() valida a função jurosCompostos() da classe CalculadoraJuros, que calcula o juro composto com base no principal, taxa de juros e período. Ele testa diferentes cenários, incluindo valores de entrada zero e valores positivos.
+
+O método testMontanteJurosCompostos() valida a função montanteJurosCompostos() da classe CalculadoraJuros, que calcula o montante de juros compostos com base no principal, taxa de juros e período. Ele testa diferentes cenários, incluindo valores de entrada zero e valores positivos.
+
+Os métodos de teste utilizam a anotação @Test do JUnit para marcar os métodos que devem ser executados como testes. Eles também utilizam a classe Assertions para validar os resultados dos cálculos.
+
+Não há uso de mocks ou exceções nesse arquivo de teste.

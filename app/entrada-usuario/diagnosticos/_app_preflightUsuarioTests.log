@@ -1,0 +1,143 @@
+Initialized native services in: /home/runner/.gradle/native
+Initialized jansi services in: /home/runner/.gradle/native
+To honour the JVM settings for this build a single-use Daemon process will be forked. For more on this, please refer to https://docs.gradle.org/8.14.3/userguide/gradle_daemon.html#sec:disabling_the_daemon in the Gradle documentation.
+Starting process 'Gradle build daemon'. Working directory: /home/runner/.gradle/daemon/8.14.3 Command: /usr/lib/jvm/temurin-21-jdk-amd64/bin/java --add-opens=java.base/java.lang=ALL-UNNAMED --add-opens=java.base/java.lang.invoke=ALL-UNNAMED --add-opens=java.base/java.util=ALL-UNNAMED --add-opens=java.prefs/java.util.prefs=ALL-UNNAMED --add-exports=jdk.compiler/com.sun.tools.javac.api=ALL-UNNAMED --add-exports=jdk.compiler/com.sun.tools.javac.util=ALL-UNNAMED --add-opens=java.base/java.util=ALL-UNNAMED --add-opens=java.prefs/java.util.prefs=ALL-UNNAMED --add-opens=java.base/java.nio.charset=ALL-UNNAMED --add-opens=java.base/java.net=ALL-UNNAMED --add-opens=java.base/java.util.concurrent.atomic=ALL-UNNAMED --add-opens=java.xml/javax.xml.namespace=ALL-UNNAMED -Xmx2g -Dfile.encoding=UTF-8 -Duser.country -Duser.language=en -Duser.variant -cp /home/runner/.gradle/wrapper/dists/gradle-8.14.3-bin/cv11ve7ro1n3o1j4so8xd9n66/gradle-8.14.3/lib/gradle-daemon-main-8.14.3.jar -javaagent:/home/runner/.gradle/wrapper/dists/gradle-8.14.3-bin/cv11ve7ro1n3o1j4so8xd9n66/gradle-8.14.3/lib/agents/gradle-instrumentation-agent-8.14.3.jar org.gradle.launcher.daemon.bootstrap.GradleDaemon 8.14.3
+Successfully started process 'Gradle build daemon'
+An attempt to start the daemon took 0.981 secs.
+The client will now receive all logging from the daemon (pid: 3806). The daemon log file: /home/runner/.gradle/daemon/8.14.3/daemon-3806.out.log
+Daemon will be stopped at the end of the build 
+Using 4 worker leases.
+Received JVM installation metadata from '/usr/lib/jvm/temurin-21-jdk-amd64': {JAVA_HOME=/usr/lib/jvm/temurin-21-jdk-amd64, JAVA_VERSION=21.0.9, JAVA_VENDOR=Eclipse Adoptium, RUNTIME_NAME=OpenJDK Runtime Environment, RUNTIME_VERSION=21.0.9+10-LTS, VM_NAME=OpenJDK 64-Bit Server VM, VM_VERSION=21.0.9+10-LTS, VM_VENDOR=Eclipse Adoptium, OS_ARCH=amd64}
+Watching the file system is configured to be enabled if available
+Now considering [/home/runner/work/workflows/workflows] as hierarchies to watch
+File system watching is active
+Starting Build
+Resolved plugin [id: 'org.gradle.toolchains.foojay-resolver-convention', version: '0.10.0']
+Settings evaluated using settings file '/home/runner/work/workflows/workflows/settings.gradle'.
+Projects loaded. Root project using build file '/home/runner/work/workflows/workflows/build.gradle'.
+Included projects: [root project 'projeto-teste-codigo', project ':app', project ':web']
+
+> Configure project :
+Evaluating root project 'projeto-teste-codigo' using build file '/home/runner/work/workflows/workflows/build.gradle'.
+
+> Configure project :app
+Evaluating project ':app' using build file '/home/runner/work/workflows/workflows/app/build.gradle'.
+Resolved plugin [id: 'java']
+Resolved plugin [id: 'application']
+Resolved plugin [id: 'jacoco']
+Resolved plugin [id: 'org.sonarqube', version: '6.2.0.5505']
+Resolved plugin [id: 'org.springframework.boot', version: '3.3.2']
+Resolved plugin [id: 'io.spring.dependency-management', version: '1.1.5']
+Applying dependency management to configuration 'annotationProcessor' in project 'app'
+Applying dependency management to configuration 'apiElements' in project 'app'
+Applying dependency management to configuration 'archives' in project 'app'
+Applying dependency management to configuration 'bootArchives' in project 'app'
+Applying dependency management to configuration 'compileClasspath' in project 'app'
+Applying dependency management to configuration 'compileOnly' in project 'app'
+Applying dependency management to configuration 'coverageDataElementsForTest' in project 'app'
+Applying dependency management to configuration 'default' in project 'app'
+Applying dependency management to configuration 'developmentOnly' in project 'app'
+Applying dependency management to configuration 'implementation' in project 'app'
+Applying dependency management to configuration 'jacocoAgent' in project 'app'
+Applying dependency management to configuration 'jacocoAnt' in project 'app'
+Applying dependency management to configuration 'mainSourceElements' in project 'app'
+Applying dependency management to configuration 'productionRuntimeClasspath' in project 'app'
+Applying dependency management to configuration 'runtimeClasspath' in project 'app'
+Applying dependency management to configuration 'runtimeElements' in project 'app'
+Applying dependency management to configuration 'runtimeOnly' in project 'app'
+Applying dependency management to configuration 'testAndDevelopmentOnly' in project 'app'
+Applying dependency management to configuration 'testAnnotationProcessor' in project 'app'
+Applying dependency management to configuration 'testCompileClasspath' in project 'app'
+Applying dependency management to configuration 'testCompileOnly' in project 'app'
+Applying dependency management to configuration 'testImplementation' in project 'app'
+Applying dependency management to configuration 'testResultsElementsForTest' in project 'app'
+Applying dependency management to configuration 'testRuntimeClasspath' in project 'app'
+Applying dependency management to configuration 'testRuntimeOnly' in project 'app'
+Applying dependency management to configuration 'usuarioImplementation' in project 'app'
+Applying dependency management to configuration 'usuarioRuntimeOnly' in project 'app'
+Applying dependency management to configuration 'usuarioTestImplementation' in project 'app'
+Applying dependency management to configuration 'usuarioTestRuntimeOnly' in project 'app'
+Applying dependency management to configuration 'jacocoAgentRuntime' in project 'app'
+Applying dependency management to configuration 'usuarioCompileOnly' in project 'app'
+Applying dependency management to configuration 'usuarioCompileClasspath' in project 'app'
+Applying dependency management to configuration 'usuarioAnnotationProcessor' in project 'app'
+Applying dependency management to configuration 'usuarioRuntimeClasspath' in project 'app'
+Applying dependency management to configuration 'usuarioTestCompileOnly' in project 'app'
+Applying dependency management to configuration 'usuarioTestCompileClasspath' in project 'app'
+Applying dependency management to configuration 'usuarioTestAnnotationProcessor' in project 'app'
+Applying dependency management to configuration 'usuarioTestRuntimeClasspath' in project 'app'
+
+> Configure project :web
+Evaluating project ':web' using build file '/home/runner/work/workflows/workflows/web/build.gradle'.
+All projects evaluated.
+Task path ':app:preflightUsuarioTests' matched project ':app'
+Task name matched 'preflightUsuarioTests'
+Selected primary task 'preflightUsuarioTests' from project :app
+Tasks to be executed: [task ':app:resolverDepsUsuario', task ':app:organizarUsuario', task ':app:sanearTestesUsuario', task ':app:prepUsuarioDirs', task ':app:preflightUsuarioTests']
+Tasks that were excluded: []
+Resolve mutations for :app:resolverDepsUsuario (Thread[#68,Execution worker,5,main]) started.
+:app:resolverDepsUsuario (Thread[#68,Execution worker,5,main]) started.
+
+> Task :app:resolverDepsUsuario UP-TO-DATE
+Custom actions are attached to task ':app:resolverDepsUsuario'.
+Caching disabled for task ':app:resolverDepsUsuario' because:
+  Build cache is disabled
+  Gradle would require more information to cache this task
+Skipping task ':app:resolverDepsUsuario' as it is up-to-date.
+Resolve mutations for :app:organizarUsuario (Thread[#68,Execution worker,5,main]) started.
+:app:organizarUsuario (Thread[#68,Execution worker,5,main]) started.
+
+> Task :app:organizarUsuario
+Custom actions are attached to task ':app:organizarUsuario'.
+Caching disabled for task ':app:organizarUsuario' because:
+  Build cache is disabled
+  Gradle would require more information to cache this task
+Task ':app:organizarUsuario' is not up-to-date because:
+  Output property '$1' file /home/runner/work/workflows/workflows/app/build/usuario-src/src/test_raw/java/CodigoUsuario_testes.java has changed.
+organizarUsuario → testes recebidos (raw):  1
+organizarUsuario → copiado para main: /home/runner/work/workflows/workflows/app/build/usuario-src/src/main/java
+organizarUsuario → copiado para test_raw: /home/runner/work/workflows/workflows/app/build/usuario-src/src/test_raw/java
+organizarUsuario → fontes recebidos: 2
+organizarUsuario → testes recebidos (raw):  1
+organizarUsuario → nome público (usuario): CalculadoraJuros
+organizarUsuario → nome esperado (testes): CalculadoraJuros
+Resolve mutations for :app:sanearTestesUsuario (Thread[#68,Execution worker,5,main]) started.
+:app:sanearTestesUsuario (Thread[#68,Execution worker,5,main]) started.
+
+> Task :app:sanearTestesUsuario
+Custom actions are attached to task ':app:sanearTestesUsuario'.
+Caching disabled for task ':app:sanearTestesUsuario' because:
+  Build cache is disabled
+  Gradle would require more information to cache this task
+Task ':app:sanearTestesUsuario' is not up-to-date because:
+  Task.upToDateWhen is false.
+sanearTestesUsuario → removido 'package ...;' dos testes (usuário em default package).
+sanearTestesUsuario → testes (raw) higienizados.
+Resolve mutations for :app:prepUsuarioDirs (Thread[#68,Execution worker,5,main]) started.
+:app:prepUsuarioDirs (Thread[#68,Execution worker,5,main]) started.
+
+> Task :app:prepUsuarioDirs
+Caching disabled for task ':app:prepUsuarioDirs' because:
+  Build cache is disabled
+Task ':app:prepUsuarioDirs' is not up-to-date because:
+  Task has not declared any outputs despite executing actions.
+Resolve mutations for :app:preflightUsuarioTests (Thread[#68,Execution worker,5,main]) started.
+:app:preflightUsuarioTests (Thread[#68,Execution worker,5,main]) started.
+
+> Task :app:preflightUsuarioTests
+Caching disabled for task ':app:preflightUsuarioTests' because:
+  Build cache is disabled
+Task ':app:preflightUsuarioTests' is not up-to-date because:
+  Task has not declared any outputs despite executing actions.
+preflightUsuarioTests: OK (sem padrões proibidos).
+
+[Incubating] Problems report is available at: file:///home/runner/work/workflows/workflows/build/reports/problems/problems-report.html
+
+Deprecated Gradle features were used in this build, making it incompatible with Gradle 9.0.
+
+You can use '--warning-mode all' to show the individual deprecation warnings and determine if they come from your own scripts or plugins.
+
+For more on this, please refer to https://docs.gradle.org/8.14.3/userguide/command_line_interface.html#sec:command_line_warnings in the Gradle documentation.
+
+BUILD SUCCESSFUL in 7s
+5 actionable tasks: 4 executed, 1 up-to-date
