@@ -386,7 +386,144 @@ jobs:
           echo "tem_cov=false" >> "$GITHUB_OUTPUT"
         fi
 
-    - name: Refinar explicações dos testes com IA (Groq) — TXT
+    # - name: Refinar explicações dos testes com IA (Groq) — TXT
+    #   if: always()
+    #   env:
+    #     GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+    #     GROQ_MODELO: llama-3.1-8b-instant
+    #     ROOT: ${{ github.workspace }}
+    #     TESTS_DIR: ${{ github.workspace }}/app/entrada-usuario/testes_explicações
+    #     EXPL_DIR: ${{ github.workspace }}/app/entrada-usuario/testes_explicações/explicacoes
+    #     SAIDA_TXT: ${{ github.workspace }}/app/entrada-usuario/testes_explicações/explicacoes/explicacoes_refatoradas.txt
+    #   shell: bash
+    #   run: |
+    #     set -euo pipefail
+
+    #     mkdir -p "$TESTS_DIR/tests" "$EXPL_DIR"
+
+    #     node - <<'NODE'
+    #     const fs = require('fs');
+    #     const path = require('path');
+
+    #     const TESTS_DIR = process.env.TESTS_DIR;
+    #     const EXPL_DIR  = process.env.EXPL_DIR;
+    #     const SAIDA_TXT = process.env.SAIDA_TXT;
+    #     const modelo    = process.env.GROQ_MODELO || 'llama-3.1-8b-instant';
+    #     const apiKey    = process.env.GROQ_API_KEY;
+
+    #     function walk(dir, out=[]) {
+    #       if (!fs.existsSync(dir)) return out;
+    #       for (const entry of fs.readdirSync(dir, {withFileTypes:true})) {
+    #         const p = path.join(dir, entry.name);
+    #         if (entry.isDirectory()) walk(p, out); else out.push(p);
+    #       }
+    #       return out;
+    #     }
+
+    #     // Coleta: testes .java e relatorio.txt (antigo)
+    #     const all = walk(TESTS_DIR);
+    #     const javaTests = all.filter(f => f.endsWith('.java') && f.includes(path.sep + 'tests' + path.sep));
+    #     const relatorioAntigo = all.find(f => path.basename(f) === 'relatorio.txt');
+
+    #     const testesPayload = javaTests.map(f => ({
+    #       nome: path.basename(f),
+    #       conteudo: fs.readFileSync(f, 'utf-8')
+    #     }));
+
+    #     const apoio = relatorioAntigo && fs.existsSync(relatorioAntigo) ? fs.readFileSync(relatorioAntigo, 'utf-8') : '';
+
+    #     const systemPrompt = [
+    #       'Você é um assistente que escreve documentação técnica curta, objetiva e EM TEXTO PLANO (sem Markdown) sobre testes JUnit.',
+    #       'A saída deve ser um arquivo .txt com o título na primeira linha: "Explicações dos Testes".',
+    #       'Para cada ARQUIVO DE TESTE, crie uma seção iniciando com "=== <NOME_DO_ARQUIVO> ===".',
+    #       'Em 3-8 linhas por seção, explique: o que o teste valida, quais funções/métodos do código ele cobre, cenários principais/borda, uso de mocks e exceções.',
+    #       'Se houver texto de apoio, use apenas como contexto. Não repita o arquivo inteiro nem paths de filesystem.',
+    #       'Não use bullet points com símbolos especiais; apenas texto plano com quebras de linha.'
+    #     ].join(' ');
+
+    #     const userPayload = {
+    #       relatorio_suporte: apoio,
+    #       testes: testesPayload
+    #     };
+
+    #     // Função que grava fallback básico
+    #     function writeFallback(motivo) {
+    #       const linhas = [];
+    #       linhas.push('Explicações dos Testes');
+    #       linhas.push('');
+    #       if (testesPayload.length === 0) {
+    #         linhas.push('(Nenhum teste encontrado.)');
+    #       } else {
+    #         for (const t of testesPayload) {
+    #           linhas.push(`=== ${t.nome} ===`);
+    #           linhas.push('Resumo: valida cenários principais do código e cobre os métodos relacionados.');
+    #           linhas.push('');
+    #         }
+    #       }
+    #       const out = linhas.join('\n');
+    #       fs.mkdirSync(path.dirname(SAIDA_TXT), { recursive: true });
+    #       fs.writeFileSync(SAIDA_TXT, out, 'utf-8');
+    #       // também substituir o antigo relatorio.txt na raiz por compat
+    #       fs.writeFileSync(path.join(TESTS_DIR, 'relatorio.txt'), out, 'utf-8');
+    #       console.log('Gerado fallback (', motivo, '):', SAIDA_TXT);
+    #     }
+
+    #     (async () => {
+    #       if (!apiKey) {
+    #         console.log('GROQ_API_KEY ausente. Gerando fallback…');
+    #         writeFallback('sem API key');
+    #         return;
+    #       }
+
+    #       const resp = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+    #         method: 'POST',
+    #         headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+    #         body: JSON.stringify({
+    #           model: modelo,
+    #           messages: [
+    #             { role: 'system', content: systemPrompt },
+    #             { role: 'user', content: 'Gere o texto plano solicitado com base no JSON a seguir.' },
+    #             { role: 'user', content: JSON.stringify(userPayload) }
+    #           ],
+    #           temperature: 0.2,
+    #           max_tokens: 1400
+    #         })
+    #       });
+
+    #       if (!resp.ok) {
+    #         const txt = await resp.text();
+    #         console.error('Groq API falhou:', resp.status, txt);
+    #         writeFallback('erro API');
+    #         return;
+    #       }
+    #       const data = await resp.json();
+    #       let saida = (data.choices?.[0]?.message?.content || '').trim();
+
+    #       if (!saida) {
+    #         writeFallback('vazio');
+    #         return;
+    #       }
+
+    #       // Garante título correto na 1ª linha
+    #       const lines = saida.split(/\r?\n/);
+    #       if (!/^Explicações dos Testes\s*$/i.test(lines[0] || '')) {
+    #         saida = 'Explicações dos Testes\n\n' + saida;
+    #       }
+
+    #       fs.mkdirSync(path.dirname(SAIDA_TXT), { recursive: true });
+    #       fs.writeFileSync(SAIDA_TXT, saida, 'utf-8');
+
+    #       // Substitui o antigo relatorio.txt (compatibilidade com tela antiga/artefatos)
+    #       fs.writeFileSync(path.join(TESTS_DIR, 'relatorio.txt'), saida, 'utf-8');
+
+    #       console.log('Gerado .txt refatorado:', SAIDA_TXT, '(', saida.length, 'bytes )');
+    #     })().catch(err => {
+    #       console.error('Falha inesperada:', err);
+    #       writeFallback('exceção');
+    #     });
+    #     NODE
+
+    - name: Refinar explicações dos testes com IA (Groq) — TXT (+ resumo Sonar)
       if: always()
       env:
         GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
@@ -395,6 +532,7 @@ jobs:
         TESTS_DIR: ${{ github.workspace }}/app/entrada-usuario/testes_explicações
         EXPL_DIR: ${{ github.workspace }}/app/entrada-usuario/testes_explicações/explicacoes
         SAIDA_TXT: ${{ github.workspace }}/app/entrada-usuario/testes_explicações/explicacoes/explicacoes_refatoradas.txt
+        SONAR_JSON: ${{ github.workspace }}/app/entrada-usuario/relatorio-sonar.json
       shell: bash
       run: |
         set -euo pipefail
@@ -408,6 +546,7 @@ jobs:
         const TESTS_DIR = process.env.TESTS_DIR;
         const EXPL_DIR  = process.env.EXPL_DIR;
         const SAIDA_TXT = process.env.SAIDA_TXT;
+        const SONAR_JSON= process.env.SONAR_JSON;
         const modelo    = process.env.GROQ_MODELO || 'llama-3.1-8b-instant';
         const apiKey    = process.env.GROQ_API_KEY;
 
@@ -420,7 +559,7 @@ jobs:
           return out;
         }
 
-        // Coleta: testes .java e relatorio.txt (antigo)
+        // ===== Coleta testes .java e relatorio.txt (apoio legado) =====
         const all = walk(TESTS_DIR);
         const javaTests = all.filter(f => f.endsWith('.java') && f.includes(path.sep + 'tests' + path.sep));
         const relatorioAntigo = all.find(f => path.basename(f) === 'relatorio.txt');
@@ -432,21 +571,68 @@ jobs:
 
         const apoio = relatorioAntigo && fs.existsSync(relatorioAntigo) ? fs.readFileSync(relatorioAntigo, 'utf-8') : '';
 
+        // ===== Carrega issues do Sonar (quando existir) =====
+        let issuesPayload = [];
+        try {
+          if (SONAR_JSON && fs.existsSync(SONAR_JSON)) {
+            const j = JSON.parse(fs.readFileSync(SONAR_JSON, 'utf-8'));
+            const issues = Array.isArray(j?.issues?.issues) ? j.issues.issues : (Array.isArray(j?.issues) ? j.issues : []);
+            // Foco nos tipos desejados
+            const tipoOk = new Set(['BUG', 'VULNERABILITY', 'CODE_SMELL']);
+            const sevOrd = { BLOCKER:0, CRITICAL:1, MAJOR:2, MINOR:3, INFO:4 };
+
+            const filt = issues
+              .filter(i => tipoOk.has(i.type))
+              .map(i => ({
+                type: i.type,
+                severity: i.severity,
+                rule: i.rule,
+                component: i.component,
+                path: i.component?.split(':')[1] || i.path || '',
+                message: i.message,
+                line: i.textRange?.startLine || null,
+                effort: i.effort || i.debt || null,
+                status: i.status || i.issueStatus || '',
+                resolution: i.resolution || '',
+                createdAt: i.creationDate || ''
+              }))
+              // Ordena: tipo (Bugs, Vuln, Smell) → severidade → mais recente
+              .sort((a,b) => {
+                const tipoRank = (t) => t==='BUG'?0 : t==='VULNERABILITY'?1 : 2;
+                const r1 = tipoRank(a.type) - tipoRank(b.type);
+                if (r1) return r1;
+                const s1 = (sevOrd[a.severity] ?? 9) - (sevOrd[b.severity] ?? 9);
+                if (s1) return s1;
+                return String(b.createdAt).localeCompare(String(a.createdAt));
+              })
+              .slice(0, 10);
+
+            issuesPayload = filt;
+          }
+        } catch (e) {
+          console.warn('Aviso: falha ao ler/parsear relatorio-sonar.json:', e.message);
+        }
+
         const systemPrompt = [
-          'Você é um assistente que escreve documentação técnica curta, objetiva e EM TEXTO PLANO (sem Markdown) sobre testes JUnit.',
-          'A saída deve ser um arquivo .txt com o título na primeira linha: "Explicações dos Testes".',
+          'Você escreve documentação curta e objetiva em TEXTO PLANO (sem Markdown) sobre testes JUnit.',
+          'PARTE 1: Gere o arquivo .txt com título na 1ª linha: "Explicações dos Testes".',
           'Para cada ARQUIVO DE TESTE, crie uma seção iniciando com "=== <NOME_DO_ARQUIVO> ===".',
-          'Em 3-8 linhas por seção, explique: o que o teste valida, quais funções/métodos do código ele cobre, cenários principais/borda, uso de mocks e exceções.',
-          'Se houver texto de apoio, use apenas como contexto. Não repita o arquivo inteiro nem paths de filesystem.',
-          'Não use bullet points com símbolos especiais; apenas texto plano com quebras de linha.'
+          'Em 3–8 linhas por seção, explique: o que valida, quais funções/métodos cobre, cenários principais/borda, uso de mocks e exceções.',
+          'Não inclua caminhos de filesystem nem JSON bruto.',
+          'PARTE 2 (se houver payload de issues do Sonar): acrescente ao FINAL um bloco:',
+          '"=== Resumo dos problemas do Sonar (topo 10) ==="',
+          'Liste cada item em UMA LINHA, numerado como "1) ...", até no máximo 10.',
+          'Cada linha deve conter: tipo (Bug/Vulnerability/Code Smell) + severidade, mensagem clara e curta, referência ao arquivo e linha quando existir, e UMA sugestão de ação (ex.: tratar null, extrair constante, usar logger).',
+          'Texto plano, sem bullets especiais além da numeração 1), 2), 3).'
         ].join(' ');
 
         const userPayload = {
           relatorio_suporte: apoio,
-          testes: testesPayload
+          testes: testesPayload,
+          sonar_issues_top: issuesPayload  // pode estar vazio; nesse caso, ignore a PARTE 2
         };
 
-        // Função que grava fallback básico
+        // ===== Fallback TXT =====
         function writeFallback(motivo) {
           const linhas = [];
           linhas.push('Explicações dos Testes');
@@ -460,10 +646,18 @@ jobs:
               linhas.push('');
             }
           }
+          if (issuesPayload.length > 0) {
+            linhas.push('=== Resumo dos problemas do Sonar (topo 10) ===');
+            issuesPayload.forEach((it, idx) => {
+              const pos = idx + 1;
+              const ref = it.line ? `${it.path}:${it.line}` : (it.path || 'arquivo não informado');
+              linhas.push(`${pos}) ${it.type} • ${it.severity} — ${it.message} (${ref})`);
+            });
+          }
           const out = linhas.join('\n');
           fs.mkdirSync(path.dirname(SAIDA_TXT), { recursive: true });
           fs.writeFileSync(SAIDA_TXT, out, 'utf-8');
-          // também substituir o antigo relatorio.txt na raiz por compat
+          // compat com tela antiga
           fs.writeFileSync(path.join(TESTS_DIR, 'relatorio.txt'), out, 'utf-8');
           console.log('Gerado fallback (', motivo, '):', SAIDA_TXT);
         }
@@ -482,11 +676,11 @@ jobs:
               model: modelo,
               messages: [
                 { role: 'system', content: systemPrompt },
-                { role: 'user', content: 'Gere o texto plano solicitado com base no JSON a seguir.' },
+                { role: 'user', content: 'Gere o TEXTO PLANO solicitado com base no JSON a seguir.' },
                 { role: 'user', content: JSON.stringify(userPayload) }
               ],
               temperature: 0.2,
-              max_tokens: 1400
+              max_tokens: 1600
             })
           });
 
@@ -513,7 +707,7 @@ jobs:
           fs.mkdirSync(path.dirname(SAIDA_TXT), { recursive: true });
           fs.writeFileSync(SAIDA_TXT, saida, 'utf-8');
 
-          // Substitui o antigo relatorio.txt (compatibilidade com tela antiga/artefatos)
+          // compat com tela antiga
           fs.writeFileSync(path.join(TESTS_DIR, 'relatorio.txt'), saida, 'utf-8');
 
           console.log('Gerado .txt refatorado:', SAIDA_TXT, '(', saida.length, 'bytes )');
@@ -522,6 +716,7 @@ jobs:
           writeFallback('exceção');
         });
         NODE
+
 
 
     - name: Commit e push dos arquivos gerados (na main)
