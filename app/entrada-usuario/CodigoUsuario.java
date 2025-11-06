@@ -1,21 +1,28 @@
 import java.util.Scanner;
 
-public class ContadorVogais {
+public class ConversorHoras {
     public static void main(String[] args) {
         Scanner scanner = new Scanner(System.in);
         
-        System.out.print("Digite uma palavra: ");
-        String palavra = scanner.nextLine().toLowerCase();
+        System.out.print("Digite as horas (0-23): ");
+        int horas = scanner.nextInt();
         
-        int vogais = 0;
-        for (int i = 0; i < palavra.length(); i++) {
-            char letra = palavra.charAt(i);
-            if (letra == 'a' || letra == 'e' || letra == 'i' || letra == 'o' || letra == 'u') {
-                vogais++;
+        if (horas >= 0 && horas <= 23) {
+            String periodo;
+            if (horas < 12) {
+                periodo = "AM";
+            } else {
+                periodo = "PM";
             }
+            
+            int horas12 = horas > 12 ? horas - 12 : horas;
+            if (horas12 == 0) horas12 = 12;
+            
+            System.out.println(horas + " horas = " + horas12 + " " + periodo);
+        } else {
+            System.out.println("Hora inválida!");
         }
         
-        System.out.println("A palavra '" + palavra + "' tem " + vogais + " vogais");
         scanner.close();
     }
 }

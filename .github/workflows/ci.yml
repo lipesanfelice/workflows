@@ -523,7 +523,7 @@ jobs:
     #     });
     #     NODE
 
-    - name: Refinar explicações dos testes com IA (Groq) — TXT (+ top 10 Bugs/Vulns/Smells)
+    - name: Refinar explicações dos testes com IA (Groq) — TXT + Dicas
       if: always()
       env:
         GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
@@ -546,7 +546,7 @@ jobs:
         const TESTS_DIR = process.env.TESTS_DIR;
         const EXPL_DIR  = process.env.EXPL_DIR;
         const SAIDA_TXT = process.env.SAIDA_TXT;
-        const SONAR_JSON= process.env.SONAR_JSON;
+        const SONAR_JSON_PATH = process.env.SONAR_JSON;
         const modelo    = process.env.GROQ_MODELO || 'llama-3.1-8b-instant';
         const apiKey    = process.env.GROQ_API_KEY;
 
@@ -559,7 +559,7 @@ jobs:
           return out;
         }
 
-        // ===== Coleta testes (.java) e apoio legado =====
+        // Coleta: testes .java e relatorio.txt (antigo)
         const all = walk(TESTS_DIR);
         const javaTests = all.filter(f => f.endsWith('.java') && f.includes(path.sep + 'tests' + path.sep));
         const relatorioAntigo = all.find(f => path.basename(f) === 'relatorio.txt');
@@ -571,61 +571,48 @@ jobs:
 
         const apoio = relatorioAntigo && fs.existsSync(relatorioAntigo) ? fs.readFileSync(relatorioAntigo, 'utf-8') : '';
 
-        // ===== Carrega issues do Sonar (só BUG/VULNERABILITY/CODE_SMELL) =====
-        let issuesPayload = [];
+        // Sonar JSON (opcional)
+        let sonarResumo = null;
         try {
-          if (SONAR_JSON && fs.existsSync(SONAR_JSON)) {
-            const j = JSON.parse(fs.readFileSync(SONAR_JSON, 'utf-8'));
-            const issues = Array.isArray(j?.issues?.issues) ? j.issues.issues : (Array.isArray(j?.issues) ? j.issues : []);
-            const tipoOk = new Set(['BUG','VULNERABILITY','CODE_SMELL']);
-            const sevOrd = { BLOCKER:0, CRITICAL:1, MAJOR:2, MINOR:3, INFO:4 };
-
-            const filtradas = issues
-              .filter(i => tipoOk.has(i.type))
-              .map(i => ({
-                type: i.type,                          // BUG | VULNERABILITY | CODE_SMELL
-                severity: i.severity,                  // BLOCKER/CRITICAL/MAJOR/...
-                message: i.message,
-                path: (i.component?.split(':')[1]) || i.path || '',
-                line: i.textRange?.startLine || null,
-                effort: i.effort || i.debt || null,
-                createdAt: i.creationDate || '',
-              }))
-              // Ordena por tipo (Bugs → Vulns → Smells), severidade e recência
-              .sort((a,b)=>{
-                const rankT = t => t==='BUG'?0 : t==='VULNERABILITY'?1 : 2;
-                const rT = rankT(a.type)-rankT(b.type); if (rT) return rT;
-                const sev = s => ({BLOCKER:0,CRITICAL:1,MAJOR:2,MINOR:3,INFO:4}[s] ?? 9);
-                const rS = sev(a.severity)-sev(b.severity); if (rS) return rS;
-                return String(b.createdAt).localeCompare(String(a.createdAt));
-              })
-              .slice(0, 10); // <= cap total 10
-
-            issuesPayload = filtradas;
+          if (SONAR_JSON_PATH && fs.existsSync(SONAR_JSON_PATH)) {
+            const raw = fs.readFileSync(SONAR_JSON_PATH, 'utf-8');
+            // Para não mandar um JSON gigantesco, reduzimos só ao necessário
+            const j = JSON.parse(raw);
+            sonarResumo = {
+              metricasProjeto: j?.measures?.project || [],
+              metricasArquivos: j?.measures?.tree?.components || [],
+              exemplosIssues: (j?.issues?.issues || []).slice(0, 30) // amostra pequena é suficiente para dicas
+            };
           }
         } catch (e) {
-          console.warn('Aviso: falha ao ler/parsear relatorio-sonar.json:', e.message);
+          // Em caso de erro, segue sem sonarResumo
+          sonarResumo = null;
         }
 
         const systemPrompt = [
-          'Você escreve documentação curta e objetiva em TEXTO PLANO (sem Markdown) sobre testes JUnit.',
-          'PARTE 1: Gere o arquivo .txt com título na 1ª linha: "Explicações dos Testes".',
-          'Para cada ARQUIVO DE TESTE, crie uma seção iniciando com "=== <NOME_DO_ARQUIVO> ===".',
-          'Em 3–8 linhas por seção, explique: o que valida, quais funções/métodos cobre, cenários principais/borda, uso de mocks e exceções.',
-          'Não inclua caminhos de filesystem nem JSON bruto.',
-          'PARTE 2 (se sonar_issues_top não estiver vazio): ao FINAL acrescente:',
-          '"=== Resumo (até 10) — Bugs, Vulnerabilities e Code Smells (Sonar) ==="',
-          'Liste no MÁXIMO 10 linhas numeradas "1) ...". Se houver menos, liste só as existentes. Se não houver, escreva "Nenhum problema encontrado nessas categorias."',
-          'Cada linha: Tipo (Bug/Vulnerability/Code Smell) + severidade, mensagem refinada e clara, arquivo e linha (se houver), e UMA sugestão de ação (ex.: tratar null, extrair constante, usar logger).',
-          'Texto plano; não use bullets além de 1), 2), 3).'
+          'Você é um assistente que escreve documentação curta, objetiva e EM TEXTO PLANO (sem Markdown).',
+          'Objetivo 1: GERAR EXPLICAÇÕES DOS TESTES JUNIT.',
+          'Objetivo 2: GERAR UMA LISTA FINAL DE DICAS DE MELHORIA DO CÓDIGO (5 a 10 itens numerados).',
+          '',
+          'Regras de SAÍDA (arquivo .txt):',
+          '1) Primeira linha deve ser o título: "Explicações dos Testes".',
+          '2) Para cada ARQUIVO DE TESTE, criar uma seção iniciando com "=== <NOME_DO_ARQUIVO> ===".',
+          '   Em 3–8 linhas por seção, explique: o que valida, métodos cobertos, cenários principais/borda, mocks/exceções.',
+          '   Não listar caminhos de filesystem nem JSON bruto.',
+          '3) Ao FINAL, criar a seção "=== Dicas de melhoria do código ===" com 5–10 itens numerados "1) ...",',
+          '   cada item com no máximo 120 caracteres, sem URLs.',
+          '4) Se houver dados de Sonar (métricas/issues), use-os como CONTEXTO para personalizar as dicas (ex.: smells, complexidade, duplicação),',
+          '   mas não copie o JSON nem IDs de issues; descreva em linguagem simples.',
+          '5) Não use bullets com símbolos especiais; use apenas numeração "1) 2) 3)".'
         ].join(' ');
 
         const userPayload = {
           relatorio_suporte: apoio,
           testes: testesPayload,
-          sonar_issues_top: issuesPayload  // já contém só BUG/VULNERABILITY/CODE_SMELL, cap ≤10
+          sonar_resumo: sonarResumo // pode ser null
         };
 
+        // Função que grava fallback básico
         function writeFallback(motivo) {
           const linhas = [];
           linhas.push('Explicações dos Testes');
@@ -639,24 +626,26 @@ jobs:
               linhas.push('');
             }
           }
-          linhas.push('=== Resumo (até 10) — Bugs, Vulnerabilities e Code Smells (Sonar) ===');
-          if (issuesPayload.length === 0) {
-            linhas.push('Nenhum problema encontrado nessas categorias.');
-          } else {
-            issuesPayload.forEach((it, i) => {
-              const ref = it.line ? `${it.path}:${it.line}` : (it.path || 'arquivo não informado');
-              linhas.push(`${i+1}) ${it.type} • ${it.severity} — ${it.message} (${ref}). Sugestão: revisar e corrigir conforme orientação da regra.`);
-            });
-          }
+          linhas.push('=== Dicas de melhoria do código ===');
+          linhas.push('1) Padronizar nomes e responsabilidades curtas.');
+          linhas.push('2) Evitar duplicação de trechos frequentes.');
+          linhas.push('3) Isolar lógica complexa em métodos menores.');
+          linhas.push('4) Acrescentar testes para casos de erro e borda.');
+          linhas.push('5) Preferir logs a System.out/err.');
           const out = linhas.join('\n');
           fs.mkdirSync(path.dirname(SAIDA_TXT), { recursive: true });
           fs.writeFileSync(SAIDA_TXT, out, 'utf-8');
+          // compat: substituir relatorio.txt antigo
           fs.writeFileSync(path.join(TESTS_DIR, 'relatorio.txt'), out, 'utf-8');
           console.log('Gerado fallback (', motivo, '):', SAIDA_TXT);
         }
 
         (async () => {
-          if (!apiKey) { writeFallback('sem API key'); return; }
+          if (!apiKey) {
+            console.log('GROQ_API_KEY ausente. Gerando fallback…');
+            writeFallback('sem API key');
+            return;
+          }
 
           const resp = await fetch('https://api.groq.com/openai/v1/chat/completions', {
             method: 'POST',
@@ -665,7 +654,7 @@ jobs:
               model: modelo,
               messages: [
                 { role: 'system', content: systemPrompt },
-                { role: 'user', content: 'Gere o TEXTO PLANO solicitado com base no JSON a seguir.' },
+                { role: 'user', content: 'Gere o texto plano solicitado com base no JSON a seguir.' },
                 { role: 'user', content: JSON.stringify(userPayload) }
               ],
               temperature: 0.2,
@@ -674,21 +663,34 @@ jobs:
           });
 
           if (!resp.ok) {
-            console.error('Groq API falhou:', resp.status, await resp.text());
+            const txt = await resp.text();
+            console.error('Groq API falhou:', resp.status, txt);
             writeFallback('erro API');
             return;
           }
-          let saida = (await resp.json()).choices?.[0]?.message?.content?.trim() || '';
+          const data = await resp.json();
+          let saida = (data.choices?.[0]?.message?.content || '').trim();
 
-          if (!saida) { writeFallback('vazio'); return; }
+          if (!saida) {
+            writeFallback('vazio');
+            return;
+          }
 
+          // Garante título correto na 1ª linha
           const lines = saida.split(/\r?\n/);
           if (!/^Explicações dos Testes\s*$/i.test(lines[0] || '')) {
             saida = 'Explicações dos Testes\n\n' + saida;
           }
 
+          // Garante que exista a seção de dicas no fim
+          if (!/^\s*=== Dicas de melhoria do código ===\s*$/m.test(saida)) {
+            saida += '\n\n=== Dicas de melhoria do código ===\n1) Priorizar clareza e reduzir duplicação.\n2) Adicionar testes para casos de erro.\n3) Extrair funções grandes em métodos menores.';
+          }
+
           fs.mkdirSync(path.dirname(SAIDA_TXT), { recursive: true });
           fs.writeFileSync(SAIDA_TXT, saida, 'utf-8');
+
+          // compat: substituir relatorio.txt antigo
           fs.writeFileSync(path.join(TESTS_DIR, 'relatorio.txt'), saida, 'utf-8');
 
           console.log('Gerado .txt refatorado:', SAIDA_TXT, '(', saida.length, 'bytes )');
@@ -698,48 +700,6 @@ jobs:
         });
         NODE
 
-
-    - name: Commit e push dos arquivos gerados (na main)
-      if: ${{ github.event_name != 'pull_request' }}
-      env:
-        BRANCH: main
-      run: |
-        set -euo pipefail
-        git config user.name  "github-actions[bot]"
-        git config user.email "github-actions[bot]@users.noreply.github.com"
-        git config --global --add safe.directory "$GITHUB_WORKSPACE"
-
-        git stash push --include-untracked --all -m "ci-autostash" || true
-        git fetch origin "$BRANCH" --prune
-        if git rev-parse --verify "$BRANCH" >/dev/null 2>&1; then
-          git checkout "$BRANCH"
-        else
-          git checkout -b "$BRANCH"
-        fi
-        git reset --hard "origin/$BRANCH"
-        git stash pop || true
-
-        # Preferir o que foi gerado nesta execução
-        if git diff --name-only --diff-filter=U | grep -q .; then
-          echo "Resolvendo conflitos preferindo as alterações geradas (stash/theirs)…"
-          git checkout --theirs -- .
-          git add -A
-        fi
-
-        git add -A app/entrada-usuario
-
-        if git diff --cached --quiet; then
-          echo "Sem mudanças para commit."
-        else
-          msg="chore: atualizar entrada-usuario e testes gerados (incl. patches IA Groq) [skip ci] - run ${{ github.run_number }} @ ${{ github.sha }}"
-          git commit -m "$msg"
-          if ! git push origin HEAD:"$BRANCH"; then
-            git pull --rebase --autostash origin "$BRANCH" || true
-            git push --force-with-lease origin HEAD:"$BRANCH"
-          fi
-        fi
-
-        echo "COV_SHA=$(git rev-parse HEAD)" >> $GITHUB_ENV
 
     - name: Upload para Codecov (uploader CLI)
       if: steps.check_cov.outputs.tem_cov == 'true'
