@@ -523,7 +523,7 @@ jobs:
     #     });
     #     NODE
 
-    - name: Refinar explicações dos testes com IA (Groq) — TXT (+ resumo Sonar)
+    - name: Refinar explicações dos testes com IA (Groq) — TXT (+ top 10 Bugs/Vulns/Smells)
       if: always()
       env:
         GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
@@ -559,7 +559,7 @@ jobs:
           return out;
         }
 
-        // ===== Coleta testes .java e relatorio.txt (apoio legado) =====
+        // ===== Coleta testes (.java) e apoio legado =====
         const all = walk(TESTS_DIR);
         const javaTests = all.filter(f => f.endsWith('.java') && f.includes(path.sep + 'tests' + path.sep));
         const relatorioAntigo = all.find(f => path.basename(f) === 'relatorio.txt');
@@ -571,43 +571,37 @@ jobs:
 
         const apoio = relatorioAntigo && fs.existsSync(relatorioAntigo) ? fs.readFileSync(relatorioAntigo, 'utf-8') : '';
 
-        // ===== Carrega issues do Sonar (quando existir) =====
+        // ===== Carrega issues do Sonar (só BUG/VULNERABILITY/CODE_SMELL) =====
         let issuesPayload = [];
         try {
           if (SONAR_JSON && fs.existsSync(SONAR_JSON)) {
             const j = JSON.parse(fs.readFileSync(SONAR_JSON, 'utf-8'));
             const issues = Array.isArray(j?.issues?.issues) ? j.issues.issues : (Array.isArray(j?.issues) ? j.issues : []);
-            // Foco nos tipos desejados
-            const tipoOk = new Set(['BUG', 'VULNERABILITY', 'CODE_SMELL']);
+            const tipoOk = new Set(['BUG','VULNERABILITY','CODE_SMELL']);
             const sevOrd = { BLOCKER:0, CRITICAL:1, MAJOR:2, MINOR:3, INFO:4 };
 
-            const filt = issues
+            const filtradas = issues
               .filter(i => tipoOk.has(i.type))
               .map(i => ({
-                type: i.type,
-                severity: i.severity,
-                rule: i.rule,
-                component: i.component,
-                path: i.component?.split(':')[1] || i.path || '',
+                type: i.type,                          // BUG | VULNERABILITY | CODE_SMELL
+                severity: i.severity,                  // BLOCKER/CRITICAL/MAJOR/...
                 message: i.message,
+                path: (i.component?.split(':')[1]) || i.path || '',
                 line: i.textRange?.startLine || null,
                 effort: i.effort || i.debt || null,
-                status: i.status || i.issueStatus || '',
-                resolution: i.resolution || '',
-                createdAt: i.creationDate || ''
+                createdAt: i.creationDate || '',
               }))
-              // Ordena: tipo (Bugs, Vuln, Smell) → severidade → mais recente
-              .sort((a,b) => {
-                const tipoRank = (t) => t==='BUG'?0 : t==='VULNERABILITY'?1 : 2;
-                const r1 = tipoRank(a.type) - tipoRank(b.type);
-                if (r1) return r1;
-                const s1 = (sevOrd[a.severity] ?? 9) - (sevOrd[b.severity] ?? 9);
-                if (s1) return s1;
+              // Ordena por tipo (Bugs → Vulns → Smells), severidade e recência
+              .sort((a,b)=>{
+                const rankT = t => t==='BUG'?0 : t==='VULNERABILITY'?1 : 2;
+                const rT = rankT(a.type)-rankT(b.type); if (rT) return rT;
+                const sev = s => ({BLOCKER:0,CRITICAL:1,MAJOR:2,MINOR:3,INFO:4}[s] ?? 9);
+                const rS = sev(a.severity)-sev(b.severity); if (rS) return rS;
                 return String(b.createdAt).localeCompare(String(a.createdAt));
               })
-              .slice(0, 10);
+              .slice(0, 10); // <= cap total 10
 
-            issuesPayload = filt;
+            issuesPayload = filtradas;
           }
         } catch (e) {
           console.warn('Aviso: falha ao ler/parsear relatorio-sonar.json:', e.message);
@@ -619,20 +613,19 @@ jobs:
           'Para cada ARQUIVO DE TESTE, crie uma seção iniciando com "=== <NOME_DO_ARQUIVO> ===".',
           'Em 3–8 linhas por seção, explique: o que valida, quais funções/métodos cobre, cenários principais/borda, uso de mocks e exceções.',
           'Não inclua caminhos de filesystem nem JSON bruto.',
-          'PARTE 2 (se houver payload de issues do Sonar): acrescente ao FINAL um bloco:',
-          '"=== Resumo dos problemas do Sonar (topo 10) ==="',
-          'Liste cada item em UMA LINHA, numerado como "1) ...", até no máximo 10.',
-          'Cada linha deve conter: tipo (Bug/Vulnerability/Code Smell) + severidade, mensagem clara e curta, referência ao arquivo e linha quando existir, e UMA sugestão de ação (ex.: tratar null, extrair constante, usar logger).',
-          'Texto plano, sem bullets especiais além da numeração 1), 2), 3).'
+          'PARTE 2 (se sonar_issues_top não estiver vazio): ao FINAL acrescente:',
+          '"=== Resumo (até 10) — Bugs, Vulnerabilities e Code Smells (Sonar) ==="',
+          'Liste no MÁXIMO 10 linhas numeradas "1) ...". Se houver menos, liste só as existentes. Se não houver, escreva "Nenhum problema encontrado nessas categorias."',
+          'Cada linha: Tipo (Bug/Vulnerability/Code Smell) + severidade, mensagem refinada e clara, arquivo e linha (se houver), e UMA sugestão de ação (ex.: tratar null, extrair constante, usar logger).',
+          'Texto plano; não use bullets além de 1), 2), 3).'
         ].join(' ');
 
         const userPayload = {
           relatorio_suporte: apoio,
           testes: testesPayload,
-          sonar_issues_top: issuesPayload  // pode estar vazio; nesse caso, ignore a PARTE 2
+          sonar_issues_top: issuesPayload  // já contém só BUG/VULNERABILITY/CODE_SMELL, cap ≤10
         };
 
-        // ===== Fallback TXT =====
         function writeFallback(motivo) {
           const linhas = [];
           linhas.push('Explicações dos Testes');
@@ -646,28 +639,24 @@ jobs:
               linhas.push('');
             }
           }
-          if (issuesPayload.length > 0) {
-            linhas.push('=== Resumo dos problemas do Sonar (topo 10) ===');
-            issuesPayload.forEach((it, idx) => {
-              const pos = idx + 1;
+          linhas.push('=== Resumo (até 10) — Bugs, Vulnerabilities e Code Smells (Sonar) ===');
+          if (issuesPayload.length === 0) {
+            linhas.push('Nenhum problema encontrado nessas categorias.');
+          } else {
+            issuesPayload.forEach((it, i) => {
               const ref = it.line ? `${it.path}:${it.line}` : (it.path || 'arquivo não informado');
-              linhas.push(`${pos}) ${it.type} • ${it.severity} — ${it.message} (${ref})`);
+              linhas.push(`${i+1}) ${it.type} • ${it.severity} — ${it.message} (${ref}). Sugestão: revisar e corrigir conforme orientação da regra.`);
             });
           }
           const out = linhas.join('\n');
           fs.mkdirSync(path.dirname(SAIDA_TXT), { recursive: true });
           fs.writeFileSync(SAIDA_TXT, out, 'utf-8');
-          // compat com tela antiga
           fs.writeFileSync(path.join(TESTS_DIR, 'relatorio.txt'), out, 'utf-8');
           console.log('Gerado fallback (', motivo, '):', SAIDA_TXT);
         }
 
         (async () => {
-          if (!apiKey) {
-            console.log('GROQ_API_KEY ausente. Gerando fallback…');
-            writeFallback('sem API key');
-            return;
-          }
+          if (!apiKey) { writeFallback('sem API key'); return; }
 
           const resp = await fetch('https://api.groq.com/openai/v1/chat/completions', {
             method: 'POST',
@@ -685,20 +674,14 @@ jobs:
           });
 
           if (!resp.ok) {
-            const txt = await resp.text();
-            console.error('Groq API falhou:', resp.status, txt);
+            console.error('Groq API falhou:', resp.status, await resp.text());
             writeFallback('erro API');
             return;
           }
-          const data = await resp.json();
-          let saida = (data.choices?.[0]?.message?.content || '').trim();
+          let saida = (await resp.json()).choices?.[0]?.message?.content?.trim() || '';
 
-          if (!saida) {
-            writeFallback('vazio');
-            return;
-          }
+          if (!saida) { writeFallback('vazio'); return; }
 
-          // Garante título correto na 1ª linha
           const lines = saida.split(/\r?\n/);
           if (!/^Explicações dos Testes\s*$/i.test(lines[0] || '')) {
             saida = 'Explicações dos Testes\n\n' + saida;
@@ -706,8 +689,6 @@ jobs:
 
           fs.mkdirSync(path.dirname(SAIDA_TXT), { recursive: true });
           fs.writeFileSync(SAIDA_TXT, saida, 'utf-8');
-
-          // compat com tela antiga
           fs.writeFileSync(path.join(TESTS_DIR, 'relatorio.txt'), saida, 'utf-8');
 
           console.log('Gerado .txt refatorado:', SAIDA_TXT, '(', saida.length, 'bytes )');
@@ -716,7 +697,6 @@ jobs:
           writeFallback('exceção');
         });
         NODE
-
 
 
     - name: Commit e push dos arquivos gerados (na main)
