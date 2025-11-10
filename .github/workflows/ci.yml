@@ -523,21 +523,53 @@ jobs:
         });
         NODE
 
+    # - name: Upload para Codecov (uploader CLI)
+    #   if: steps.check_cov.outputs.tem_cov == 'true'
+    #   run: |
+    #     set -euo pipefail
+    #     curl -Os https://uploader.codecov.io/latest/linux/codecov
+    #     chmod +x codecov
+    #     ./codecov \
+    #       -t "$CODECOV_TOKEN" \
+    #       -f "$JACOCO_XML" \
+    #       -F usuario \
+    #       -n cobertura-entrada-usuario \
+    #       -C "$COV_SHA" \
+    #       -v
+    #   env:
+    #     CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+
     - name: Upload para Codecov (uploader CLI)
       if: steps.check_cov.outputs.tem_cov == 'true'
-      run: |
-        set -euo pipefail
-        curl -Os https://uploader.codecov.io/latest/linux/codecov
-        chmod +x codecov
-        ./codecov \
-          -t "$CODECOV_TOKEN" \
-          -f "$JACOCO_XML" \
-          -F usuario \
-          -n cobertura-entrada-usuario \
-          -C "$COV_SHA" \
-          -v
       env:
         CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+        # Se já tiver JACOCO_XML definido antes, pode remover esta linha:
+        JACOCO_XML: ${{ github.workspace }}/app/entrada-usuario/jacoco-relatorio/jacoco.xml
+      run: |
+        set -euo pipefail
+
+        # Defaults seguros (evita "unbound variable")
+        COV_SHA="${COV_SHA:-${GITHUB_SHA:-}}"
+        COV_BRANCH="${COV_BRANCH:-${GITHUB_REF_NAME:-}}"
+        COV_REPO="${COV_REPO:-${GITHUB_REPOSITORY:-}}"
+
+        # Baixa uploader
+        curl -sSLo codecov https://uploader.codecov.io/latest/linux/codecov
+        chmod +x codecov
+
+        # Monta argumentos dinamicamente
+        ARGS=(-t "$CODECOV_TOKEN" -f "$JACOCO_XML" -F usuario -n cobertura-entrada-usuario -v)
+
+        # Adiciona SHA/branch/repo se disponíveis (evita passar vazio)
+        [ -n "$COV_SHA" ]    && ARGS+=(-C "$COV_SHA")
+        [ -n "$COV_BRANCH" ] && ARGS+=(-B "$COV_BRANCH")
+        [ -n "$COV_REPO" ]   && ARGS+=(-r "$COV_REPO")
+
+        # (Opcional) falhar se upload falhar: adicione -Z
+        # ARGS+=(-Z)
+
+        ./codecov "${ARGS[@]}"
+
 
     - name: Escreve marcador de sucesso
       if: ${{ success() }}

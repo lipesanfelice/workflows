@@ -1,23 +1,23 @@
-import java.security.SecureRandom;
-
-public class GeradorSenha {
-    private static final String CARACTERES = 
-        "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*";
+public class CalculadoraIMC {
     
-    public static String gerarSenha(int tamanho) {
-        SecureRandom random = new SecureRandom();
-        StringBuilder senha = new StringBuilder();
-        
-        for (int i = 0; i < tamanho; i++) {
-            int index = random.nextInt(CARACTERES.length());
-            senha.append(CARACTERES.charAt(index));
-        }
-        
-        return senha.toString();
+    public static double calcularIMC(double peso, double altura) {
+        return peso / (altura * altura);
+    }
+    
+    public static String classificarIMC(double imc) {
+        if (imc < 18.5) return "Abaixo do peso";
+        else if (imc < 25) return "Peso normal";
+        else if (imc < 30) return "Sobrepeso";
+        else if (imc < 35) return "Obesidade grau I";
+        else if (imc < 40) return "Obesidade grau II";
+        else return "Obesidade grau III";
     }
     
     public static void main(String[] args) {
-        System.out.println("Senha gerada: " + gerarSenha(12));
-        System.out.println("Senha gerada: " + gerarSenha(16));
+        double imc1 = calcularIMC(70, 1.75);
+        double imc2 = calcularIMC(90, 1.70);
+        
+        System.out.println("IMC 70kg/1.75m: " + imc1 + " - " + classificarIMC(imc1));
+        System.out.println("IMC 90kg/1.70m: " + imc2 + " - " + classificarIMC(imc2));
     }
 }
