@@ -1,28 +1,23 @@
-import java.util.Scanner;
+import java.security.SecureRandom;
 
-public class ConversorHoras {
-    public static void main(String[] args) {
-        Scanner scanner = new Scanner(System.in);
+public class GeradorSenha {
+    private static final String CARACTERES = 
+        "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*";
+    
+    public static String gerarSenha(int tamanho) {
+        SecureRandom random = new SecureRandom();
+        StringBuilder senha = new StringBuilder();
         
-        System.out.print("Digite as horas (0-23): ");
-        int horas = scanner.nextInt();
-        
-        if (horas >= 0 && horas <= 23) {
-            String periodo;
-            if (horas < 12) {
-                periodo = "AM";
-            } else {
-                periodo = "PM";
-            }
-            
-            int horas12 = horas > 12 ? horas - 12 : horas;
-            if (horas12 == 0) horas12 = 12;
-            
-            System.out.println(horas + " horas = " + horas12 + " " + periodo);
-        } else {
-            System.out.println("Hora inválida!");
+        for (int i = 0; i < tamanho; i++) {
+            int index = random.nextInt(CARACTERES.length());
+            senha.append(CARACTERES.charAt(index));
         }
         
-        scanner.close();
+        return senha.toString();
+    }
+    
+    public static void main(String[] args) {
+        System.out.println("Senha gerada: " + gerarSenha(12));
+        System.out.println("Senha gerada: " + gerarSenha(16));
     }
 }
