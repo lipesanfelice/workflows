@@ -5,6 +5,7 @@ public class Prompts {
     public static String montarPromptGroqPorArquivo(String sonarRecorte, String caminhoArquivo, String conteudoArquivo) {
         String regras = """
 Regras:
+- Gere no mínimo 20 testes.
 - Gere UM ÚNICO arquivo de teste JUnit 5 para o arquivo alvo.
 - Pacote EXATO: org.example.generated
 - Nome exato da classe e do arquivo: <NomeDaClasseAlvo>_testes
