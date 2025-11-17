@@ -613,7 +613,7 @@ async function carregarResultados(){
 
     // LOC reais do usuário
     const locModel = await fetchUserSourceLoc();
-    
+    renderLocChart(locModel);
 
     escreveStatus('Resultados atualizados', 'ok');
   } catch (e) {
