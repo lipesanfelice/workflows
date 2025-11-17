@@ -583,11 +583,28 @@ jobs:
         mkdir -p app/entrada-usuario
         node -e "const fs=require('fs'); const now=Date.now(); const j={done:true,status:'failure',endedAt:now}; fs.writeFileSync('app/entrada-usuario/done.json', JSON.stringify(j,null,2));"
 
-    - name: Commit do marcador
+    - name: Commit do marcador + artefatos
       if: ${{ success() || failure() || cancelled() }}
       run: |
+        set -euo pipefail
+
         git config user.name  "github-actions[bot]"
         git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+        # done.json deve sempre existir (sucesso ou falha)
         git add app/entrada-usuario/done.json
-        git commit -m "mark: done [skip ci]" || echo "nada a commitar"
-        git push
+
+        # Artefatos gerados pelo pipeline (não falham se não existirem)
+        git add app/entrada-usuario/relatorio-sonar.json || true
+        git add app/entrada-usuario/testes_explicações   || true
+        git add app/entrada-usuario/jacoco-relatorio     || true
+
+        # Só commita se realmente tiver algo staged
+        if git diff --cached --quiet; then
+          echo "Nenhuma mudança para commitar"
+        else
+          git commit -m "mark: done + artefatos [skip ci]"
+          git push
+        fi
+
+    
