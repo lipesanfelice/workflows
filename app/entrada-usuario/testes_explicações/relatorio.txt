@@ -1,0 +1,23 @@
+Explicações dos Testes
+
+=== CodigoUsuario_testes.java ===
+
+Este arquivo de teste valida a funcionalidade do contador de vogais em diferentes cenários.
+
+O teste cobre os métodos main e contador da classe ContadorVogais.
+
+Os cenários principais incluem:
+
+- Contagem de vogais em palavras com letras maiúsculas e minúsculas
+- Contagem de vogais em palavras com letras especiais e acentos
+- Contagem de vogais em palavras com espaços e acentos
+- Contagem de vogais em palavras vazias
+- Contagem de vogais em palavras com letras especiais e acentos
+
+O teste utiliza mocks para simular a entrada de palavras para o contador.
+
+As exceções testadas incluem:
+
+- Lançamento de exceção quando a palavra de entrada está vazia
+
+O teste utiliza a assertThrows para verificar se a exceção é lançada corretamente.
