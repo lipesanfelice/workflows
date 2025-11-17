@@ -1,22 +1,31 @@
+import java.util.Random;
 import java.util.Scanner;
 
-public class ContadorVogais {
+public class JogoAdivinhacao {
     public static void main(String[] args) {
         Scanner scanner = new Scanner(System.in);
+        Random random = new Random();
         
-        System.out.print("Digite uma palavra: ");
-        String palavra = scanner.nextLine().toLowerCase();
+        int numeroSecreto = random.nextInt(100) + 1;
+        int tentativas = 0;
+        int palpite;
         
-        int contador = 0;
-        for (int i = 0; i < palavra.length(); i++) {
-            char letra = palavra.charAt(i);
-            if (letra == 'a' || letra == 'e' || letra == 'i' || 
-                letra == 'o' || letra == 'u') {
-                contador++;
+        System.out.println("Adivinhe o número entre 1 e 100!");
+        
+        do {
+            System.out.print("Seu palpite: ");
+            palpite = scanner.nextInt();
+            tentativas++;
+            
+            if (palpite < numeroSecreto) {
+                System.out.println("Muito baixo! Tente novamente.");
+            } else if (palpite > numeroSecreto) {
+                System.out.println("Muito alto! Tente novamente.");
+            } else {
+                System.out.println("Parabéns! Você acertou em " + tentativas + " tentativas!");
             }
-        }
+        } while (palpite != numeroSecreto);
         
-        System.out.println("A palavra '" + palavra + "' tem " + contador + " vogais");
         scanner.close();
     }
 }
