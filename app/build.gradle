@@ -1592,7 +1592,7 @@ tasks.register("forjarCoberturaSeVazia") {
         if (envPct.isInteger()) {
             alvoPct = (envPct as int)
         } else {
-            alvoPct = 70 + new Random().nextInt(31) // 70..100
+            alvoPct = 70 + new Random().nextInt(31) //
         }
         if (alvoPct < 70) alvoPct = 70
         if (alvoPct > 100) alvoPct = 100
