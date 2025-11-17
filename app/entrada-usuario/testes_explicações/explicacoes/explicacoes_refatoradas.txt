@@ -1,0 +1,24 @@
+Explicações dos Testes
+
+=== CodigoUsuario_testes ===
+
+Este arquivo de teste valida a funcionalidade de um jogo de moeda com cara e coroa. Ele testa diferentes cenários, incluindo escolha de cara ou coroa, resultado da moeda, ganho e perda, além de entradas inválidas e fechamento do scanner.
+
+O teste cobre as seguintes funções/métodos do código:
+- Scanner
+- Random
+- assert
+
+Cenários principais/borda:
+- Escolha de cara ou coroa
+- Resultado da moeda (cara ou coroa)
+- Ganho (escolha de cara e resultado de cara)
+- Perda (escolha de coroa e resultado de coroa)
+- Entrada inválida (número diferente de 0 ou 1)
+- Fechamento do scanner
+
+Uso de mocks:
+- O teste não utiliza mocks, pois não há dependências externas no código.
+
+Exceções:
+- O teste não testa exceções explícitas, pois o código não lança exceções em nenhum dos cenários testados.

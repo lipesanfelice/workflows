@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>CaraCoroa.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">app</a> &gt; <a href="index.source.html" class="el_package">default</a> &gt; <span class="el_source">CaraCoroa.java</span></div><h1>CaraCoroa.java</h1><pre class="source lang-java linenums">import java.util.Random;
+import java.util.Scanner;
+
+<span class="nc" id="L4">public class CaraCoroa {</span>
+    public static void main(String[] args) {
+<span class="nc" id="L6">        Scanner scanner = new Scanner(System.in);</span>
+<span class="nc" id="L7">        Random random = new Random();</span>
+        
+<span class="nc" id="L9">        System.out.println(&quot;Cara ou Coroa? (0-Cara, 1-Coroa)&quot;);</span>
+<span class="nc" id="L10">        int escolha = scanner.nextInt();</span>
+        
+<span class="nc" id="L12">        int resultado = random.nextInt(2);</span>
+<span class="nc bnc" id="L13" title="All 2 branches missed.">        String resultadoTexto = (resultado == 0) ? &quot;Cara&quot; : &quot;Coroa&quot;;</span>
+<span class="nc bnc" id="L14" title="All 2 branches missed.">        String escolhaTexto = (escolha == 0) ? &quot;Cara&quot; : &quot;Coroa&quot;;</span>
+        
+<span class="nc" id="L16">        System.out.println(&quot;Resultado: &quot; + resultadoTexto);</span>
+<span class="nc" id="L17">        System.out.println(&quot;Sua escolha: &quot; + escolhaTexto);</span>
+        
+<span class="nc bnc" id="L19" title="All 2 branches missed.">        if (escolha == resultado) {</span>
+<span class="nc" id="L20">            System.out.println(&quot;Você ganhou!&quot;);</span>
+        } else {
+<span class="nc" id="L22">            System.out.println(&quot;Você perdeu!&quot;);</span>
+        }
+        
+<span class="nc" id="L25">        scanner.close();</span>
+<span class="nc" id="L26">    }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>
